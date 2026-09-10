@@ -1,6 +1,6 @@
-# Strix Table Prototype
+# The Called
 
-Strix 的阶段 A 灰盒舞台：Vite + React + TypeScript + React Three Fiber。
+Vite + React + TypeScript + Three.js（React Three Fiber）基础工程，不含玩法或内容。
 
 ## 运行
 
@@ -9,15 +9,18 @@ npm install
 npm run dev
 ```
 
-开发地址：`http://localhost:4174/`。
+浏览器打开终端里给出的本地地址即可。拖拽可旋转视角，滚轮缩放。
 
-## 当前范围
+## 结构
 
-- 全屏 3D 桌面与 3×3 棋盘
-- 程序化灰盒手牌和牌堆
-- `board / hand / overview` 三种受控镜头
-- 可悬停、可选择的九个棋盘格
-- Game Core / Store / Scene / HUD 分层骨架
-- 空间查询的最小单元测试
+```text
+src/
+  main.tsx            入口
+  App.tsx             挂载 Canvas
+  scene/Experience.tsx 灯光、占位几何体、轨道控制
+  styles/global.css   全屏画布重置
+public/
+  favicon.svg
+```
 
-规则、拖拽、结算与正式资产刻意留在后续阶段。
+新游戏的文档、规则和资源导入后，从 `src/scene` 往外长即可。
