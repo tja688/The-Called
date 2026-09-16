@@ -14,6 +14,7 @@ npm run dev
 ## 结构
 
 ```text
+docs/                 第四版设计案（从索引.md 读）
 src/
   main.tsx            入口
   App.tsx             挂载 Canvas
@@ -23,4 +24,4 @@ public/
   favicon.svg
 ```
 
-新游戏的文档、规则和资源导入后，从 `src/scene` 往外长即可。
+规则写在 `docs/`。代码从 `src/scene` 往外长即可。
