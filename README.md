@@ -1,6 +1,6 @@
 # The Called
 
-Vite + React + TypeScript + Three.js（React Three Fiber）基础工程，不含玩法或内容。
+第四版战斗原型。规则核走 `GameService`，默认像素表现；`?present=dom` 是规则白模。
 
 ## 运行
 
@@ -9,19 +9,31 @@ npm install
 npm run dev
 ```
 
-浏览器打开终端里给出的本地地址即可。拖拽可旋转视角，滚轮缩放。
+浏览器打开本地地址。控制台 `called.game.dispatch` / `ask`。空格快进演出。
+
+```bash
+npm test
+npm run sprites:lint
+npm run sim -- --seed 1
+npm run sim -- --compare
+```
+
+开发时打开 `/pixels.html` 看资产与编辑页。
 
 ## 结构
 
 ```text
-docs/                 第四版设计案（从索引.md 读）
-src/
-  main.tsx            入口
-  App.tsx             挂载 Canvas
-  scene/Experience.tsx 灯光、占位几何体、轨道控制
-  styles/global.css   全屏画布重置
-public/
-  favicon.svg
+docs/                 设计案（从 索引.md 读）
+docs/6-开发交接/      表现层接缝
+src/core              命令 / 查询 / 事件总线
+src/domain            战斗与一趟
+src/content           卡表、遭遇、锚点
+src/application       GameService 与读模型类型
+src/shell             HTML 白模（规则验收器）
+src/pixel             像素引擎（不知道游戏）
+src/present           场景：只消费事件
+src/audio             短音效
+src/tools/sim.ts      无头四节点
 ```
 
-规则写在 `docs/`。代码从 `src/scene` 往外长即可。
+表现层只消费 `GameService`，见 [docs/6-开发交接/表现层接缝.md](docs/6-开发交接/表现层接缝.md)。
