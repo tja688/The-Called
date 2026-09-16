@@ -1,6 +1,8 @@
 node_modules/
 dist/
 release/
+packaged/
+electron-builder.local.json
 coverage/
 *.tsbuildinfo
 .DS_Store

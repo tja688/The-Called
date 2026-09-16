@@ -20,6 +20,12 @@ npm run sim -- --compare
 
 开发时打开 `/pixels.html` 看资产与编辑页。
 
+```bash
+npm run pack
+```
+
+桌面包默认落到 `Documents/The-Called-Play/`：双击 `win-unpacked/The Called.exe`，或发旁边的 zip。F11 全屏。输出目录可用 `CALLED_PACK_OUT` 改。
+
 ## 结构
 
 ```text
