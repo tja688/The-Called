@@ -1,6 +1,6 @@
 # 像素资产 DSL
 
-`SpriteDef` / `ShapeIcon` 的字段与生成模板。实现以 `the_called3` 的 `src/pixel/dsl.ts`、`shapes.ts` 为准。
+本仓库 `SpriteDef` / `ShapeIcon` 的字段与生成模板。通用绘制（snap / bake / nearest / 预览）走 canvas-pixel。实现以本仓库 `src/pixel/dsl.ts`、`shapes.ts` 为准。
 
 ## ASCII：`SpriteDef`
 
