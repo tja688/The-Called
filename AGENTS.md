@@ -25,7 +25,7 @@
 - **全量同步**：在仓库根目录执行 `npm run sync:feishu-docs`（或 `node scripts/sync-feishu-wiki.mjs`）。说明见 [`scripts/sync-feishu-wiki.md`](scripts/sync-feishu-wiki.md)。
 - **差异记录**：每次同步追加 [`docs/飞书同步差异记录.md`](docs/飞书同步差异记录.md)（该文件与 [`sync-feishu-wiki.config.json`](scripts/sync-feishu-wiki.config.json) 中的 `preserveRelPaths` 不会被同步删除）。
 - 改设计：**先改飞书**，再跑同步；不要只在本地 `docs/` 改飞书已有页面（除非用户明确说「仅本地草稿」）。
-- **不同步、仓库自管**：[`docs/6-开发交接/表现层接缝.md`](docs/6-开发交接/表现层接缝.md)（已在 `preserveRelPaths` 中）。
+- **不同步、仓库自管**：[`docs/6-开发交接/表现层接缝.md`](docs/6-开发交接/表现层接缝.md)、[`docs/4-数据汇总/虚构配置表.md`](docs/4-数据汇总/虚构配置表.md)（已在 `preserveRelPaths` 中）。playtest 临时虚构的空间与出图说明在根目录 [`虚构设计总纲.md`](虚构设计总纲.md)。
 
 ## 做任何改动前，按此顺序读
 
@@ -42,4 +42,4 @@
 
 规则只通过 `GameService` 的 `dispatch` / `ask` / `on`。`present` 和 `pixel` 只消费事件，不改判定。
 
-改接缝先改 `src/application/commands.ts`、`queries.ts`、事件联合和 [`docs/6-开发交接/表现层接缝.md`](docs/6-开发交接/表现层接缝.md)，四处一起动。`npm run sim -- --compare` 必须和第一轮基线逐位一致。
+改接缝先改 `src/application/commands.ts`、`queries.ts`、事件联合和 [`docs/6-开发交接/表现层接缝.md`](docs/6-开发交接/表现层接缝.md)，四处一起动。`npm run sim -- --compare` 必须和第 1 层新基线逐位一致。残响不进默认测试门。

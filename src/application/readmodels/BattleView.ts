@@ -1,9 +1,8 @@
 import { cardDef } from '../../content/cards'
 import { isCorner, type Cell, CELLS } from '../../domain/geometry'
-import { currentPoints, finalPoints, woundEstimate } from '../../domain/battle/points'
+import { currentPoints, finalPoints, avatarCostOf } from '../../domain/battle/points'
 import { avatarOf, cardAt, type BattleState } from '../../domain/battle/state'
-import type { BattlePhase, CardStatus, Side, Zone } from '../../domain/types'
-import type { EncounterId } from '../../domain/types'
+import type { BattlePhase, CardKind, CardStatus, Side, Zone } from '../../domain/types'
 import type { BattleResult } from '../../domain/battle/state'
 
 export interface CardView {
@@ -11,7 +10,7 @@ export interface CardView {
   defId: string
   name: string
   owner: Side
-  kind: 'occupy' | 'spell'
+  kind: CardKind
   zone: Zone
   cell?: Cell
   basePoints: number
@@ -29,27 +28,35 @@ export interface CellView {
 }
 
 export interface BattleView {
-  encounterId: EncounterId
+  encounterId: string
   cells: CellView[]
   cards: Record<string, CardView>
   hand: string[]
   deckLeft: number
   discardCount: number
-  mana: number
-  manaCap: number
+  enemyDiscardCount: number
+  occupy: number
+  occupyCap: number
+  resA: number
   playerFinal: number
   enemyFinal: number
   leading: boolean
   turn: number
   opening: boolean
   phase: BattlePhase
-  avatar: { onBoard: boolean; current: number; woundEstimate: number }
+  avatar: { onBoard: boolean; current: number; avatarCost: number }
   mustPlaceAvatar: boolean
   canEndTurn: boolean
+  canActivate: boolean
   result?: BattleResult
 }
 
-export function toBattleView(state: BattleState, mustPlaceAvatar: boolean, canEndTurn: boolean): BattleView {
+export function toBattleView(
+  state: BattleState,
+  mustPlaceAvatar: boolean,
+  canEndTurn: boolean,
+  canActivate: boolean,
+): BattleView {
   const cards: Record<string, CardView> = {}
   for (const inst of Object.values(state.cards)) {
     cards[inst.id] = {
@@ -79,21 +86,24 @@ export function toBattleView(state: BattleState, mustPlaceAvatar: boolean, canEn
     hand: [...state.hand],
     deckLeft: state.deck.length,
     discardCount: state.discard.length,
-    mana: state.mana,
-    manaCap: state.manaCap,
+    enemyDiscardCount: state.enemyDiscard.length,
+    occupy: state.occupy,
+    occupyCap: state.occupyCap,
+    resA: state.resA,
     playerFinal: finalPoints(state, 'player'),
     enemyFinal: finalPoints(state, 'enemy'),
-    leading: state.leading,
+    leading: finalPoints(state, 'player') > finalPoints(state, 'enemy'),
     turn: state.turn,
     opening: state.opening,
     phase: state.phase,
     avatar: {
       onBoard: !!av && av.zone === 'board',
       current: av ? currentPoints(state, av) : 0,
-      woundEstimate: woundEstimate(state),
+      avatarCost: avatarCostOf(state),
     },
     mustPlaceAvatar,
     canEndTurn,
+    canActivate,
     result: state.result,
   }
 }

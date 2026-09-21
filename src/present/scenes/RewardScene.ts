@@ -2,24 +2,26 @@ import { Scene } from '../Scene'
 import type { TextLayer } from '../../pixel/text'
 import { panel } from '../../pixel/ui'
 import { PAL } from '../../pixel/palette'
-import { bakeSky } from '../../pixel/sky'
-import { duskWash } from '../../pixel/light'
+import { Scenery } from '../../pixel/scenery'
 import { drawHandCard } from '../widgets'
 import { audio } from '../../audio/audio'
 import { PANEL } from '../layout'
 
 export class RewardScene extends Scene {
   readonly name = 'reward' as const
-  private sky = bakeSky('dusk', 640, 240)
+  private scenery = new Scenery('chest')
+  private t = 0
+
+  update(dt: number): void { this.t += dt }
 
   render(world: CanvasRenderingContext2D, ui: CanvasRenderingContext2D, text: TextLayer): void {
-    world.drawImage(this.sky, 0, 0)
-    duskWash(world, 0.12)
+    this.scenery.drawBack(world, 0, this.t)
+    this.scenery.drawFront(world, 0, this.t)
     const run = this.app.view()
     const pool = run?.reward?.pool ?? []
     const picked = run?.reward?.picked
     const { x, y, w, h } = PANEL
-    panel(ui, x, y, w, h, 'wood')
+    panel(ui, x, y, w, h, 'stone')
     text.occlude(x, y, w, h)
     text.draw('选一张进卡盒', x + 20, y + 16, { size: 18, bold: true, color: PAL.lamp1 })
     text.draw('不自动进牌组。回地图后再编。', x + 20, y + 42, { size: 12, color: PAL.cream })

@@ -1,7 +1,7 @@
 import type { Query } from '../core/messages'
 import type { Cell } from '../domain/geometry'
 import type { CardDef } from '../content/cards'
-import type { LegalPlay, PreviewPlay } from '../domain/battle/BattleAggregate'
+import type { LegalPlay } from '../domain/battle/BattleAggregate'
 import type { BattleView } from './readmodels/BattleView'
 import type { RunView } from './readmodels/RunView'
 
@@ -21,7 +21,8 @@ export interface QueryResults {
   'run.view': RunView | null
   'battle.view': BattleView | null
   'battle.legalPlays': LegalPlay[]
-  'battle.previewPlay': PreviewPlay | null
+  'battle.legalActivates': { card: string; targets: string[] }[]
+  'battle.previewPlay': import('../domain/battle/BattleAggregate').PreviewPlay | null
   'battle.inspect': InspectView
   'content.card': CardDef
 }
@@ -30,7 +31,8 @@ export type GameQuery =
   | Query<'run.view'>
   | Query<'battle.view'>
   | Query<'battle.legalPlays'>
-  | (Query<'battle.previewPlay'> & { card: string; cell?: Cell; target?: string })
+  | Query<'battle.legalActivates'>
+  | (Query<'battle.previewPlay'> & { card: string; cell?: Cell; target?: string; target2?: string })
   | (Query<'battle.inspect'> & { card: string })
   | (Query<'content.card'> & { defId: string })
 

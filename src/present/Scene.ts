@@ -2,7 +2,7 @@ import type { DomainEvent } from '../core/messages'
 import type { TextLayer } from '../pixel/text'
 import type { PresentApp } from './PresentApp'
 
-export type SceneName = 'title' | 'map' | 'event' | 'reward' | 'battle' | 'ending'
+export type SceneName = 'title' | 'map' | 'event' | 'reward' | 'battle' | 'ending' | 'shop' | 'rest' | 'forge' | 'chest'
 
 /** 场景接口：进入 / 离开 / 每帧 / 事件编排（可 await）/ 键盘 */
 export abstract class Scene {

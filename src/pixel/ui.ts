@@ -33,15 +33,15 @@ export function pxFrame(g: G, x: number, y: number, w: number, h: number, stroke
   }
 }
 
-export type PanelStyle = 'wood' | 'paper' | 'dark' | 'glass' | 'cream'
+export type PanelStyle = 'wood' | 'paper' | 'dark' | 'glass' | 'cream' | 'stone'
 
-/** 面板：木底 + 亮边；paper 为纸质文本区 */
+/** 面板：石底锈边；paper 为纸质文本区 */
 export function panel(g: G, x: number, y: number, w: number, h: number, style: PanelStyle = 'wood'): void {
-  if (style === 'wood') {
+  if (style === 'wood' || style === 'stone') {
     pxRoundRect(g, x, y, w, h, PAL.ink, 3)
-    pxRoundRect(g, x + 1, y + 1, w - 2, h - 2, PAL.wood1, 2)
-    pxFrame(g, x + 1, y + 1, w - 2, h - 2, PAL.wood3, 2)
-    g.fillStyle = PAL.wood2
+    pxRoundRect(g, x + 1, y + 1, w - 2, h - 2, style === 'stone' ? PAL.tile1 : PAL.wood1, 2)
+    pxFrame(g, x + 1, y + 1, w - 2, h - 2, style === 'stone' ? PAL.copperD : PAL.wood3, 2)
+    g.fillStyle = style === 'stone' ? PAL.stoneL : PAL.wood2
     g.fillRect(x + 3, y + 3, w - 6, 1)
   } else if (style === 'paper') {
     pxRoundRect(g, x, y, w, h, PAL.ink2, 2)

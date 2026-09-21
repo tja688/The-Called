@@ -6,6 +6,7 @@
   "preserveRelPaths": [
     "飞书同步差异记录.md",
     "6-开发交接/表现层接缝.md",
+    "4-数据汇总/虚构配置表.md",
     "agents/issue-tracker.md",
     "agents/triage-labels.md",
     "agents/domain.md"

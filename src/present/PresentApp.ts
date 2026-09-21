@@ -24,6 +24,10 @@ import { EventScene } from './scenes/EventScene'
 import { RewardScene } from './scenes/RewardScene'
 import { BattleScene } from './scenes/BattleScene'
 import { EndingScene } from './scenes/EndingScene'
+import { ShopScene } from './scenes/ShopScene'
+import { RestScene } from './scenes/RestScene'
+import { ForgeScene } from './scenes/ForgeScene'
+import { ChestScene } from './scenes/ChestScene'
 
 interface Toast { text: string; t: number; y: number }
 interface Banner { text: string; sub?: string; t: number; hold: number; color: string }
@@ -208,6 +212,10 @@ export class PresentApp implements Renderable {
     if (ev.screen === 'map' && this.scene?.name !== 'map') await this.go(new MapScene(this))
     else if (ev.screen === 'event' && this.scene?.name !== 'event') await this.go(new EventScene(this))
     else if (ev.screen === 'reward' && this.scene?.name !== 'reward') await this.go(new RewardScene(this))
+    else if (ev.screen === 'shop' && this.scene?.name !== 'shop') await this.go(new ShopScene(this))
+    else if (ev.screen === 'rest' && this.scene?.name !== 'rest') await this.go(new RestScene(this))
+    else if (ev.screen === 'forge' && this.scene?.name !== 'forge') await this.go(new ForgeScene(this))
+    else if (ev.screen === 'chest' && this.scene?.name !== 'chest') await this.go(new ChestScene(this))
     else if (ev.screen === 'over' && this.scene?.name !== 'ending') await this.go(new EndingScene(this))
   }
 

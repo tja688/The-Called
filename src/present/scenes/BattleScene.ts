@@ -1,21 +1,22 @@
 /**
- * 俯视桌面 + 九宫格。动画只跟事件走；读模型只用于合法格 / 预览 / HUD 对齐。
+ * 锈门层石室 + 九宫格。动画只跟事件走；读模型只用于合法格 / 预览 / HUD 对齐。
  */
 import { Scene } from '../Scene'
 import type { DomainEvent } from '../../core/messages'
 import type { BattleEvent } from '../../domain/battle/events'
 import type { Cell } from '../../domain/geometry'
-import type { EncounterId } from '../../domain/types'
 import type { TextLayer } from '../../pixel/text'
 import { PAL, rgba } from '../../pixel/palette'
 import { ASSETS } from '../../pixel/assets'
-import { bakeTable, type TableKind } from '../../pixel/terrain'
-import { duskWash, nightWash, vignette, glow } from '../../pixel/light'
+import { bakeTable } from '../../pixel/terrain'
+import { Scenery, roomOfEncounter } from '../../pixel/scenery'
+import { glow } from '../../pixel/light'
 import { pxRoundRect, pxFrame, dashedLine, bannerBg } from '../../pixel/ui'
 import { drawSprite, blit } from '../../pixel/dsl'
 import { tween, wait, ease, osc, clamp } from '../../pixel/tween'
 import { cardDef } from '../../content/cards'
 import { encounterDef } from '../../content/encounters'
+import { fictionName, avatarSpriteId } from '../fiction'
 import { audio } from '../../audio/audio'
 import { BATTLE, TOPBAR_H } from '../layout'
 import { drawHandCard, drawBoardToken, drawHpBar, drawWoundChip, drawTooltip } from '../widgets'
@@ -28,7 +29,7 @@ interface Actor {
   id: string
   defId: string
   owner: 'player' | 'enemy'
-  kind: 'occupy' | 'spell'
+  kind: 'occupy' | 'spell' | 'avatar'
   isAvatar: boolean
   x: number
   y: number
@@ -58,7 +59,9 @@ const cellCenter = (cell: number) => {
   return { x: p.x + BATTLE.cell / 2, y: p.y + BATTLE.cell / 2 }
 }
 const DECK = { x: 600, y: 318 }
-const TABLE: Record<EncounterId, TableKind> = { yuZhuang: 'bamboo', boShou: 'stone', shouMen: 'hall' }
+function tableOf(id: string) {
+  return roomOfEncounter(id)
+}
 
 export class BattleScene extends Scene {
   readonly name = 'battle' as const
@@ -70,10 +73,11 @@ export class BattleScene extends Scene {
   private leading = false
   private leadFlash = 0
   private turn = 1
-  private phase: 'play' | 'pressure' | 'over' = 'play'
+  private phase: 'play' | 'over' = 'play'
   private wound = 0
-  private encounterId: EncounterId = 'yuZhuang'
+  private encounterId = 'MON.N01'
   private table: HTMLCanvasElement | null = null
+  private scenery = new Scenery('corridor')
   private t = 0
   private floaters: Floater[] = []
   private drips: Drip[] = []
@@ -87,10 +91,11 @@ export class BattleScene extends Scene {
     const v = this.app.ask({ type: 'battle.view' })
     if (!v) return
     this.encounterId = v.encounterId
-    this.table = bakeTable(TABLE[v.encounterId])
-    this.wound = v.avatar.woundEstimate
-    this.mana = v.mana
-    this.manaCap = v.manaCap
+    this.scenery = new Scenery(roomOfEncounter(v.encounterId))
+    this.table = bakeTable(tableOf(v.encounterId))
+    this.wound = v.avatar.avatarCost
+    this.mana = v.occupy
+    this.manaCap = v.occupyCap
     this.leading = v.leading
     this.turn = v.turn
     this.phase = v.phase
@@ -121,7 +126,10 @@ export class BattleScene extends Scene {
       case 'battle.cardDrawn': await this.onDrawn(ev); break
       case 'battle.turnStarted': await this.onTurn(ev, brief); break
       case 'battle.phaseChanged': await this.onPhase(ev); break
-      case 'battle.manaChanged': await this.onMana(ev, brief); break
+      case 'battle.occupyChanged': await this.onMana(ev, brief); break
+      case 'battle.resourceChanged': await this.beat(0.04); break
+      case 'battle.effectResolved': await this.onEffect(ev); break
+      case 'battle.activated': this.app.toast(ev.text, 52); await this.beat(0.08); break
       case 'battle.cardPlayed': await this.onPlayed(ev); break
       case 'battle.cardCovered': await this.onCovered(ev); break
       case 'battle.cardEntered': await this.onEntered(ev); break
@@ -129,8 +137,6 @@ export class BattleScene extends Scene {
       case 'battle.pointsChanged': await this.onPoints(ev, brief); break
       case 'battle.statusAdded': await this.onStatus(ev, true); break
       case 'battle.statusRemoved': await this.onStatus(ev, false); break
-      case 'battle.pressureResolved': await this.onPressure(ev); break
-      case 'battle.leadChanged': await this.onLead(ev); break
       case 'battle.settled': await this.onSettled(ev); break
     }
   }
@@ -142,7 +148,7 @@ export class BattleScene extends Scene {
   private makeActor(id: string, defId: string, owner: Actor['owner'], x: number, y: number): Actor {
     const def = cardDef(defId)
     const a: Actor = {
-      id, defId, owner, kind: def.kind, isAvatar: defId === 'AVATAR',
+      id, defId, owner, kind: def.kind, isAvatar: def.kind === 'avatar',
       x, y, sx: 1, sy: 1, alpha: 1, scale: 1, lift: 0, glow: 0, flash: 0,
       zone: 'fly', points: def.basePoints, sealed: false, z: this.zc++,
     }
@@ -176,10 +182,11 @@ export class BattleScene extends Scene {
 
   private async onStart(ev: BE<'battle.started'>): Promise<void> {
     this.encounterId = ev.encounterId
-    this.table = bakeTable(TABLE[ev.encounterId])
+    this.scenery = new Scenery(roomOfEncounter(ev.encounterId))
+    this.table = bakeTable(tableOf(ev.encounterId))
     audio.atmosphere(ev.encounterId)
     const enc = encounterDef(ev.encounterId)
-    await this.app.showBanner(enc.name, ev.text.replace(/^[^。]+。/, ''), 0.7, enc.boss ? PAL.lamp2 : PAL.lamp1)
+    await this.app.showBanner(fictionName(enc.id), ev.text.replace(/^[^。]+。/, ''), 0.7, enc.tier === 'boss' ? PAL.lamp2 : PAL.lamp1)
   }
 
   private async onDealt(ev: BE<'battle.avatarDealt'>): Promise<void> {
@@ -203,7 +210,7 @@ export class BattleScene extends Scene {
     this.turn = ev.turn
     this.leading = ev.leading
     if (ev.won) {
-      await this.app.showBanner('领先成立', '撑过了这一拍', 0.7, PAL.lamp1)
+      await this.app.showBanner('总点数更大', '回合开始检查通过', 0.7, PAL.lamp1)
       return
     }
     if (!brief) await this.beat(ev.opening ? 0.12 : 0.18)
@@ -211,14 +218,15 @@ export class BattleScene extends Scene {
 
   private async onPhase(ev: BE<'battle.phaseChanged'>): Promise<void> {
     this.phase = ev.phase
-    if (ev.phase === 'pressure') {
-      this.app.shake = 2.2
-      audio.sfx('pressure')
-      await this.beat(0.16)
-    }
   }
 
-  private async onMana(ev: BE<'battle.manaChanged'>, brief: boolean): Promise<void> {
+  private async onEffect(ev: BE<'battle.effectResolved'>): Promise<void> {
+    const c = ev.cell ? cellCenter(ev.cell) : { x: 320, y: 160 }
+    this.floatAt(c, ev.timing, PAL.orange)
+    await this.beat(0.06)
+  }
+
+  private async onMana(ev: BE<'battle.occupyChanged'>, brief: boolean): Promise<void> {
     const up = ev.current > this.mana || ev.cap > this.manaCap
     this.mana = ev.current
     this.manaCap = ev.cap
@@ -284,7 +292,7 @@ export class BattleScene extends Scene {
     const a = this.actors.get(ev.card)
     if (!a) return
     const c = cellCenter(ev.cell)
-    if (a.isAvatar || ev.reason === 'banish') {
+    if (a.isAvatar || ev.to === 'gone') {
       audio.sfx('banish')
       a.flash = 1
       await tween(a, { scale: 1.4, alpha: 0, sy: 0.2 }, 0.28, ease.inQuad)
@@ -293,7 +301,7 @@ export class BattleScene extends Scene {
       await tween(a, { x: to.x, y: to.y, alpha: 0, scale: 0.4 }, 0.22, ease.inQuad)
     }
     a.zone = 'gone'
-    this.floatAt(c, ev.reason === 'banish' ? '驱离' : '离场', PAL.gray3)
+    this.floatAt(c, ev.to === 'gone' ? '驱离' : '离场', PAL.gray3)
     await this.beat(0.05)
   }
 
@@ -308,52 +316,26 @@ export class BattleScene extends Scene {
       audio.sfx('hurt')
       this.drips.push({ x: a.x, y: a.y - 20, t: 0 })
       const v = this.app.ask({ type: 'battle.view' })
-      if (v) this.wound = v.avatar.woundEstimate
+      if (v) this.wound = v.avatar.avatarCost
     }
     if (!brief) await this.beat(0.1)
   }
 
   private async onStatus(ev: BE<'battle.statusAdded'> | BE<'battle.statusRemoved'>, add: boolean): Promise<void> {
     const a = this.actors.get(ev.card)
-    if (a) a.sealed = add
+    if (a && ev.status === 'sealed') a.sealed = add
     audio.sfx('seal')
-    if (a) this.floatAt({ x: a.x, y: a.y }, add ? '封印' : '解封', PAL.dai)
+    if (a) this.floatAt({ x: a.x, y: a.y }, add ? ev.status : `-${ev.status}`, PAL.dai)
     await this.beat(0.12)
-  }
-
-  private async onPressure(ev: BE<'battle.pressureResolved'>): Promise<void> {
-    const here = [...this.actors.values()].find((a) => a.zone === 'board' && a.cell === ev.cell)
-    const c = cellCenter(ev.cell)
-    audio.sfx('pressure')
-    this.app.shake = 1.6
-    if (here) {
-      here.lift = ev.kind === 'damageAvatarOrBanish' ? 6 : -10
-      await tween(here, { lift: 0 }, 0.22, ease.outBounce)
-    }
-    if (ev.kind === 'banishAvatarIfAdjacentAndAtMost') {
-      const av = [...this.actors.values()].find((a) => a.isAvatar && a.zone === 'board')
-      if (av) {
-        this.lockLines.push({ x1: c.x, y1: c.y, x2: av.x, y2: av.y, t: 0.45 })
-      }
-    }
-    this.floatAt(c, '压迫', PAL.orange)
-    await this.beat(0.08)
-  }
-
-  private async onLead(ev: BE<'battle.leadChanged'>): Promise<void> {
-    this.leading = ev.leading
-    this.leadFlash = 0.6
-    if (ev.leading) audio.sfx('lead')
-    await this.app.showBanner(ev.leading ? '领先' : '领先丢失', undefined, 0.45, ev.leading ? PAL.sta : PAL.gray3)
   }
 
   private async onSettled(ev: BE<'battle.settled'>): Promise<void> {
     this.result = ev
-    this.wound = ev.wound
+    this.wound = ev.avatarCost
     this.phase = 'over'
     audio.sfx(ev.outcome === 'win' ? 'win' : 'lose')
     this.app.flashA = 0.4
-    await this.app.showBanner(ev.outcome === 'win' ? '胜利' : '失败', `伤口 ${ev.wound}`, 0.9, ev.outcome === 'win' ? PAL.lamp1 : PAL.fruR)
+    await this.app.showBanner(ev.outcome === 'win' ? '胜利' : '失败', `化身代价 ${ev.avatarCost}`, 0.9, ev.outcome === 'win' ? PAL.lamp1 : PAL.fruR)
   }
 
   render(world: G, ui: G, text: TextLayer): void {
@@ -368,13 +350,9 @@ export class BattleScene extends Scene {
   }
 
   private drawTable(g: G): void {
-    g.fillStyle = PAL.night1
-    g.fillRect(0, 0, 640, 360)
+    this.scenery.drawBack(g, 0, this.t)
     if (this.table) g.drawImage(this.table, 0, BATTLE.tableY)
-    if (this.encounterId === 'yuZhuang') duskWash(g, 0.08)
-    if (this.encounterId === 'boShou') duskWash(g, 0.16)
-    if (this.encounterId === 'shouMen') nightWash(g, 0.22)
-    vignette(g, 0.28)
+    this.scenery.drawFront(g, 0, this.t)
     if (this.leading || this.leadFlash > 0) {
       const a = 0.18 + this.leadFlash * 0.4
       glow(g, 320, 170, 90, PAL.sta, a, false)
@@ -397,10 +375,22 @@ export class BattleScene extends Scene {
       const info = view?.cells[cell - 1]
       const legalCell = !!play?.cells.includes(cell as Cell)
       pxRoundRect(g, p.x, p.y, BATTLE.cell, BATTLE.cell, PAL.ink, 2)
-      pxRoundRect(g, p.x + 1, p.y + 1, BATTLE.cell - 2, BATTLE.cell - 2, info?.shadowActive ? PAL.night2 : PAL.wood1, 1)
-      if (info?.corner) {
-        g.fillStyle = rgba(PAL.night1, 0.35)
+      const floor = this.app.view()?.floorEffect
+      const tile = info?.shadowActive ? PAL.slate : PAL.stone
+      pxRoundRect(g, p.x + 1, p.y + 1, BATTLE.cell - 2, BATTLE.cell - 2, tile, 1)
+      g.fillStyle = PAL.leaf
+      g.fillRect(p.x + 3, p.y + BATTLE.cell - 4, 10, 1)
+      if (floor === 'ME.02') {
+        g.fillStyle = rgba(PAL.redD, 0.35)
         g.fillRect(p.x + 2, p.y + 2, BATTLE.cell - 4, BATTLE.cell - 4)
+      }
+      if (info?.corner) {
+        g.fillStyle = rgba(PAL.leaf, floor === 'ME.03' ? 0.45 : 0.22)
+        g.fillRect(p.x + 2, p.y + 2, BATTLE.cell - 4, BATTLE.cell - 4)
+        if (floor === 'ME.03') {
+          g.fillStyle = PAL.gray1
+          g.fillRect(p.x + 4, p.y + BATTLE.cell - 10, 8, 6)
+        }
       }
       if (legalCell) {
         pxFrame(g, p.x, p.y, BATTLE.cell, BATTLE.cell, PAL.lamp1, 2)
@@ -430,7 +420,7 @@ export class BattleScene extends Scene {
       const x = a.x, y = a.y + a.lift
       g.save()
       if (a.isAvatar) {
-        const b = ASSETS.sprite('char.avatar')
+        const b = ASSETS.sprite(avatarSpriteId(a.defId))
         if (b) {
           const bob = a.zone === 'board' ? Math.sin(this.t * 2.2) * 0.03 : 0
           drawSprite(g, b, x, y + 18, {
@@ -453,7 +443,7 @@ export class BattleScene extends Scene {
         g.scale(a.sx * a.scale * 1.6, a.sy * a.scale * 1.6)
         g.drawImage(icon, -icon.width / 2, -icon.height / 2)
         g.restore()
-        text.draw(cardDef(a.defId).name, x, y + 18, { size: 9, align: 'center', color: PAL.cream, alpha: a.alpha })
+        text.draw(fictionName(a.defId), x, y + 18, { size: 9, align: 'center', color: PAL.cream, alpha: a.alpha })
         text.draw(String(a.points), x, y - 16, { size: 13, align: 'center', bold: true, color: a.sealed ? PAL.gray2 : PAL.fruR, stroke: PAL.ink, strokeWidth: 3, alpha: a.alpha })
         if (a.sealed) blit(g, ASSETS.icon('icon.seal', 16, 16), x + 10, y - 22)
       } else {
@@ -480,16 +470,16 @@ export class BattleScene extends Scene {
     const run = this.app.view()
     const view = this.app.ask({ type: 'battle.view' })
     bannerBg(ui, 0, TOPBAR_H, 0.82)
-    text.draw(encounterDef(this.encounterId).name, 10, 6, { size: 12, bold: true, color: PAL.lamp1 })
-    text.draw(`第${this.turn}回合 · ${this.phase === 'play' ? '出牌' : this.phase === 'pressure' ? '压迫' : '结束'}`, 92, 7, { size: 11, color: PAL.cream })
+    text.draw(fictionName(this.encounterId), 10, 6, { size: 12, bold: true, color: PAL.lamp1 })
+    text.draw(`第${this.turn}回合 · ${this.phase === 'play' ? '出牌' : '结束'}`, 92, 7, { size: 11, color: PAL.cream })
     if (run) drawHpBar(ui, text, 250, 9, 90, run.hp, run.hpMax)
-    drawWoundChip(ui, text, 430, 5, view?.avatar.woundEstimate ?? this.wound)
+    drawWoundChip(ui, text, 430, 5, view?.avatar.avatarCost ?? this.wound)
     const pf = view?.playerFinal ?? 0, ef = view?.enemyFinal ?? 0
     text.draw(`己${pf}`, 10, 32, { size: 13, bold: true, color: PAL.fruG })
     text.draw(`敌${ef}`, 70, 32, { size: 13, bold: true, color: PAL.fruR })
     if (this.leading) blit(ui, ASSETS.icon('icon.lead', 16, 16), 118, 30)
     for (let i = 0; i < Math.max(this.manaCap, 1); i++) {
-      const icon = ASSETS.icon('icon.mana', 16, 16)
+      const icon = ASSETS.icon('icon.occupy', 16, 16)
       ui.save()
       ui.globalAlpha = i < this.mana ? 1 : 0.25
       blit(ui, icon, 150 + i * 14, 30)
@@ -500,6 +490,15 @@ export class BattleScene extends Scene {
       audio.sfx('click')
       this.app.send({ type: 'battle.endTurn' })
     }, { small: true, disabled: this.app.busy || !view?.canEndTurn })
+    this.app.ui.button('activate', { x: 552, y: 218, w: 76, h: 26 }, '主动', () => {
+      const acts = this.app.ask({ type: 'battle.legalActivates' })
+      const a = acts[0]
+      if (!a) return
+      audio.sfx('click')
+      if (a.targets.length === 1) this.app.send({ type: 'battle.activate', card: a.card, target: a.targets[0] })
+      else if (!a.targets.length) this.app.send({ type: 'battle.activate', card: a.card })
+      else this.app.send({ type: 'battle.activate', card: a.card, target: a.targets[0] })
+    }, { small: true, disabled: this.app.busy || !view?.canActivate })
   }
 
   private drawHand(ui: G, text: TextLayer): void {
@@ -541,7 +540,7 @@ export class BattleScene extends Scene {
         target: p.targets[0],
       })
       if (preview) {
-        text.draw(`预览 己${preview.player} 敌${preview.enemy} 化身${preview.avatar} 费${preview.mana}/${preview.manaCap}`, 320, 268, {
+        text.draw(`预览 己${preview.player} 敌${preview.enemy} 化身${preview.avatar} 费${preview.occupy}/${preview.occupyCap}`, 320, 268, {
           size: 10, align: 'center', color: PAL.gray3,
         })
       }
@@ -552,7 +551,7 @@ export class BattleScene extends Scene {
     if (!this.result) return
     bannerBg(ui, 140, 70, 0.78)
     text.draw(this.result.outcome === 'win' ? '胜利' : '失败', 320, 150, { size: 20, align: 'center', bold: true, color: this.result.outcome === 'win' ? PAL.lamp1 : PAL.fruR })
-    text.draw(`伤口 ${this.result.wound} · ${this.result.reason === 'lead' ? '领先检查' : this.result.reason === 'avatarGone' ? '化身离场' : '无牌可出'}`, 320, 176, { size: 12, align: 'center', color: PAL.cream })
+    text.draw(`化身代价 ${this.result.avatarCost} · ${this.result.reason === 'lead' ? '总点检查' : this.result.reason === 'clear' ? '清场' : this.result.reason === 'avatarGone' ? '化身离场' : '无牌可出'}`, 320, 176, { size: 12, align: 'center', color: PAL.cream })
     this.app.ui.button('finish', { x: 260, y: 198, w: 120, h: 26 }, '回地图', () => {
       audio.sfx('click')
       this.app.send({ type: 'run.finishFlow' })

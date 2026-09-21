@@ -2,7 +2,6 @@
  * 短采样合成：一拍一音。不要编曲。快进时缩短或跳过。
  */
 import { tw } from '../pixel/tween'
-import type { EncounterId } from '../domain/types'
 
 export type Sfx =
   | 'click' | 'play' | 'cover' | 'draw' | 'mana' | 'pressure'
@@ -77,12 +76,12 @@ class AudioBus {
     if (noise) this.burst(ctx, fast ? 0.04 : 0.08)
   }
 
-  atmosphere(id: EncounterId | null): void {
+  atmosphere(id: string | null): void {
     const ctx = this.ensure()
     if (!ctx || !this.master) return
     this.stopDrone()
     if (!id) return
-    const freq = id === 'yuZhuang' ? 92 : id === 'boShou' ? 73 : 55
+    const freq = id.includes('N') ? 92 : id.includes('E') ? 73 : 55
     const osc = ctx.createOscillator()
     const g = ctx.createGain()
     osc.type = 'sine'

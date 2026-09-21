@@ -14,7 +14,7 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 
 Narrative and systems design live under **`docs/`**, mirrored from the Feishu wiki **the call 游戏设计案** (`npm run sync:feishu-docs`). Treat Feishu as the source of truth for that tree; see `scripts/sync-feishu-wiki.md`.
 
-**Exception:** [`docs/6-开发交接/表现层接缝.md`](../6-开发交接/表现层接缝.md) is maintained in-repo only (not synced from Feishu). It is the handoff for commands, queries, events, and presentation.
+**Exception:** [`docs/6-开发交接/表现层接缝.md`](../6-开发交接/表现层接缝.md) is maintained in-repo only (not synced from Feishu). It is the handoff for commands, queries, events, and presentation. Playtest fiction names live in [`docs/4-数据汇总/虚构配置表.md`](../4-数据汇总/虚构配置表.md) (also repo-local); floor-1 look and object art notes live in [`虚构设计总纲.md`](../../虚构设计总纲.md) at the repo root.
 
 ## File structure
 
@@ -23,6 +23,7 @@ Single-context repo (this repo):
 ```
 /
 ├── CONTEXT.md
+├── 虚构设计总纲.md   ← playtest fiction lookbook (repo-local)
 ├── docs/
 │   ├── agents/          ← agent / triage / tracker config (repo-local)
 │   ├── adr/             ← ADRs when they exist (optional)

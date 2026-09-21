@@ -21,12 +21,10 @@ export const BATTLE = {
 }
 
 export const MAP = {
-  nodes: {
-    yuZhuang: { x: 96, y: 188 },
-    drawer: { x: 236, y: 168 },
-    boShou: { x: 376, y: 188 },
-    shouMen: { x: 520, y: 158 },
-  } as Record<string, { x: number; y: number }>,
+  padX: 48,
+  padY: 44,
+  width: 544,
+  height: 236,
 }
 
 export const PANEL = {

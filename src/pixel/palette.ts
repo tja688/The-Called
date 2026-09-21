@@ -34,10 +34,10 @@ export const MASTER: ReadonlySet<string> = new Set(Object.values(PAL).map((h) =>
 
 /** 体系 → 主色（卡框、符号、文字高亮） */
 export const SCHOOL_COLOR: Record<string, string> = {
-  science: PAL.sta, mystery: PAL.fruR, religion: PAL.dai, neutral: PAL.sna, monster: PAL.sig, enemy: PAL.ene,
+  'SYS.A': PAL.gold, 'SYS.B': PAL.purpleL, 'SYS.C': PAL.dai, neutral: PAL.stoneL, enemy: PAL.ene,
 }
 export const SCHOOL_COLOR_DARK: Record<string, string> = {
-  science: PAL.yellowD, mystery: PAL.redD, religion: PAL.blueD, neutral: PAL.tan, monster: PAL.purpleD, enemy: PAL.wood1,
+  'SYS.A': PAL.yellowD, 'SYS.B': PAL.purpleD, 'SYS.C': PAL.blueD, neutral: PAL.slate, enemy: PAL.copperD,
 }
 
 /** 解析 'key' 或 '#hex' */

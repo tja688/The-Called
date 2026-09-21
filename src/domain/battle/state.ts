@@ -1,7 +1,12 @@
 import type { RngState } from '../../core/Rng'
-import type { BattlePhase, BattleOutcome, CardKind, CardStatus, SettleReason, Side, Zone } from '../types'
+import type { BattleOutcome, BattlePhase, CardKind, CardStatus, SettleReason, Side, Zone } from '../types'
 import type { Cell } from '../geometry'
-import type { EncounterId } from '../types'
+
+export interface DeckEntry {
+  defId: string
+  basePoints: number
+  boxUid?: string
+}
 
 export interface CardInst {
   id: string
@@ -14,30 +19,42 @@ export interface CardInst {
   permanent: number
   statuses: CardStatus[]
   isAvatar: boolean
+  boxUid?: string
+  timer?: number
+  timerMax?: number
+  linkId?: string
 }
 
 export interface BattleResult {
   outcome: BattleOutcome
   reason: SettleReason
-  wound: number
+  avatarCost: number
 }
 
 export interface BattleState {
-  encounterId: EncounterId
+  encounterId: string
+  boss: boolean
   rng: RngState
   nextId: number
   cards: Record<string, CardInst>
   board: (string | null)[]
   hand: string[]
-  deck: string[]
+  deck: DeckEntry[]
   discard: string[]
-  exile: string[]
-  mana: number
-  manaCap: number
+  enemyDiscard: string[]
+  occupy: number
+  occupyCap: number
+  resA: number
+  goldDelta: number
+  burnedUids: string[]
+  firstOccupyDone: boolean
+  activated: boolean
+  relicFirstOccupy: boolean
+  mapEffect?: string
+  initialAvatar: number
   turn: number
   phase: BattlePhase
   opening: boolean
-  leading: boolean
   result?: BattleResult
 }
 
@@ -47,6 +64,10 @@ export function emptyBoard(): (string | null)[] {
 
 export function isSealed(card: CardInst): boolean {
   return card.statuses.includes('sealed')
+}
+
+export function hasStatus(card: CardInst, status: CardStatus): boolean {
+  return card.statuses.includes(status)
 }
 
 export function boardCards(state: BattleState): CardInst[] {
@@ -65,4 +86,12 @@ export function avatarOf(state: BattleState): CardInst | undefined {
 export function cardAt(state: BattleState, cell: number): CardInst | undefined {
   const id = state.board[cell]
   return id ? state.cards[id] : undefined
+}
+
+export function isGone(card: CardInst): boolean {
+  return card.zone === 'gone'
+}
+
+export function playerDiscard(state: BattleState): CardInst[] {
+  return state.discard.map((id) => state.cards[id])
 }

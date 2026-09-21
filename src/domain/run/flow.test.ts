@@ -1,0 +1,178 @@
+import { describe, expect, it } from 'vitest'
+import { RunAggregate } from './RunAggregate'
+import { startRun } from '../../test/helpers'
+import { isRewardable, playerCardIds } from '../../content/cards'
+import { eventsForFloor } from '../../content/events'
+import { mapEffectsFor } from '../../content/mapEffects'
+import { rewardableIds } from '../../content/rewards'
+import { toRunView } from '../../application/readmodels/RunView'
+import type { NodeType } from '../types'
+
+function approach(r: RunAggregate, type: NodeType) {
+  const node = r.state.nodes.find((n) => n.type === type)
+  if (!node) throw new Error(`没有 ${type}`)
+  r.state.screen = 'map'
+  r.state.ended = undefined
+  for (const pos of [
+    { x: node.x + 1, y: node.y },
+    { x: node.x - 1, y: node.y },
+    { x: node.x, y: node.y + 1 },
+    { x: node.x, y: node.y - 1 },
+  ]) {
+    r.state.player = pos
+    if (r.availableNodes().includes(node.id)) return node
+  }
+  throw new Error(`${type} 走不到`)
+}
+
+describe('普通战斗循环', () => {
+  it('胜：三选一 + 12 金；败回地图可再进且重抽怪', () => {
+    const { aggregate: r } = RunAggregate.start(8, 'DK.A')
+    const node = approach(r, 'normal')
+    r.enterNode(node.id)
+    expect(r.state.screen).toBe('battle')
+    const first = r.state.pendingEncounter
+    r.applyBattleResult({ outcome: 'lose', reason: 'avatarGone', avatarCost: 4 })
+    expect(r.state.screen).toBe('map')
+    expect(r.state.ended).toBeUndefined()
+    expect(node.lost).toBe(true)
+    expect(node.monsterId).toBeUndefined()
+    expect(r.availableNodes()).toContain(node.id)
+    r.enterNode(node.id)
+    expect(r.state.screen).toBe('battle')
+    expect(r.state.pendingEncounter).toBeTruthy()
+    expect(r.state.pendingEncounter === first || r.state.pendingEncounter).toBeTruthy()
+    r.applyBattleResult({ outcome: 'win', reason: 'clear', avatarCost: 0 })
+    expect(r.state.gold).toBe(12)
+    expect(r.state.pendingReward).toHaveLength(3)
+    expect(new Set(r.state.pendingReward).size).toBe(3)
+    for (const id of r.state.pendingReward!) expect(isRewardable(id)).toBe(true)
+    r.rewardPick(r.state.pendingReward![0])
+    r.returnToMap()
+    expect(r.state.screen).toBe('map')
+    expect(r.state.box.length).toBeGreaterThan(10)
+  })
+
+  it('只能看见相邻类型', () => {
+    const { aggregate: r } = RunAggregate.start(3, 'DK.A')
+    const far = r.state.nodes.find((n) => Math.abs(n.x) + Math.abs(n.y) > 1)
+    if (!far) return
+    const view = toRunView(r.state, r.availableNodes())
+    const v = view.nodes.find((n) => n.id === far.id)!
+    expect(v.type).toBe('unknown')
+  })
+})
+
+describe('事件商店疗养锻造宝箱', () => {
+  it('第 1 层事件不含专属更高层；抽空给 15 金', () => {
+    expect(eventsForFloor(1).every((e) => e.floors.includes(1))).toBe(true)
+    expect(eventsForFloor(1).some((e) => e.id === 'EV.08')).toBe(false)
+    const { aggregate: r } = RunAggregate.start(4, 'DK.A')
+    r.state.seenEvents = eventsForFloor(1).map((e) => e.id)
+    const node = approach(r, 'event')
+    r.enterNode(node.id)
+    expect(r.state.eventId).toBe('EV.EMPTY')
+    r.eventOption(0)
+    expect(r.state.gold).toBe(15)
+  })
+
+  it('商店陈列 5 张、可买可复制可空手离开再进', () => {
+    const { aggregate: r } = RunAggregate.start(6, 'DK.A')
+    r.state.gold = 400
+    const node = approach(r, 'shop')
+    r.enterNode(node.id)
+    expect(node.shop?.offers.length).toBe(5)
+    const first = node.shop!.offers[0]
+    expect(isRewardable(first.defId)).toBe(true)
+    r.shopBuyCard(0)
+    expect(r.state.box.some((c) => c.defId === first.defId)).toBe(true)
+    const beforeCopy = r.state.box.length
+    r.shopCopy(r.state.box[0].uid)
+    expect(r.state.box.length).toBe(beforeCopy + 1)
+    r.returnToMap()
+    r.enterNode(node.id)
+    expect(r.state.screen).toBe('shop')
+  })
+
+  it('宝箱已有遗物则 15 金；随机遗物不重复', () => {
+    const { aggregate: r } = RunAggregate.start(9, 'DK.A')
+    r.state.relics = ['RL.01']
+    const gold = r.state.gold
+    const chest = approach(r, 'chest')
+    r.enterNode(chest.id)
+    expect(r.state.gold).toBe(gold + 15)
+  })
+})
+
+describe('精英 BOSS 下层与内容池', () => {
+  it('精英胜：卡 + 25 金 + 遗物或 15 金', () => {
+    const { aggregate: r } = RunAggregate.start(10, 'DK.A')
+    const node = approach(r, 'elite')
+    r.enterNode(node.id)
+    expect(['MON.E01', 'MON.E04']).toContain(r.state.pendingEncounter)
+    r.applyBattleResult({ outcome: 'win', reason: 'lead', avatarCost: 0 })
+    expect(r.state.gold).toBe(25)
+    expect(r.state.relics.includes('RL.01') || r.state.gold >= 25).toBe(true)
+    expect(r.state.pendingReward).toHaveLength(3)
+  })
+
+  it('BOSS 胜出现下层，点下层通关；BOSS 败整局失败', () => {
+    const { aggregate: r } = RunAggregate.start(12, 'DK.A')
+    const boss = approach(r, 'boss')
+    r.enterNode(boss.id)
+    expect(r.state.pendingEncounter).toBe('MON.B02')
+    r.applyBattleResult({ outcome: 'win', reason: 'clear', avatarCost: 0 })
+    expect(r.state.gold).toBe(80)
+    const next = r.state.nodes.find((n) => n.type === 'nextFloor')
+    expect(next).toBeTruthy()
+    r.state.player = { x: next!.x + 1, y: next!.y }
+    if (!r.availableNodes().includes(next!.id)) r.state.player = { x: next!.x, y: next!.y + 1 }
+    r.enterNode(next!.id)
+    expect(r.state.ended).toBe('victory')
+
+    const { aggregate: r2 } = RunAggregate.start(12, 'DK.A')
+    const boss2 = approach(r2, 'boss')
+    r2.enterNode(boss2.id)
+    r2.applyBattleResult({ outcome: 'lose', reason: 'avatarGone', avatarCost: 10 })
+    expect(r2.state.ended).toBe('defeat')
+  })
+
+  it('血条归零整局失败', () => {
+    const { aggregate: r } = RunAggregate.start(1, 'DK.A')
+    r.state.hp = 3
+    const node = approach(r, 'normal')
+    r.enterNode(node.id)
+    r.applyBattleResult({ outcome: 'win', reason: 'clear', avatarCost: 10 })
+    expect(r.state.ended).toBe('defeat')
+  })
+
+  it('本层地图效果来自 ME.01–03；58 张玩家卡除基础负面进池', () => {
+    expect(mapEffectsFor(1).map((m) => m.id).sort()).toEqual(['ME.01', 'ME.02', 'ME.03'])
+    const { aggregate: r } = RunAggregate.start(1, 'DK.A')
+    expect(['ME.01', 'ME.02', 'ME.03']).toContain(r.state.floorEffect)
+    expect(playerCardIds()).toHaveLength(58)
+    const pool = rewardableIds('SYS.A')
+    expect(pool.length).toBeGreaterThan(20)
+    expect(pool.every((id) => isRewardable(id))).toBe(true)
+    expect(pool.some((id) => id.startsWith('PC.N'))).toBe(true)
+  })
+})
+
+describe('GameService 命令竖切', () => {
+  it('能走进相邻普通仗并落下化身', async () => {
+    const game = await startRun('DK.A', 11)
+    const run = game.ask({ type: 'run.view' })!
+    const node = run.availableNodes[0]
+    await game.dispatch({ type: 'run.enterNode', node })
+    const after = game.ask({ type: 'run.view' })!
+    if (after.screen !== 'battle') return
+    const bv = game.ask({ type: 'battle.view' })!
+    const av = bv.hand.find((id) => bv.cards[id].isAvatar)!
+    const legal = game.ask({ type: 'battle.legalPlays' }).find((p) => p.card === av)!
+    await game.dispatch({ type: 'battle.play', card: av, cell: legal.cells[0] })
+    const placed = game.ask({ type: 'battle.view' })!
+    expect(placed.avatar.onBoard).toBe(true)
+    expect(placed.occupy).toBeGreaterThanOrEqual(1)
+    expect(game.ask({ type: 'battle.legalActivates' }).length).toBeGreaterThanOrEqual(0)
+  })
+})

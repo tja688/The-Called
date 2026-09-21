@@ -45,8 +45,9 @@ function gallery(): void {
   main.replaceChildren()
   side.replaceChildren()
   let row = section('化身（ASCII）')
-  const b = ASSETS.sprite('char.avatar')
-  if (b) {
+  for (const id of ['char.pca00', 'char.pcb00', 'char.pcc00']) {
+    const b = ASSETS.sprite(id)
+    if (!b) continue
     for (const anim of Object.keys(b.def.animations ?? { idle: {} })) {
       const c = document.createElement('canvas')
       c.className = 'px'
@@ -58,27 +59,26 @@ function gallery(): void {
       drawSprite(g, b, b.anchor[0], b.anchor[1], { anim, t: 0.2 })
       const d = document.createElement('div')
       d.className = 'cell'
-      d.append(c, document.createElement('br'), `char.avatar ${anim}`)
+      d.append(c, document.createElement('br'), `${id} ${anim}`)
       row.append(d)
     }
   }
-  row = section('敌方器物')
+  row = section('敌方')
   for (const [k, s] of Object.entries(ASSETS.all.shapes)) {
     if (k.startsWith('npc.')) row.append(cell(k, ASSETS.icon(s.id), 3))
   }
   row = section('卡面')
   for (const c of Object.values(content().cards)) {
-    if (c.id === 'AVATAR') continue
-    row.append(cell(`${c.name} ${c.id}`, ASSETS.card(c.id), 3))
+    row.append(cell(`${c.id}`, ASSETS.card(c.id), 3))
   }
   row = section('图标 / 特效 / 道具 / UI')
   for (const [k, s] of Object.entries(ASSETS.all.shapes)) {
     if (/^(icon|fx|prop|ui)\./.test(k)) row.append(cell(k, ASSETS.icon(s.id), k.startsWith('prop.') ? 2 : 4))
   }
-  row = section('桌面材质')
-  for (const k of ['bamboo', 'stone', 'wood', 'hall'] as const) row.append(cell(k, bakeTable(k), 0.5))
-  row = section('横版场面（静帧）')
-  for (const key of ['title', 'l1_dock'] as const) {
+  row = section('地砖')
+  for (const k of ['corridor', 'foyer', 'nest', 'boss'] as const) row.append(cell(k, bakeTable(k), 0.5))
+  row = section('锈门层房间')
+  for (const key of ['gate', 'corridor', 'boss', 'shop'] as const) {
     const sc = new Scenery(key)
     const c = document.createElement('canvas')
     c.className = 'px'
@@ -87,7 +87,8 @@ function gallery(): void {
     const g = c.getContext('2d')!
     g.imageSmoothingEnabled = false
     sc.drawBack(g, 200, 1.2)
-    if (b) drawSprite(g, b, 220, GROUND_Y, { anim: 'idle', t: 0.2, shadow: true })
+    const ranger = ASSETS.sprite('char.pca00')
+    if (ranger) drawSprite(g, ranger, 220, GROUND_Y, { anim: 'idle', t: 0.2, shadow: true })
     sc.drawFront(g, 200, 1.2)
     const d = document.createElement('div')
     d.className = 'cell'

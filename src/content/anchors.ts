@@ -1,4 +1,4 @@
-/** 数值锚点。调参先改这里。见 docs/4-数据汇总/数值锚点.md */
+/** 数值锚点。调参先改这里。 */
 
 export const ANCHORS = {
   hpMax: 30,
@@ -7,14 +7,20 @@ export const ANCHORS = {
   openingDraw: 4,
   turnDraw: 1,
   avatarBase: 10,
-  loseHp: 10,
-  bandage: 8,
-  shadowCorner: 1,
-  openingFinal: {
-    yuZhuang: 17,
-    boShou: 17,
-    shouMen: 22,
-  } as const,
+  deckMin: 10,
+  goldNormal: 12,
+  goldElite: 25,
+  goldBoss: 80,
+  goldFallback: 15,
+  restHealPct: 0.3,
+  shopWhite: 30,
+  shopBlue: 45,
+  shopGold: 90,
+  shopCopyFirst: 45,
+  shopCopyStep: 15,
+  rarityWhite: 60,
+  rarityBlue: 30,
+  rarityGold: 10,
 } as const
 
 export type AnchorId = keyof typeof ANCHORS
