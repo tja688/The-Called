@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "sim": "tsx src/tools/sim.ts",
     "sim:compare": "tsx src/tools/sim.ts --compare",
+    "sync:feishu-docs": "node scripts/sync-feishu-wiki.mjs",
     "electron": "electron .",
     "pack": "npm run build && node scripts/pack-electron.mjs"
   },

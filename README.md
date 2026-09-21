@@ -29,8 +29,9 @@ npm run pack
 ## 结构
 
 ```text
-docs/                 设计案（从 索引.md 读）
-docs/6-开发交接/      表现层接缝
+docs/                 设计案（飞书同步，`npm run sync:feishu-docs`）
+docs/agents/          Issue / triage / domain 配置（Matt Pocock skills）
+docs/6-开发交接/      表现层接缝（仓库维护，不同步）
 src/core              命令 / 查询 / 事件总线
 src/domain            战斗与一趟
 src/content           卡表、遭遇、锚点
