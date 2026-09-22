@@ -10,7 +10,6 @@ import { PAL, rgba } from '../../pixel/palette'
 import { ASSETS } from '../../pixel/assets'
 import { bakeTable } from '../../pixel/terrain'
 import { Scenery, roomOfEncounter } from '../../pixel/scenery'
-import { glow } from '../../pixel/light'
 import { pxRoundRect, pxFrame, dashedLine, bannerBg } from '../../pixel/ui'
 import { drawSprite, blit } from '../../pixel/dsl'
 import { tween, wait, ease, osc, clamp } from '../../pixel/tween'
@@ -22,6 +21,8 @@ import { BATTLE, TOPBAR_H, INSPECT } from '../layout'
 import { drawHandCard, drawBoardToken, drawHpBar, drawWoundChip, drawInspectPanel, drawStatuses, drawHint } from '../widgets'
 import type { LegalPlay } from '../../domain/battle/BattleAggregate'
 import { mapEffectDef } from '../../content/mapEffects'
+import type { Cause } from '../../domain/battle/events'
+import { drawSparks, sfxForKind, statusWord, strikeKind, type Spark, type SparkKind } from './battleFx'
 
 type BE<T extends BattleEvent['type']> = Extract<BattleEvent, { type: T }>
 type G = CanvasRenderingContext2D
@@ -41,14 +42,17 @@ interface Actor {
   lift: number
   glow: number
   flash: number
+  ox: number
+  oy: number
   zone: 'hand' | 'board' | 'fly' | 'gone'
   cell?: Cell
   points: number
   sealed: boolean
+  statuses: string[]
   z: number
 }
 
-interface Floater { x: number; y: number; text: string; color: string; t: number }
+interface Floater { x: number; y: number; text: string; color: string; t: number; life: number }
 interface Drip { x: number; y: number; t: number }
 
 const CELL_POS = (cell: number) => {
@@ -71,8 +75,6 @@ export class BattleScene extends Scene {
   private selected: string | null = null
   private mana = 0
   private manaCap = 0
-  private leading = false
-  private leadFlash = 0
   private turn = 1
   private phase: 'play' | 'over' = 'play'
   private wound = 0
@@ -81,9 +83,15 @@ export class BattleScene extends Scene {
   private scenery = new Scenery('corridor')
   private t = 0
   private floaters: Floater[] = []
+  private sparks: Spark[] = []
   private drips: Drip[] = []
   private result: BE<'battle.settled'> | null = null
-  private lastType = ''
+  /** 本张卡这一时机是否已经播过带因果的后果。effectResolved 时清掉。 */
+  private beatLanded = false
+  private drew = false
+  private usedActive = false
+  private lastCast: { x: number; y: number; defId: string } | null = null
+  private pendingSetup: { cell: Cell; defId: string; current: number }[] = []
   private zc = 0
   private pickedTarget: string | null = null
   private activateAim = false
@@ -98,7 +106,6 @@ export class BattleScene extends Scene {
     this.wound = v.avatar.avatarCost
     this.mana = v.occupy
     this.manaCap = v.occupyCap
-    this.leading = v.leading
     this.turn = v.turn
     this.phase = v.phase
     audio.atmosphere(v.encounterId)
@@ -110,9 +117,12 @@ export class BattleScene extends Scene {
 
   update(dt: number): void {
     this.t += dt
-    this.leadFlash = Math.max(0, this.leadFlash - dt)
-    for (const a of this.actors.values()) a.flash = Math.max(0, a.flash - dt * 3)
-    this.floaters = this.floaters.filter((f) => (f.t += dt) < 0.7)
+    for (const a of this.actors.values()) {
+      a.flash = Math.max(0, a.flash - dt * 3)
+      a.glow = Math.max(0, a.glow - dt * 2.4)
+    }
+    this.floaters = this.floaters.filter((f) => (f.t += dt) < f.life)
+    this.sparks = this.sparks.filter((s) => (s.t += dt) < s.life)
     this.drips = this.drips.filter((d) => (d.t += dt) < 0.55)
     this.lockLines = this.lockLines.filter((l) => (l.t -= dt) > 0)
   }
@@ -120,27 +130,32 @@ export class BattleScene extends Scene {
   async handle(e: DomainEvent): Promise<void> {
     if (!e.type.startsWith('battle.')) return
     const ev = e as BattleEvent
-    const brief = this.lastType === ev.type
-    this.lastType = ev.type
+    this.beginBeat()
     switch (ev.type) {
       case 'battle.started': await this.onStart(ev); break
       case 'battle.avatarDealt': await this.onDealt(ev); break
       case 'battle.cardDrawn': await this.onDrawn(ev); break
-      case 'battle.turnStarted': await this.onTurn(ev, brief); break
+      case 'battle.turnStarted': await this.onTurn(ev); break
       case 'battle.phaseChanged': await this.onPhase(ev); break
-      case 'battle.occupyChanged': await this.onMana(ev, brief); break
-      case 'battle.resourceChanged': await this.beat(0.04); break
+      case 'battle.occupyChanged': await this.onMana(ev); break
+      case 'battle.resourceChanged': await this.onResource(ev); break
       case 'battle.effectResolved': await this.onEffect(ev); break
-      case 'battle.activated': this.app.toast(ev.text, 52); await this.beat(0.08); break
+      case 'battle.activated': await this.onActivated(ev); break
       case 'battle.cardPlayed': await this.onPlayed(ev); break
       case 'battle.cardCovered': await this.onCovered(ev); break
       case 'battle.cardEntered': await this.onEntered(ev); break
       case 'battle.cardRemoved': await this.onRemoved(ev); break
-      case 'battle.pointsChanged': await this.onPoints(ev, brief); break
+      case 'battle.pointsChanged': await this.onPoints(ev); break
       case 'battle.statusAdded': await this.onStatus(ev, true); break
       case 'battle.statusRemoved': await this.onStatus(ev, false); break
       case 'battle.settled': await this.onSettled(ev); break
     }
+  }
+
+  /** 下一条后果开始前，清掉上一条还挂着的飘字和火花。 */
+  private beginBeat(): void {
+    this.floaters = []
+    this.sparks = []
   }
 
   private async beat(sec: number): Promise<void> {
@@ -151,8 +166,8 @@ export class BattleScene extends Scene {
     const def = cardDef(defId)
     const a: Actor = {
       id, defId, owner, kind: def.kind, isAvatar: def.kind === 'avatar',
-      x, y, sx: 1, sy: 1, alpha: 1, scale: 1, lift: 0, glow: 0, flash: 0,
-      zone: 'fly', points: def.basePoints, sealed: false, z: this.zc++,
+      x, y, sx: 1, sy: 1, alpha: 1, scale: 1, lift: 0, glow: 0, flash: 0, ox: 0, oy: 0,
+      zone: 'fly', points: def.basePoints, sealed: false, statuses: [], z: this.zc++,
     }
     this.actors.set(id, a)
     return a
@@ -178,14 +193,63 @@ export class BattleScene extends Scene {
     }))
   }
 
-  private floatAt(p: { x: number; y: number }, text: string, color: string): void {
-    this.floaters.push({ x: p.x, y: p.y, text, color, t: 0 })
+  /** 同一时刻只留这一条字，等它读完再往下。 */
+  private async caption(p: { x: number; y: number } | undefined, text: string, color: string, sec = 0.18): Promise<void> {
+    this.floaters = []
+    const at = p ?? { x: 320, y: 150 }
+    this.floaters.push({ x: at.x, y: at.y - 12, text, color, t: 0, life: sec + 0.04 })
+    await wait(sec)
+    this.floaters = []
+  }
+
+  private spark(kind: SparkKind, p: { x: number; y: number } | undefined, life = 0.22): Spark {
+    const s: Spark = { kind, x: p?.x ?? 320, y: p?.y ?? 160, t: 0, life }
+    this.sparks.push(s)
+    return s
+  }
+
+  private noteCause(cause?: Cause): void {
+    if (cause) this.beatLanded = true
+  }
+
+  private actorAt(id: string | undefined): Actor | undefined {
+    return id ? this.actors.get(id) : undefined
+  }
+
+  private spot(a: Actor | undefined, fallback?: { x: number; y: number }): { x: number; y: number } {
+    if (a) return { x: a.x + a.ox, y: a.y + a.oy - 8 }
+    return fallback ?? { x: 320, y: 160 }
+  }
+
+  private async lunge(a: Actor, toward: { x: number; y: number }, dist = 12): Promise<void> {
+    const dx = toward.x - a.x
+    const dy = toward.y - a.y
+    const len = Math.hypot(dx, dy) || 1
+    await tween(a, { ox: (dx / len) * dist, oy: (dy / len) * dist, sx: 1.18, sy: 0.84 }, 0.07, ease.outQuad)
+    await tween(a, { ox: 0, oy: 0, sx: 1, sy: 1 }, 0.08, ease.outQuad)
+  }
+
+  private async flinch(a: Actor): Promise<void> {
+    a.flash = 1
+    await tween(a, { sx: 0.82, sy: 1.16, ox: 4 }, 0.05, ease.outQuad)
+    await tween(a, { sx: 1, sy: 1, ox: 0 }, 0.07, ease.outQuad)
+  }
+
+  private async pulse(a: Actor): Promise<void> {
+    a.glow = 1
+    await tween(a, { sx: 1.16, sy: 0.88 }, 0.06, ease.outQuad)
+    await tween(a, { sx: 1, sy: 1 }, 0.08, ease.outBack)
   }
 
   private async onStart(ev: BE<'battle.started'>): Promise<void> {
     this.encounterId = ev.encounterId
     this.scenery = new Scenery(roomOfEncounter(ev.encounterId))
     this.table = bakeTable(tableOf(ev.encounterId))
+    this.pendingSetup = ev.setup.map((s) => ({ ...s }))
+    this.usedActive = false
+    this.beatLanded = false
+    this.drew = false
+    this.result = null
     audio.atmosphere(ev.encounterId)
     const enc = encounterDef(ev.encounterId)
     await this.app.showBanner(fictionName(enc.id), ev.text.replace(/^[^。]+。/, ''), 0.7, enc.tier === 'boss' ? PAL.lamp2 : PAL.lamp1)
@@ -203,19 +267,28 @@ export class BattleScene extends Scene {
   private async onDrawn(ev: BE<'battle.cardDrawn'>): Promise<void> {
     const a = this.makeActor(ev.card, ev.defId, 'player', DECK.x, DECK.y)
     this.hand.push(ev.card)
+    this.drew = true
     audio.sfx('draw')
     await this.layoutHand()
     await this.beat(0.04)
   }
 
-  private async onTurn(ev: BE<'battle.turnStarted'>, brief: boolean): Promise<void> {
+  private async onTurn(ev: BE<'battle.turnStarted'>): Promise<void> {
     this.turn = ev.turn
-    this.leading = ev.leading
+    for (const tm of ev.timers) {
+      const a = this.actorAt(tm.card)
+      const p = a ? this.spot(a) : { x: 320, y: 150 }
+      if (a) a.glow = 1
+      this.spark('fuse', p, 0.16)
+      audio.sfx('pressure')
+      await this.caption(p, `${fictionName(tm.defId)} 引信 ${tm.left}`, PAL.lamp2, 0.12)
+    }
     if (ev.won) {
-      await this.app.showBanner('总点数更大', '回合开始检查通过', 0.7, PAL.lamp1)
+      audio.sfx('lead')
+      await this.app.showBanner('总点数更大', '称重通过', 0.7, PAL.lamp1)
       return
     }
-    if (!brief) await this.beat(ev.opening ? 0.12 : 0.18)
+    if (!ev.opening) await this.beat(0.06)
   }
 
   private async onPhase(ev: BE<'battle.phaseChanged'>): Promise<void> {
@@ -223,17 +296,63 @@ export class BattleScene extends Scene {
   }
 
   private async onEffect(ev: BE<'battle.effectResolved'>): Promise<void> {
-    const c = ev.cell ? cellCenter(ev.cell) : { x: 320, y: 160 }
-    this.floatAt(c, ev.timing, PAL.orange)
-    await this.beat(0.06)
+    if (ev.hit) await this.slotResolveHit(ev)
+    else await this.slotResolveMiss(ev)
+    this.beatLanded = false
+    this.drew = false
   }
 
-  private async onMana(ev: BE<'battle.occupyChanged'>, brief: boolean): Promise<void> {
-    const up = ev.current > this.mana || ev.cap > this.manaCap
+  private async slotResolveHit(ev: BE<'battle.effectResolved'>): Promise<void> {
+    const a = this.actorAt(ev.card)
+    if (a) a.glow = 1
+    await this.beat(this.beatLanded ? 0.14 : 0.18)
+  }
+
+  private async slotResolveMiss(ev: BE<'battle.effectResolved'>): Promise<void> {
+    if (this.drew) {
+      await this.beat(0.04)
+      return
+    }
+    const a = this.actorAt(ev.card)
+    const p = a ? this.spot(a) : (ev.cell ? cellCenter(ev.cell) : { x: 320, y: 150 })
+    this.spark('whiff', p, 0.12)
+    audio.sfx('whiff')
+    await this.caption(p, `${fictionName(ev.defId)} 落空`, PAL.gray3, 0.12)
+  }
+
+  private async onMana(ev: BE<'battle.occupyChanged'>): Promise<void> {
+    const prev = this.mana
+    const prevCap = this.manaCap
     this.mana = ev.current
     this.manaCap = ev.cap
-    if (up) audio.sfx('mana')
-    if (!brief) await this.beat(0.08)
+    if (ev.cause?.timing === 'enter') {
+      this.noteCause(ev.cause)
+      audio.sfx('mana')
+      await this.caption({ x: 180, y: 48 }, `${fictionName(ev.cause.defId)} 入场 +1`, PAL.sta, 0.14)
+      return
+    }
+    const refill = !ev.cause && (ev.current > prev || ev.cap > prevCap) && (ev.current > 0 || ev.cap > 0)
+    if (refill) {
+      audio.sfx('mana')
+      await this.caption({ x: 180, y: 48 }, `费用 ${ev.current}/${ev.cap}`, PAL.lamp1, 0.12)
+      return
+    }
+    if (ev.current !== prev || ev.cap !== prevCap) await this.beat(0.04)
+  }
+
+  private async onResource(ev: BE<'battle.resourceChanged'>): Promise<void> {
+    this.noteCause(ev.cause)
+    const who = ev.cause ? fictionName(ev.cause.defId) : '圣油'
+    audio.sfx(ev.current > 0 ? 'buff' : 'click')
+    await this.caption({ x: 220, y: 48 }, `${who} 圣油 ${ev.current}`, PAL.gold, 0.1)
+  }
+
+  private async onActivated(ev: BE<'battle.activated'>): Promise<void> {
+    this.usedActive = true
+    const a = this.actorAt(ev.card)
+    audio.sfx('play')
+    if (a) await this.pulse(a)
+    await this.caption(a ? this.spot(a) : { x: 320, y: 150 }, `${fictionName(ev.defId)} 主动`, PAL.lamp1, 0.16)
   }
 
   private async onPlayed(ev: BE<'battle.cardPlayed'>): Promise<void> {
@@ -243,6 +362,7 @@ export class BattleScene extends Scene {
     audio.sfx('play')
     if (!a) return
     if (ev.kind === 'spell') {
+      this.lastCast = { x: a.x + BATTLE.cardW / 2, y: a.y, defId: ev.defId }
       a.zone = 'fly'
       await tween(a, { y: a.y - 24, alpha: 0.2, scale: 1.15 }, 0.22, ease.outQuad)
       a.zone = 'gone'
@@ -256,79 +376,223 @@ export class BattleScene extends Scene {
 
   private async onCovered(ev: BE<'battle.cardCovered'>): Promise<void> {
     const v = this.actors.get(ev.victim)
+    const by = this.actors.get(ev.by)
     const c = cellCenter(ev.cell)
     audio.sfx('cover')
-    this.floatAt(c, `-${ev.victimPoints}`, PAL.lamp3)
+    this.spark('boom', c, 0.2)
+    if (by && !ev.tied) by.points = Math.max(0, by.points - ev.victimPoints)
+    const word = ev.tied ? '平点' : `压住 -${ev.victimPoints}`
     if (v) {
       v.glow = 1
-      await tween(v, { sy: 0.2, sx: 1.35, alpha: 0.35 }, 0.2, ease.inQuad)
+      await tween(v, { sy: 0.2, sx: 1.35, alpha: 0.35 }, 0.16, ease.inQuad)
     }
-    await this.beat(0.05)
+    await this.caption(c, word, PAL.lamp3, 0.14)
   }
 
   private async onEntered(ev: BE<'battle.cardEntered'>): Promise<void> {
+    if (ev.motion === 'move') {
+      await this.slotMove(ev)
+      return
+    }
+    await this.slotPlace(ev)
+  }
+
+  private async slotPlace(ev: BE<'battle.cardEntered'>): Promise<void> {
+    this.noteCause(ev.cause)
     let a = this.actors.get(ev.card)
     const dest = cellCenter(ev.cell)
-    const view = this.app.ask({ type: 'battle.view' })
-    const inst = view?.cards[ev.card]
     if (!a) {
-      a = this.makeActor(ev.card, inst?.defId ?? 'E1A', inst?.owner ?? 'enemy', dest.x, dest.y - 40)
+      const slot = this.pendingSetup.find((s) => s.cell === ev.cell)
+      const view = this.app.ask({ type: 'battle.view' })
+      const inst = view?.cards[ev.card]
+      const defId = slot?.defId ?? inst?.defId ?? ev.cause?.defId ?? 'EC.01'
+      const owner = inst?.owner ?? (defId.startsWith('EC.') ? 'enemy' : 'player')
+      a = this.makeActor(ev.card, defId, owner, dest.x, dest.y - 36)
       a.alpha = 0
+      if (slot) a.points = slot.current
+      if (slot) this.pendingSetup = this.pendingSetup.filter((s) => s !== slot)
     }
     this.hand = this.hand.filter((id) => id !== ev.card)
     a.cell = ev.cell
     a.zone = 'fly'
-    if (inst) a.points = inst.currentPoints
-    await tween(a, { x: dest.x, y: dest.y, alpha: 1, scale: 1, sx: 1.2, sy: 0.75 }, 0.22, ease.outQuad)
+    const who = fictionName(ev.cause?.defId ?? a.defId)
+    audio.sfx(a.defId === 'EC.03' || a.defId === 'EC.14' ? 'buff' : 'play')
+    await tween(a, { x: dest.x, y: dest.y, alpha: 1, scale: 1, sx: 1.2, sy: 0.75 }, 0.16, ease.outQuad)
     a.zone = 'board'
-    await tween(a, { sx: 1, sy: 1 }, 0.16, ease.outBack)
-    if (ev.covered) this.floatAt(dest, '压住', PAL.lamp2)
-    if (a.defId === 'P03') {
-      audio.sfx('mana')
-      this.floatAt({ x: dest.x, y: dest.y - 16 }, '+邻', PAL.sta)
-    }
+    await tween(a, { sx: 1, sy: 1 }, 0.1, ease.outBack)
+    if (ev.covered) await this.caption(dest, `${who} 落地`, PAL.lamp2, 0.1)
+    else if (ev.cause) await this.caption(dest, `${who} 落地`, PAL.cream, 0.1)
     await this.layoutHand()
   }
 
-  private async onRemoved(ev: BE<'battle.cardRemoved'>): Promise<void> {
-    const a = this.actors.get(ev.card)
-    if (!a) return
-    const c = cellCenter(ev.cell)
-    if (a.isAvatar || ev.to === 'gone') {
-      audio.sfx('banish')
-      a.flash = 1
-      await tween(a, { scale: 1.4, alpha: 0, sy: 0.2 }, 0.28, ease.inQuad)
-    } else {
-      const to = ev.to === 'discard' ? { x: 40, y: 330 } : { x: 40, y: 40 }
-      await tween(a, { x: to.x, y: to.y, alpha: 0, scale: 0.4 }, 0.22, ease.inQuad)
+  private async slotMove(ev: BE<'battle.cardEntered'>): Promise<void> {
+    this.noteCause(ev.cause)
+    const dest = cellCenter(ev.cell)
+    const from = ev.from ? cellCenter(ev.from) : dest
+    let a = this.actors.get(ev.card)
+    if (!a) {
+      const view = this.app.ask({ type: 'battle.view' })
+      const inst = view?.cards[ev.card]
+      a = this.makeActor(ev.card, inst?.defId ?? ev.cause?.defId ?? 'EC.01', inst?.owner ?? 'enemy', from.x, from.y)
     }
-    a.zone = 'gone'
-    this.floatAt(c, ev.to === 'gone' ? '驱离' : '离场', PAL.gray3)
-    await this.beat(0.05)
+    a.x = from.x
+    a.y = from.y
+    a.cell = ev.cell
+    a.zone = 'fly'
+    const ogre = a.defId === 'EC.01' || a.defId === 'EC.18'
+    const skel = a.defId === 'EC.07' || a.defId === 'EC.05'
+    audio.sfx(ogre ? 'step' : 'play')
+    if (ogre) this.spark('club', from, 0.16)
+    await tween(a, { x: dest.x, y: dest.y, sx: ogre ? 1.28 : skel ? 1.05 : 1.12, sy: ogre ? 0.72 : 0.9 }, 0.14, ease.outQuad)
+    a.zone = 'board'
+    await tween(a, { sx: 1, sy: 1 }, 0.08, ease.outBack)
+    if (ogre) this.app.shake = 3
+    await this.caption(dest, `${fictionName(a.defId)} →${ev.cell}`, PAL.cream, 0.1)
   }
 
-  private async onPoints(ev: BE<'battle.pointsChanged'>, brief: boolean): Promise<void> {
+  private async onRemoved(ev: BE<'battle.cardRemoved'>): Promise<void> {
+    this.noteCause(ev.cause)
     const a = this.actors.get(ev.card)
-    if (a) a.points = ev.after
-    const p = a ? { x: a.x, y: a.y - 10 } : { x: 320, y: 160 }
-    const d = ev.after - ev.before
-    this.floatAt(p, `${d > 0 ? '+' : ''}${d}`, d >= 0 ? PAL.sta : PAL.fruR)
-    if (a?.isAvatar && d < 0) {
+    const c = a ? this.spot(a) : cellCenter(ev.cell)
+    const who = fictionName(ev.cause?.defId ?? ev.defId)
+    if (a && (a.isAvatar || ev.to === 'gone')) {
+      audio.sfx('banish')
       a.flash = 1
-      audio.sfx('hurt')
-      this.drips.push({ x: a.x, y: a.y - 20, t: 0 })
-      const v = this.app.ask({ type: 'battle.view' })
-      if (v) this.wound = v.avatar.avatarCost
+      this.spark('boom', c, 0.2)
+      await tween(a, { scale: 1.4, alpha: 0, sy: 0.2 }, 0.2, ease.inQuad)
+    } else if (a) {
+      const to = ev.to === 'discard' ? { x: 40, y: 330 } : { x: 40, y: 40 }
+      audio.sfx('play')
+      await tween(a, { x: to.x, y: to.y, alpha: 0, scale: 0.4 }, 0.16, ease.inQuad)
     }
-    if (!brief) await this.beat(0.1)
+    if (a) a.zone = 'gone'
+    const word = ev.reason === 'tie' ? '平点离场' : ev.to === 'gone' ? '驱离' : '离场'
+    await this.caption(c, `${who} ${word}`, PAL.gray3, 0.1)
+  }
+
+  private async onPoints(ev: BE<'battle.pointsChanged'>): Promise<void> {
+    this.noteCause(ev.cause)
+    if (ev.source === 'aura' || ev.source === 'map') {
+      await this.slotRecalc(ev)
+      return
+    }
+    await this.slotStrike(ev)
+  }
+
+  private async slotRecalc(ev: BE<'battle.pointsChanged'>): Promise<void> {
+    const target = this.actorAt(ev.card)
+    const net = ev.after - ev.before
+    if (target) target.points = ev.after
+    const share = ev.auras?.find((a) => a.n !== 0)
+    const src = share ? this.actorAt(share.card) : undefined
+    if (src && src.id !== target?.id) src.glow = 1
+    const label = ev.mapEffect ? fictionName(ev.mapEffect) : share ? fictionName(share.defId) : (ev.source === 'map' ? '地图' : '驻场')
+    this.spark('link', target ? this.spot(target) : { x: 320, y: 150 }, 0.16)
+    audio.sfx(net >= 0 ? 'buff' : 'hurt')
+    await this.caption(target ? this.spot(target) : undefined, `${label} ${net > 0 ? '+' : ''}${net}`, net >= 0 ? PAL.sta : PAL.fruR, 0.16)
+    if (src) src.glow = 0
+  }
+
+  private async slotStrike(ev: BE<'battle.pointsChanged'>): Promise<void> {
+    const target = this.actorAt(ev.card)
+    const actor = ev.cause ? this.actorAt(ev.cause.actor) : undefined
+    const net = ev.after - ev.before
+    const bonus = ev.vulnerableBonus ?? 0
+    const kind = strikeKind(ev.cause?.defId, ev.cause?.op)
+    const name = ev.cause ? fictionName(ev.cause.defId) : ''
+    const p = target ? this.spot(target) : { x: 320, y: 150 }
+    let flew = false
+    if (actor && actor.zone !== 'gone' && actor.id !== ev.card) {
+      await this.lunge(actor, target ? { x: target.x, y: target.y } : p, kind === 'club' ? 16 : 12)
+    } else if (kind === 'arrow' && this.lastCast && target) {
+      const bolt = this.spark('arrow', this.lastCast, 0.28)
+      await tween(bolt, { x: target.x, y: target.y - 8 }, 0.1, ease.outQuad)
+      flew = true
+    } else if (target && (actor?.id === ev.card || !actor)) {
+      await this.pulse(target)
+    }
+    if (kind === 'club') this.app.shake = 4
+    if (!flew) this.spark(kind, p, 0.2)
+    audio.sfx(sfxForKind(kind))
+    if (bonus > 0 && net < 0) {
+      const base = net + bonus
+      if (target) target.points = ev.before + base
+      await this.caption(p, `${name} ${base}`, PAL.fruR, 0.14)
+      this.spark('mark', { x: p.x + 8, y: p.y - 6 }, 0.16)
+      if (target) {
+        target.points = ev.after
+        await this.flinch(target)
+      }
+      await this.caption(p, `易伤 -${bonus}`, PAL.sig, 0.14)
+    } else {
+      if (target) target.points = ev.after
+      const sign = net > 0 ? `+${net}` : `${net}`
+      await this.caption(p, name ? `${name} ${sign}` : sign, net >= 0 ? PAL.sta : PAL.fruR, 0.2)
+      if (target && net < 0) await this.flinch(target)
+    }
+    if (target?.isAvatar && net < 0) {
+      audio.sfx('hurt')
+      this.drips.push({ x: target.x, y: target.y - 20, t: 0 })
+    }
   }
 
   private async onStatus(ev: BE<'battle.statusAdded'> | BE<'battle.statusRemoved'>, add: boolean): Promise<void> {
-    const a = this.actors.get(ev.card)
-    if (a && ev.status === 'sealed') a.sealed = add
+    this.noteCause(ev.cause)
+    const a = this.actorAt(ev.card)
+    if (a) {
+      if (add) {
+        if (!a.statuses.includes(ev.status)) a.statuses.push(ev.status)
+      } else {
+        a.statuses = a.statuses.filter((s) => s !== ev.status)
+      }
+      if (ev.status === 'sealed') a.sealed = add
+    }
+    if (!add && ev.status === 'protected') {
+      await this.slotGuard(ev)
+      return
+    }
+    if (ev.status === 'marked') {
+      await this.slotMark(ev, add)
+      return
+    }
+    await this.slotStatus(ev, add)
+  }
+
+  private async slotMark(ev: BE<'battle.statusAdded'> | BE<'battle.statusRemoved'>, add: boolean): Promise<void> {
+    const target = this.actorAt(ev.card)
+    const actor = ev.cause ? this.actorAt(ev.cause.actor) : undefined
+    const p = target ? this.spot(target) : { x: 320, y: 150 }
+    const name = ev.cause ? fictionName(ev.cause.defId) : ''
+    if (add && actor && actor.zone !== 'gone' && actor.id !== ev.card) {
+      await this.lunge(actor, target ? { x: target.x, y: target.y } : p, ev.cause?.defId === 'PC.A01' ? 14 : 10)
+    }
+    this.spark(add ? 'paw' : 'whiff', p, 0.2)
+    audio.sfx(add ? 'mark' : 'whiff')
+    if (target && add) target.glow = 1
+    await this.caption(p, add ? `${name} 猎印` : `${name} 揭印`, add ? PAL.gold : PAL.gray3, 0.2)
+  }
+
+  private async slotGuard(ev: BE<'battle.statusAdded'> | BE<'battle.statusRemoved'>): Promise<void> {
+    const target = this.actorAt(ev.card)
+    const p = target ? this.spot(target) : { x: 320, y: 150 }
+    const name = ev.cause ? fictionName(ev.cause.defId) : ''
+    this.spark('shield', p, 0.22)
     audio.sfx('seal')
-    if (a) this.floatAt({ x: a.x, y: a.y }, add ? ev.status : `-${ev.status}`, PAL.dai)
-    await this.beat(0.12)
+    if (target) await this.pulse(target)
+    await this.caption(p, `${name} 挡住`, PAL.dai, 0.16)
+  }
+
+  private async slotStatus(ev: BE<'battle.statusAdded'> | BE<'battle.statusRemoved'>, add: boolean): Promise<void> {
+    const target = this.actorAt(ev.card)
+    const p = target ? this.spot(target) : { x: 320, y: 150 }
+    const kind: SparkKind = ev.status === 'sealed' ? 'seal'
+      : ev.status === 'vulnerable' ? 'mark'
+      : ev.status === 'rebirth' ? 'buff'
+      : 'shield'
+    this.spark(kind, p, 0.18)
+    audio.sfx(ev.status === 'rebirth' ? 'buff' : 'seal')
+    if (target && add) await this.pulse(target)
+    await this.caption(p, statusWord(ev.status, add), ev.status === 'vulnerable' ? PAL.sig : PAL.dai, 0.14)
   }
 
   private async onSettled(ev: BE<'battle.settled'>): Promise<void> {
@@ -337,14 +601,15 @@ export class BattleScene extends Scene {
     this.phase = 'over'
     audio.sfx(ev.outcome === 'win' ? 'win' : 'lose')
     this.app.flashA = 0.4
-    await this.app.showBanner(ev.outcome === 'win' ? '胜利' : '失败', `化身代价 ${ev.avatarCost}`, 0.9, ev.outcome === 'win' ? PAL.lamp1 : PAL.fruR)
+    const why = ev.reason === 'lead' ? '称重' : ev.reason === 'clear' ? '清场' : ev.reason === 'avatarGone' ? '化身离场' : '无牌可出'
+    await this.app.showBanner(ev.outcome === 'win' ? '胜利' : '失败', `${why} · 化身代价 ${ev.avatarCost}`, 0.9, ev.outcome === 'win' ? PAL.lamp1 : PAL.fruR)
   }
 
   render(world: G, ui: G, text: TextLayer): void {
     this.drawTable(world)
     this.drawGrid(world, ui, text)
     this.drawActors(world, ui, text)
-    this.drawFx(world, text)
+    this.drawFx(ui, text)
     this.drawHud(ui, text)
     this.drawHand(ui, text)
     this.drawDiscardPick(ui, text)
@@ -357,10 +622,6 @@ export class BattleScene extends Scene {
     this.scenery.drawBack(g, 0, this.t)
     if (this.table) g.drawImage(this.table, 0, BATTLE.tableY)
     this.scenery.drawFront(g, 0, this.t)
-    if (this.leading || this.leadFlash > 0) {
-      const a = 0.18 + this.leadFlash * 0.4
-      glow(g, 320, 170, 90, PAL.sta, a, false)
-    }
   }
 
   private legal(): LegalPlay[] {
@@ -422,9 +683,9 @@ export class BattleScene extends Scene {
     const view = this.app.ask({ type: 'battle.view' })
     const acts = this.activateAim ? this.app.ask({ type: 'battle.legalActivates' })[0] : undefined
     for (const a of list) {
-      const x = a.x, y = a.y + a.lift
+      const x = a.x + a.ox, y = a.y + a.oy + a.lift
       const inst = view?.cards[a.id]
-      const statuses = inst?.statuses ?? (a.sealed ? ['sealed'] : [])
+      const statuses = a.statuses.length ? a.statuses : (a.sealed ? ['sealed'] : [])
       const aimed = !!(play?.targets.includes(a.id) || acts?.targets.includes(a.id) || this.pickedTarget === a.id)
       g.save()
       if (a.isAvatar) {
@@ -472,9 +733,10 @@ export class BattleScene extends Scene {
   }
 
   private drawFx(g: G, text: TextLayer): void {
+    drawSparks(g, this.sparks)
     for (const f of this.floaters) {
-      const k = clamp(1 - f.t / 0.7, 0, 1)
-      text.draw(f.text, f.x, f.y - f.t * 22, { size: 14, align: 'center', bold: true, color: f.color, stroke: PAL.ink, strokeWidth: 3, alpha: k })
+      const k = clamp(1 - f.t / f.life, 0, 1)
+      text.draw(f.text, f.x, f.y - f.t * 18, { size: 14, align: 'center', bold: true, color: f.color, stroke: PAL.ink, strokeWidth: 3, alpha: k })
     }
     for (const d of this.drips) {
       const k = d.t / 0.55
@@ -495,7 +757,7 @@ export class BattleScene extends Scene {
     const pf = view?.playerFinal ?? 0, ef = view?.enemyFinal ?? 0
     text.draw(`己${pf}`, 10, 32, { size: 13, bold: true, color: PAL.fruG })
     text.draw(`敌${ef}`, 70, 32, { size: 13, bold: true, color: PAL.fruR })
-    if (this.leading) blit(ui, ASSETS.icon('icon.lead', 16, 16), 118, 30)
+    if (view?.leading) blit(ui, ASSETS.icon('icon.lead', 16, 16), 118, 30)
     for (let i = 0; i < Math.max(this.manaCap, 1); i++) {
       const icon = ASSETS.icon('icon.occupy', 16, 16)
       ui.save()
@@ -516,9 +778,13 @@ export class BattleScene extends Scene {
       audio.sfx('click')
       this.app.send({ type: 'battle.endTurn' })
     }, { small: true, disabled: this.app.busy || !view?.canEndTurn })
+    const noAim = !!view && !view.mustPlaceAvatar && view.phase === 'play' && !this.usedActive && !this.app.ask({ type: 'battle.legalActivates' }).length
     this.app.ui.button('activate', { x: 552, y: 218, w: 76, h: 26 }, '主动', () => {
       this.onActivate()
-    }, { small: true, disabled: this.app.busy || !view?.canActivate })
+    }, { small: true, disabled: this.app.busy || !view?.canActivate || noAim || this.usedActive })
+    if (view && !view.mustPlaceAvatar && view.phase === 'play' && (this.usedActive || noAim)) {
+      text.draw(this.usedActive ? '本场已用过' : '没有可指定的目标', 590, 206, { size: 9, align: 'center', color: PAL.gray2 })
+    }
   }
 
   private drawHand(ui: G, text: TextLayer): void {

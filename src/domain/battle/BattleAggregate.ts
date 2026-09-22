@@ -5,8 +5,8 @@ import { seedRng, nextInt, shuffle, type RngState } from '../../core/Rng'
 import type { CardEffect, Op, Sel, Amt, Timing } from '../effects'
 import { ADJACENT, CELLS, MIRROR, cellCol, cellRow, isCell, isCorner, type Cell } from '../geometry'
 import { isBodyKind, type RemoveReason, type RemoveTo, type Side } from '../types'
-import type { BattleEvent, PointsSource } from './events'
-import { avatarCostOf, currentPoints, fenceBlocks, finalPoints, isLeading, markedMoveBlocked } from './points'
+import type { BattleEvent, Cause, PointsSource } from './events'
+import { auraContributions, avatarCostOf, currentPoints, fenceBlocks, finalPoints, isLeading, mapShare, markedMoveBlocked } from './points'
 import {
   avatarOf,
   boardCards,
@@ -54,9 +54,43 @@ interface FxCtx {
   spent: number
 }
 
+function eventCause(e: BattleEvent): Cause | undefined {
+  switch (e.type) {
+    case 'battle.pointsChanged':
+    case 'battle.statusAdded':
+    case 'battle.statusRemoved':
+    case 'battle.cardEntered':
+    case 'battle.cardRemoved':
+    case 'battle.occupyChanged':
+    case 'battle.resourceChanged':
+      return e.cause
+    default:
+      return undefined
+  }
+}
+
 export class BattleAggregate {
   readonly state: BattleState
   private lastCurrent = new Map<string, number>()
+  private causeStack: Cause[] = []
+
+  private causeNow(): Cause | undefined {
+    return this.causeStack[this.causeStack.length - 1]
+  }
+
+  private fxSource(): PointsSource {
+    return this.causeNow()?.timing ?? 'play'
+  }
+
+  private liveTimers(): { card: string; defId: string; left: number }[] {
+    const out: { card: string; defId: string; left: number }[] = []
+    for (const cell of CELLS) {
+      const card = cardAt(this.state, cell)
+      if (!card || card.timer === undefined) continue
+      out.push({ card: card.id, defId: card.defId, left: card.timer })
+    }
+    return out
+  }
 
   private constructor(state: BattleState) {
     this.state = state
@@ -120,6 +154,7 @@ export class BattleAggregate {
         card: inst.id,
         cell: slot.cell,
         covered: false,
+        motion: 'place',
         text: `${cardName(inst.defId)}落在格${slot.cell}。`,
       })
     }
@@ -412,6 +447,7 @@ export class BattleAggregate {
       opening,
       leading,
       won,
+      timers: this.liveTimers(),
       text: opening ? `第${s.turn}回合开始（开战）。` : `第${s.turn}回合开始。${leading ? '总点数更大。' : ''}`,
     })
     if (won) {
@@ -560,11 +596,20 @@ export class BattleAggregate {
       card: card.id,
       cell,
       covered: coveredPts !== null,
+      motion: 'place',
+      cause: this.causeNow(),
       text: `${cardName(card.defId)}进入格${cell}${coveredPts !== null ? `（覆盖 -${coveredPts}）` : ''}。`,
     })
     this.lastCurrent.set(card.id, currentPoints(s, card))
     this.flushPoints(events, 'aura')
-    if (card.owner === 'player' && card.isAvatar) this.adjustOccupy(1, 1, events)
+    if (card.owner === 'player' && card.isAvatar) {
+      this.adjustOccupy(1, 1, events, false, {
+        actor: card.id,
+        defId: card.defId,
+        timing: 'enter',
+        op: 'enter',
+      })
+    }
     this.runEffects(card, 'enter', events)
     this.runEffects(card, 'play', events)
     if (cardDef(card.defId).burn) this.markBurned(card)
@@ -584,38 +629,70 @@ export class BattleAggregate {
         if (this.state.deck.length < fx.sacrifice) continue
         ctx.sacrificed = this.sacrifice(fx.sacrifice, events)
       }
-      if (fx.spendRes) {
-        if (this.state.resA < fx.spendRes) continue
-        this.addRes(-fx.spendRes, events)
-        ctx.spent = fx.spendRes
-      }
-      if (fx.spendResUpTo) {
-        const others = boardCards(this.state).filter((c) => c.owner === source.owner && c.id !== source.id).length
-        const n = Math.min(this.state.resA, fx.spendResUpTo, others)
-        if (n) this.addRes(-n, events)
-        ctx.spent = n
-      }
-      if (fx.spendResAll) {
-        const n = Math.min(this.state.resA, fx.spendResAll)
-        if (n) this.addRes(-n, events)
-        ctx.spent = n
-      }
-      for (const op of fx.ops) {
-        this.resolveOp(op, ctx, events)
-        if (this.state.result) return
-      }
-      events.push({
-        type: 'battle.effectResolved',
-        card: source.id,
+      if (fx.spendRes && this.state.resA < fx.spendRes) continue
+      this.causeStack.push({
+        actor: source.id,
         defId: source.defId,
         timing,
-        cell: source.cell,
-        text: `${cardName(source.defId)}结算${timing}。`,
+        op: fx.ops[0]?.op ?? timing,
       })
+      const from = events.length
+      let aborted = false
+      try {
+        if (fx.spendRes) {
+          this.addRes(-fx.spendRes, events)
+          ctx.spent = fx.spendRes
+        }
+        if (fx.spendResUpTo) {
+          const others = boardCards(this.state).filter((c) => c.owner === source.owner && c.id !== source.id).length
+          const n = Math.min(this.state.resA, fx.spendResUpTo, others)
+          if (n) this.addRes(-n, events)
+          ctx.spent = n
+        }
+        if (fx.spendResAll) {
+          const n = Math.min(this.state.resA, fx.spendResAll)
+          if (n) this.addRes(-n, events)
+          ctx.spent = n
+        }
+        for (const op of fx.ops) {
+          this.resolveOp(op, ctx, events)
+          if (this.state.result) { aborted = true; break }
+        }
+        if (!aborted) {
+          const hit = events.slice(from).some((e) => eventCause(e)?.actor === source.id)
+          events.push({
+            type: 'battle.effectResolved',
+            card: source.id,
+            defId: source.defId,
+            timing,
+            cell: source.cell,
+            hit,
+            text: `${cardName(source.defId)}结算${timing}。`,
+          })
+        }
+      } finally {
+        this.causeStack.pop()
+      }
+      if (aborted) return
     }
   }
 
   private resolveOp(op: Op, ctx: FxCtx, events: BattleEvent[]): void {
+    const base = this.causeNow()
+    this.causeStack.push({
+      actor: base?.actor ?? ctx.source.id,
+      defId: base?.defId ?? ctx.source.defId,
+      timing: base?.timing ?? 'play',
+      op: op.op,
+    })
+    try {
+      this.applyOp(op, ctx, events)
+    } finally {
+      this.causeStack.pop()
+    }
+  }
+
+  private applyOp(op: Op, ctx: FxCtx, events: BattleEvent[]): void {
     const s = this.state
     switch (op.op) {
       case 'mark':
@@ -627,15 +704,15 @@ export class BattleAggregate {
       case 'damage':
         for (const t of this.pick(op.sel, ctx, op.one)) {
           if (op.ifMarked && hasStatus(t, 'marked')) {
-            this.changePoints(t, -this.amt(op.ifMarked.n, ctx, t), events, 'play')
+            this.changePoints(t, -this.amt(op.ifMarked.n, ctx, t), events, this.fxSource())
             if (op.ifMarked.unmark) this.stripStatus(t, 'marked', events)
           } else {
-            this.changePoints(t, -this.amt(op.n, ctx, t), events, 'play')
+            this.changePoints(t, -this.amt(op.n, ctx, t), events, this.fxSource())
           }
         }
         return
       case 'buff':
-        for (const t of this.pick(op.sel, ctx, op.one)) this.changePoints(t, this.amt(op.n, ctx, t), events, 'play')
+        for (const t of this.pick(op.sel, ctx, op.one)) this.changePoints(t, this.amt(op.n, ctx, t), events, this.fxSource())
         return
       case 'status':
         for (const t of this.pick(op.sel, ctx, op.one)) this.addStatus(t, op.status, events)
@@ -910,14 +987,19 @@ export class BattleAggregate {
     return 0
   }
 
-  private changePoints(card: CardInst, delta: number, events: BattleEvent[], source: PointsSource): void {
+  private changePoints(card: CardInst, delta: number, events: BattleEvent[], source: PointsSource, cause?: Cause): void {
     if (!delta || isGone(card)) return
+    const why = cause ?? this.causeNow()
     if (delta < 0 && hasStatus(card, 'protected')) {
-      this.stripStatus(card, 'protected', events)
+      this.stripStatus(card, 'protected', events, why)
       return
     }
     let d = delta
-    if (d < 0 && hasStatus(card, 'vulnerable')) d -= Math.ceil(Math.abs(d) * 0.25)
+    let vulnerableBonus = 0
+    if (d < 0 && hasStatus(card, 'vulnerable')) {
+      vulnerableBonus = Math.ceil(Math.abs(d) * 0.25)
+      d -= vulnerableBonus
+    }
     const before = currentPoints(this.state, card)
     card.permanent += d
     const after = currentPoints(this.state, card)
@@ -928,6 +1010,9 @@ export class BattleAggregate {
       before,
       after,
       source,
+      cause: why,
+      vulnerableBonus,
+      mapEffect: source === 'map' ? this.state.mapEffect : undefined,
       text: `${cardName(card.defId)} ${before}→${after}。`,
     })
     this.flushPoints(events, 'aura')
@@ -937,14 +1022,26 @@ export class BattleAggregate {
     if (status === 'marked' && hasStatus(card, 'marked')) return
     if (hasStatus(card, status) && status !== 'marked') return
     card.statuses.push(status)
-    events.push({ type: 'battle.statusAdded', card: card.id, status, text: `${cardName(card.defId)}获得${status}。` })
+    events.push({
+      type: 'battle.statusAdded',
+      card: card.id,
+      status,
+      cause: this.causeNow(),
+      text: `${cardName(card.defId)}获得${status}。`,
+    })
     this.flushPoints(events, 'lock')
   }
 
-  private stripStatus(card: CardInst, status: CardInst['statuses'][number], events: BattleEvent[]): void {
+  private stripStatus(card: CardInst, status: CardInst['statuses'][number], events: BattleEvent[], cause?: Cause): void {
     if (!hasStatus(card, status)) return
     card.statuses = card.statuses.filter((st) => st !== status)
-    events.push({ type: 'battle.statusRemoved', card: card.id, status, text: `${cardName(card.defId)}失去${status}。` })
+    events.push({
+      type: 'battle.statusRemoved',
+      card: card.id,
+      status,
+      cause: cause ?? this.causeNow(),
+      text: `${cardName(card.defId)}失去${status}。`,
+    })
     this.flushPoints(events, 'lock')
   }
 
@@ -964,7 +1061,13 @@ export class BattleAggregate {
     const rebirth = wasBoard && hasStatus(card, 'rebirth')
     if (rebirth) {
       card.statuses = card.statuses.filter((st) => st !== 'rebirth')
-      events.push({ type: 'battle.statusRemoved', card: card.id, status: 'rebirth', text: `${cardName(card.defId)}返魂。` })
+      events.push({
+        type: 'battle.statusRemoved',
+        card: card.id,
+        status: 'rebirth',
+        cause: this.causeNow(),
+        text: `${cardName(card.defId)}返魂。`,
+      })
     }
     this.lastCurrent.delete(card.id)
     events.push({
@@ -974,6 +1077,7 @@ export class BattleAggregate {
       cell: cell ?? 1,
       to: rebirth ? 'hand' : to,
       reason,
+      cause: this.causeNow(),
       text: `${cardName(card.defId)}离场（${reason}）。`,
     })
     if (wasBoard) {
@@ -1103,6 +1207,8 @@ export class BattleAggregate {
       card: inst.id,
       cell,
       covered: false,
+      motion: 'place',
+      cause: this.causeNow(),
       text: `${cardName(defId)}生成在格${cell}。`,
     })
     this.lastCurrent.set(inst.id, currentPoints(this.state, inst))
@@ -1137,7 +1243,8 @@ export class BattleAggregate {
   private relocate(card: CardInst, dest: Cell, events: BattleEvent[]): void {
     const s = this.state
     if (!card.cell) return
-    if (s.board[card.cell] === card.id) s.board[card.cell] = null
+    const from = card.cell
+    if (s.board[from] === card.id) s.board[from] = null
     card.cell = dest
     s.board[dest] = card.id
     events.push({
@@ -1145,6 +1252,9 @@ export class BattleAggregate {
       card: card.id,
       cell: dest,
       covered: false,
+      motion: 'move',
+      from,
+      cause: this.causeNow(),
       text: `${cardName(card.defId)}移动到格${dest}。`,
     })
     this.flushPoints(events, 'aura')
@@ -1243,26 +1353,34 @@ export class BattleAggregate {
   private firePlayWatchers(played: CardInst, events: BattleEvent[]): void {
     for (const c of boardCards(this.state)) {
       if (isSealed(c) || c.id === played.id) continue
-      if (c.defId === 'PC.N11' && c.owner === played.owner) this.changePoints(c, 1, events, 'play')
-      if (c.defId === 'EC.21' && played.kind === 'spell' && played.owner !== c.owner) this.changePoints(c, 2, events, 'play')
+      if (c.defId === 'PC.N11' && c.owner === played.owner) {
+        this.changePoints(c, 1, events, 'play', { actor: c.id, defId: c.defId, timing: 'play', op: 'spellFeed' })
+      }
+      if (c.defId === 'EC.21' && played.kind === 'spell' && played.owner !== c.owner) {
+        this.changePoints(c, 2, events, 'play', { actor: c.id, defId: c.defId, timing: 'play', op: 'spellFeed' })
+      }
     }
   }
 
   private fireCoverWatchers(coverer: CardInst, events: BattleEvent[]): void {
     for (const c of boardCards(this.state)) {
       if (isSealed(c) || c.id === coverer.id) continue
-      if (c.defId === 'EC.12' && coverer.owner !== c.owner) this.changePoints(c, 3, events, 'play')
+      if (c.defId === 'EC.12' && coverer.owner !== c.owner) {
+        this.changePoints(c, 3, events, 'onCover', { actor: c.id, defId: c.defId, timing: 'onCover', op: 'coverFeed' })
+      }
     }
   }
 
   private fireLeaveWatchers(left: CardInst, events: BattleEvent[]): void {
     for (const c of boardCards(this.state)) {
       if (isSealed(c) || c.id === left.id) continue
-      if (c.defId === 'PC.B07' && c.owner === left.owner) this.changePoints(c, 2, events, 'leave')
+      if (c.defId === 'PC.B07' && c.owner === left.owner) {
+        this.changePoints(c, 2, events, 'leave', { actor: c.id, defId: c.defId, timing: 'leave', op: 'leaveAdjSwing' })
+      }
     }
   }
 
-  private adjustOccupy(dCur: number, dCap: number, events: BattleEvent[], absoluteCap = false): void {
+  private adjustOccupy(dCur: number, dCap: number, events: BattleEvent[], absoluteCap = false, cause?: Cause): void {
     const s = this.state
     if (absoluteCap) {
       s.occupyCap = Math.max(0, s.occupyCap + dCap)
@@ -1272,12 +1390,24 @@ export class BattleAggregate {
       s.occupyCap = Math.max(0, s.occupyCap + dCap)
       s.occupy = Math.max(0, s.occupy + dCur)
     }
-    events.push({ type: 'battle.occupyChanged', current: s.occupy, cap: s.occupyCap, text: `占领费用 ${s.occupy}/${s.occupyCap}。` })
+    events.push({
+      type: 'battle.occupyChanged',
+      current: s.occupy,
+      cap: s.occupyCap,
+      cause,
+      text: `占领费用 ${s.occupy}/${s.occupyCap}。`,
+    })
   }
 
   private addRes(delta: number, events: BattleEvent[]): void {
     this.state.resA = Math.max(0, this.state.resA + delta)
-    events.push({ type: 'battle.resourceChanged', resource: 'RES.A', current: this.state.resA, text: `RES.A ${this.state.resA}。` })
+    events.push({
+      type: 'battle.resourceChanged',
+      resource: 'RES.A',
+      current: this.state.resA,
+      cause: this.causeNow(),
+      text: `RES.A ${this.state.resA}。`,
+    })
   }
 
   private checkClear(events: BattleEvent[]): void {
@@ -1319,12 +1449,17 @@ export class BattleAggregate {
       const now = currentPoints(this.state, card)
       const prev = this.lastCurrent.get(card.id)
       if (prev !== undefined && prev !== now) {
+        const auras = auraContributions(this.state, card)
+        const map = mapShare(this.state, card)
         events.push({
           type: 'battle.pointsChanged',
           card: card.id,
           before: prev,
           after: now,
           source,
+          vulnerableBonus: 0,
+          auras: source === 'aura' || auras.length ? auras : undefined,
+          mapEffect: source === 'map' ? this.state.mapEffect : map?.id,
           text: `${cardName(card.defId)} ${prev}→${now}。`,
         })
       }

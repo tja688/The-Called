@@ -266,7 +266,7 @@ export const HELP_PAGES: { title: string; body: string }[] = [
   },
   {
     title: '地图与卡盒',
-    body: '大地图是锈门层的走廊网。只能走正交相邻的节点。\n卡盒是本局拿到的牌；牌组才是战斗抽的那叠。奖励、商店、事件进卡盒，不自动进牌组。回地图后打开卡盒再编，下限 10 张。\n本层天气（狭廊 / 血砖 / 墙根）写在顶栏，双方都吃。',
+    body: '大地图是锈门层的走廊网。拖动查看别的走廊。只能走正交相邻的节点。\n没走进去的房间是暗的，走到隔壁才看清类型；看过的类型会留着。走过的房间更亮。\n卡盒是本局拿到的牌；牌组才是战斗抽的那叠。奖励、商店、事件进卡盒，不自动进牌组。回地图后打开卡盒再编，下限 10 张。\n本层天气（狭廊 / 血砖 / 墙根）写在顶栏，双方都吃。',
   },
   {
     title: '按键',
@@ -278,4 +278,10 @@ export function avatarSpriteId(defId: string): string {
   if (defId === 'PC.B00') return 'char.pcb00'
   if (defId === 'PC.C00') return 'char.pcc00'
   return 'char.pca00'
+}
+
+export function avatarHeadId(defId: string): string {
+  if (defId === 'PC.B00') return 'char.head.b'
+  if (defId === 'PC.C00') return 'char.head.c'
+  return 'char.head.a'
 }

@@ -2,6 +2,7 @@ import type { SpriteDef } from './dsl'
 import type { ShapeIcon } from './shapes'
 import { CARDS } from '../content/cards'
 import { AVATARS } from './sprites/chars/avatar'
+import { HEADS } from './sprites/chars/heads'
 import { ENEMY_ICONS } from './sprites/npcs/enemies'
 import { CARD_ICONS } from './sprites/cards'
 import { ICONS } from './sprites/icons'
@@ -9,7 +10,7 @@ import { FX } from './sprites/fx'
 import { PROPS } from './sprites/props'
 import { PANEL } from './sprites/ui/panel'
 
-export const ASCII_SPRITES: SpriteDef[] = [...AVATARS]
+export const ASCII_SPRITES: SpriteDef[] = [...AVATARS, ...HEADS]
 
 export function defToAssetId(defId: string): string {
   if (defId.startsWith('PC.') && defId.endsWith('00')) return `char.${defId.toLowerCase().replace('.', '')}`

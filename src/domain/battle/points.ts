@@ -3,31 +3,30 @@ import { mapEffectDef } from '../../content/mapEffects'
 import { ADJACENT, DIAG_ADJ, MIRROR, cellCol, cellRow, isCorner, type Cell } from '../geometry'
 import type { Side } from '../types'
 import { isBodyKind } from '../types'
+import type { AuraShare } from './events'
 import { avatarOf, boardCards, cardAt, isSealed, type BattleState, type CardInst } from './state'
 
-function auraBonus(state: BattleState, card: CardInst): number {
-  if (card.zone !== 'board' || !card.cell) return 0
-  let bonus = 0
+/** 变化之后、这张卡身上每一条驻场贡献。与 auraBonus 同口径。 */
+export function auraContributions(state: BattleState, card: CardInst): AuraShare[] {
+  if (card.zone !== 'board' || !card.cell) return []
+  const out: AuraShare[] = []
   for (const other of boardCards(state)) {
     if (other.id === card.id || isSealed(other)) continue
     for (const aura of cardDef(other.defId).auras ?? []) {
       if (aura.aura === 'adjacentAllies' && other.owner === card.owner && ADJACENT[other.cell as Cell].includes(card.cell)) {
-        bonus += aura.n
+        out.push({ card: other.id, defId: other.defId, n: aura.n })
       }
       if (aura.aura === 'mirrorAlly' && other.owner === card.owner && MIRROR[other.cell as Cell] === card.cell) {
-        bonus += aura.n
+        out.push({ card: other.id, defId: other.defId, n: aura.n })
       }
       if (aura.aura === 'columnOpponents' && other.owner !== card.owner && cellCol(other.cell!) === cellCol(card.cell)) {
-        bonus += aura.n
+        out.push({ card: other.id, defId: other.defId, n: aura.n })
       }
       if (aura.aura === 'rowOpponents' && other.owner !== card.owner && cellRow(other.cell!) === cellRow(card.cell)) {
-        bonus += aura.n
+        out.push({ card: other.id, defId: other.defId, n: aura.n })
       }
       if (aura.aura === 'diagOpponents' && other.owner !== card.owner && DIAG_ADJ[other.cell as Cell].includes(card.cell)) {
-        bonus += aura.n
-      }
-      if (aura.aura === 'perAdjacentOpponent' && other.id === card.id) {
-        // applied on the aura card itself below
+        out.push({ card: other.id, defId: other.defId, n: aura.n })
       }
     }
   }
@@ -39,18 +38,25 @@ function auraBonus(state: BattleState, card: CardInst): number {
           const t = cardAt(state, c)
           return t && t.owner !== card.owner
         }).length
-        bonus += aura.n * n
+        if (n) out.push({ card: card.id, defId: card.defId, n: aura.n * n })
       }
       if (aura.aura === 'mirrorOpponentCurrent') {
         const m = MIRROR[card.cell as Cell]
         if (m) {
           const t = cardAt(state, m)
-          if (t && t.owner !== card.owner) bonus += currentPointsRaw(state, t, true)
+          if (t && t.owner !== card.owner) {
+            const pts = currentPointsRaw(state, t, true)
+            if (pts) out.push({ card: t.id, defId: t.defId, n: pts })
+          }
         }
       }
     }
   }
-  return bonus
+  return out
+}
+
+function auraBonus(state: BattleState, card: CardInst): number {
+  return auraContributions(state, card).reduce((sum, a) => sum + a.n, 0)
 }
 
 function mapBonus(state: BattleState, card: CardInst): number {
@@ -81,6 +87,13 @@ function mapBonus(state: BattleState, card: CardInst): number {
     if (hit) return -2
   }
   return 0
+}
+
+export function mapShare(state: BattleState, card: CardInst): { id: string; n: number } | null {
+  if (!state.mapEffect) return null
+  const n = mapBonus(state, card)
+  if (!n) return null
+  return { id: state.mapEffect, n }
 }
 
 function currentPointsRaw(state: BattleState, card: CardInst, skipMirror = false): number {

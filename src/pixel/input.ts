@@ -27,6 +27,8 @@ export class Input {
   private regions: HitRegion[] = []
   private downId: string | null = null
   private downPos = { x: 0, y: 0 }
+  /** 按下后移动的距离。拖过阈值就不当成点击。 */
+  private travel = 0
   /** 键盘：按下瞬间回调 */
   onKey: ((key: string, e: KeyboardEvent) => void) | null = null
   keys = new Set<string>()
@@ -39,7 +41,12 @@ export class Input {
   constructor(private stage: Stage) {
     const el = stage.display
     el.style.touchAction = 'none'
-    el.addEventListener('pointermove', (e) => { const p = stage.toLogical(e.clientX, e.clientY); this.x = p.x; this.y = p.y })
+    el.addEventListener('pointermove', (e) => {
+      const p = stage.toLogical(e.clientX, e.clientY)
+      this.x = p.x
+      this.y = p.y
+      if (this.down) this.travel = Math.hypot(p.x - this.downPos.x, p.y - this.downPos.y)
+    })
     el.addEventListener('contextmenu', (e) => e.preventDefault())
     el.addEventListener('pointerdown', (e) => {
       const p = stage.toLogical(e.clientX, e.clientY); this.x = p.x; this.y = p.y
@@ -49,10 +56,11 @@ export class Input {
         return
       }
       this.down = true
+      this.travel = 0
+      this.downPos = { x: p.x, y: p.y }
       if (this.locked) return
       const r = this.pick(p.x, p.y)
       this.downId = r?.id ?? null
-      this.downPos = { x: p.x, y: p.y }
       r?.onDown?.(p.x, p.y)
       try { el.setPointerCapture(e.pointerId) } catch { /* ignore */ }
     })
@@ -60,10 +68,11 @@ export class Input {
       const p = stage.toLogical(e.clientX, e.clientY); this.x = p.x; this.y = p.y
       this.down = false
       const wasDown = this.downId
+      const dragged = this.travel > 6
       this.downId = null
       if (this.locked) { this.onAnyClick?.(p.x, p.y, null); return }
       const r = this.pick(p.x, p.y)
-      if (r && r.id === wasDown && r.onClick) r.onClick(p.x, p.y)
+      if (!dragged && r && r.id === wasDown && r.onClick) r.onClick(p.x, p.y)
       this.onAnyClick?.(p.x, p.y, r?.id ?? null)
     })
     el.addEventListener('pointerleave', () => { this.x = -1; this.y = -1 })

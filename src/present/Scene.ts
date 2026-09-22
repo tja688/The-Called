@@ -13,6 +13,8 @@ export abstract class Scene {
   update(_dt: number): void {}
   abstract render(world: CanvasRenderingContext2D, ui: CanvasRenderingContext2D, text: TextLayer): void
   handle(_e: DomainEvent): Promise<void> | void {}
+  /** 演出中锁指针。空格快进仍走键盘。 */
+  blocksInput(): boolean { return false }
   /** @returns 是否已经消化这次取消（选中的牌、打开的卡盒等） */
   onCancel(): boolean { return false }
   onConfirm(): void {}

@@ -180,6 +180,84 @@ describe('SYS.A 基础与胜负', () => {
   })
 })
 
+describe('结算因果', () => {
+  it('猎犬标记、食人魔减点与移动都带着施动者', () => {
+    const { aggregate: b } = startBattle('MON.N01', ['PC.A01', 'PC.A02', 'PC.A01', 'PC.A03'])
+    playDef(b, 'PC.A00', 5)
+    playDef(b, 'PC.A01', 6)
+    const dog = boardByDef(b, 'PC.A01')!
+    const events = b.playerEndTurn()
+    const mark = events.find((e) => e.type === 'battle.statusAdded' && e.status === 'marked')
+    expect(mark && mark.type === 'battle.statusAdded' ? mark.cause : undefined).toMatchObject({
+      defId: 'PC.A01', timing: 'turnEnd', op: 'mark',
+    })
+    const dmg = events.find((e) => e.type === 'battle.pointsChanged' && e.card === dog.id && e.cause?.defId === 'EC.01')
+    expect(dmg && dmg.type === 'battle.pointsChanged' ? dmg : undefined).toMatchObject({
+      source: 'turnEnd',
+      cause: { defId: 'EC.01', timing: 'turnEnd', op: 'damage' },
+    })
+    const markAt = events.indexOf(mark!)
+    const dmgAt = events.indexOf(dmg!)
+    expect(dmgAt).toBeGreaterThan(markAt)
+    const moved = events.find((e) => e.type === 'battle.cardEntered' && e.cell === 2)
+    expect(moved).toMatchObject({ motion: 'move', from: 3 })
+    const hit = events.find((e) => e.type === 'battle.effectResolved' && e.defId === 'PC.A01')
+    expect(hit && hit.type === 'battle.effectResolved' ? hit.hit : undefined).toBe(true)
+  })
+
+  it('邻格没有目标时 effectResolved.hit 为 false', () => {
+    const { aggregate: b } = startBattle('MON.N01', ['PC.A01', 'PC.A02', 'PC.A01', 'PC.A03'])
+    playDef(b, 'PC.A00', 5)
+    playDef(b, 'PC.A01', 7)
+    const events = b.playerEndTurn()
+    const fx = events.find((e) => e.type === 'battle.effectResolved' && e.defId === 'PC.A01')
+    expect(fx && fx.type === 'battle.effectResolved' ? fx.hit : undefined).toBe(false)
+    expect(events.some((e) => e.type === 'battle.statusAdded')).toBe(false)
+  })
+
+  it('化身入场加费带 enter，回合开始回满不带 cause', () => {
+    const { aggregate: b } = startBattle('MON.N01', ['PC.A01', 'PC.A02', 'PC.A01', 'PC.A03'])
+    const played = playDef(b, 'PC.A00', 5)
+    const fee = played.find((e) => e.type === 'battle.occupyChanged' && e.cause)
+    expect(fee && fee.type === 'battle.occupyChanged' ? fee.cause : undefined).toMatchObject({
+      defId: 'PC.A00', timing: 'enter',
+    })
+    const ended = b.playerEndTurn()
+    const refill = ended.find((e) => e.type === 'battle.occupyChanged' && !e.cause)
+    expect(refill).toBeTruthy()
+  })
+
+  it('引爆前能从 turnStarted.timers 看到 EC.15 剩余', () => {
+    const { events } = startBattle('MON.N03')
+    const turn = events.find((e) => e.type === 'battle.turnStarted' && e.opening)
+    expect(turn && turn.type === 'battle.turnStarted' ? turn.timers : []).toEqual(
+      expect.arrayContaining([expect.objectContaining({ defId: 'EC.15', left: 2 })]),
+    )
+  })
+
+  it('横排驻场把减点记在 auras 上', () => {
+    const { aggregate: b } = startBattle('MON.N02', fat(['PC.N01', 'PC.N09', 'PC.N01', 'PC.N01']))
+    playDef(b, 'PC.A00', 5)
+    playDef(b, 'PC.N01', 1)
+    b.playerEndTurn()
+    const events = playDef(b, 'PC.N09', undefined, 'PC.A00', 'PC.N01')
+    const down = events.find((e) => e.type === 'battle.pointsChanged' && e.after < e.before && e.auras?.some((a) => a.defId === 'EC.07' && a.n === -1))
+    expect(down).toBeTruthy()
+  })
+
+  it('易伤加成写在同一条 pointsChanged 上', () => {
+    const { aggregate: b } = startBattle('MON.N01', ['PC.A01', 'PC.A02', 'PC.A01', 'PC.A03'])
+    playDef(b, 'PC.A00', 5)
+    playDef(b, 'PC.A01', 6)
+    b.playerEndTurn()
+    b.playerActivate(avatar(b).id, boardByDef(b, 'EC.01')!.id)
+    const events = playDef(b, 'PC.A02', undefined, 'EC.01')
+    const dmg = events.find((e) => e.type === 'battle.pointsChanged' && e.cause?.defId === 'PC.A02')
+    expect(dmg && dmg.type === 'battle.pointsChanged' ? dmg.vulnerableBonus : undefined).toBe(1)
+    expect(dmg && dmg.type === 'battle.pointsChanged' ? dmg.source : undefined).toBe('play')
+  })
+})
+
 describe('GameService SYS.A 外部行为', () => {
   it('开局可选 DK.A，化身不进卡盒', async () => {
     const game = await startRun('DK.A', 2)

@@ -6,6 +6,7 @@ import { tw } from '../pixel/tween'
 export type Sfx =
   | 'click' | 'play' | 'cover' | 'draw' | 'mana' | 'pressure'
   | 'hurt' | 'banish' | 'lead' | 'win' | 'lose' | 'reward' | 'seal'
+  | 'mark' | 'step' | 'whiff' | 'buff'
 
 const FREQ: Record<Sfx, number[]> = {
   click: [880],
@@ -21,6 +22,10 @@ const FREQ: Record<Sfx, number[]> = {
   lose: [330, 247, 196],
   reward: [523, 659, 784],
   seal: [300, 240],
+  mark: [740, 980],
+  step: [160, 110],
+  whiff: [360],
+  buff: [520, 700],
 }
 
 class AudioBus {

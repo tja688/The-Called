@@ -76,7 +76,7 @@ export class PresentApp implements Renderable {
   update(dt: number): void {
     this.time += dt
     tw.update(dt)
-    this.input.locked = (this.busy && !this.shell.open)
+    this.input.locked = (this.busy && !this.shell.open) || (this.scene?.blocksInput() ?? false)
     this.scene?.update(dt)
     for (const t of this.toasts) t.t += dt
     this.toasts = this.toasts.filter((t) => t.t < 2.2)
