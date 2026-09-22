@@ -101,7 +101,7 @@ export class PresentApp implements Renderable {
     this.renderBanner(ui, text)
     this.renderToasts(ui, text)
     this.shell.render(this, ui, text)
-    this.renderChrome(ui, text)
+    if (!this.scene?.coversChrome()) this.renderChrome(ui, text)
     if (this.fade > 0) {
       ui.setTransform(1, 0, 0, 1, 0, 0)
       ui.fillStyle = rgba('#0a0810', this.fade)
@@ -144,6 +144,7 @@ export class PresentApp implements Renderable {
   }
 
   private renderChrome(ui: CanvasRenderingContext2D, text: TextLayer): void {
+    if (this.scene?.name === 'title') return
     const z = this.shell.open ? 120 : 20
     this.ui.button('menu', { x: 576, y: 4, w: 56, h: 18 }, '菜单', () => {
       audio.sfx('click')

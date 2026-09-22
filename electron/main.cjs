@@ -13,7 +13,7 @@ function createWindow() {
     minWidth: 640,
     minHeight: 360,
     backgroundColor: '#0a0810',
-    title: 'The Called',
+    title: 'TheCall · 深渊的呼唤',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {

@@ -23,6 +23,7 @@ import type { LegalPlay } from '../../domain/battle/BattleAggregate'
 import { mapEffectDef } from '../../content/mapEffects'
 import type { Cause } from '../../domain/battle/events'
 import { drawSparks, sfxForKind, statusWord, strikeKind, type Spark, type SparkKind } from './battleFx'
+import { BattleLog } from './battleLog'
 
 type BE<T extends BattleEvent['type']> = Extract<BattleEvent, { type: T }>
 type G = CanvasRenderingContext2D
@@ -86,6 +87,7 @@ export class BattleScene extends Scene {
   private sparks: Spark[] = []
   private drips: Drip[] = []
   private result: BE<'battle.settled'> | null = null
+  private log = new BattleLog()
   /** 本张卡这一时机是否已经播过带因果的后果。effectResolved 时清掉。 */
   private beatLanded = false
   private drew = false
@@ -130,6 +132,7 @@ export class BattleScene extends Scene {
   async handle(e: DomainEvent): Promise<void> {
     if (!e.type.startsWith('battle.')) return
     const ev = e as BattleEvent
+    this.log.push(ev)
     this.beginBeat()
     switch (ev.type) {
       case 'battle.started': await this.onStart(ev); break
@@ -616,6 +619,7 @@ export class BattleScene extends Scene {
     this.drawInspect(ui, text)
     this.drawAimHint(ui, text)
     this.drawResult(ui, text)
+    this.log.draw(ui, text, this.app.ui)
   }
 
   private drawTable(g: G): void {
@@ -774,6 +778,10 @@ export class BattleScene extends Scene {
       size: 10, color: PAL.gray3,
     })
     if (view?.mustPlaceAvatar) text.draw('先落下化身', 320, 52, { size: 12, align: 'center', color: PAL.lamp1, bold: true })
+    this.app.ui.button('battle-log', { x: 552, y: 172, w: 76, h: 26 }, this.log.open ? '收起' : '记录', () => {
+      audio.sfx('click')
+      this.log.toggle()
+    }, { small: true, primary: this.log.open, disabled: this.app.busy, z: 60 })
     this.app.ui.button('end-turn', { x: 552, y: 248, w: 76, h: 26 }, '结束回合', () => {
       audio.sfx('click')
       this.app.send({ type: 'battle.endTurn' })
@@ -1032,7 +1040,17 @@ export class BattleScene extends Scene {
     return null
   }
 
+  onKey(k: string): void {
+    if (!this.log.open) return
+    if (k === 'ArrowUp' || k === 'PageUp') this.log.nudge(-1)
+    if (k === 'ArrowDown' || k === 'PageDown') this.log.nudge(1)
+  }
+
   onCancel(): boolean {
+    if (this.log.open) {
+      this.log.close()
+      return true
+    }
     if (this.selected || this.activateAim || this.pickedTarget) {
       this.selected = null
       this.pickedTarget = null

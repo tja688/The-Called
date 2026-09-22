@@ -69,7 +69,7 @@ export function drawBoardToken(
 }
 
 /** 缠布血条：红从左渗到右，不要爱心。 */
-export function drawHpBar(g: G, text: TextLayer, x: number, y: number, w: number, hp: number, max: number): void {
+export function drawHpBar(g: G, text: TextLayer, x: number, y: number, w: number, hp: number, max: number, opt: { stroke?: string } = {}): void {
   const ratio = max ? hp / max : 0
   pxRoundRect(g, x, y, w, 8, PAL.ink, 1)
   g.fillStyle = PAL.paperD
@@ -85,7 +85,9 @@ export function drawHpBar(g: G, text: TextLayer, x: number, y: number, w: number
   }
   g.fillStyle = mixWrap(PAL.ink2, 0.35)
   for (let i = 6; i < w - 2; i += 6) g.fillRect(x + i, y + 1, 1, 6)
-  text.draw(`${hp}/${max}`, x + w + 6, y - 1, { size: 10, color: PAL.cream })
+  text.draw(`${hp}/${max}`, x + w + 6, y - 1, {
+    size: 10, color: PAL.cream, stroke: opt.stroke, strokeWidth: opt.stroke ? 3 : undefined,
+  })
 }
 
 function mixWrap(hex: string, a: number): string {

@@ -17,6 +17,8 @@ const Z = 110
 export class Shell {
   kind: ShellKind = 'none'
   helpPage = 0
+  /** 教程关上后回到哪一层。主菜单打开时回到标题，暂停菜单打开时回到菜单。 */
+  private helpReturn: ShellKind = 'none'
 
   get open(): boolean { return this.kind !== 'none' }
 
@@ -24,14 +26,19 @@ export class Shell {
 
   openMenu(): void { this.kind = 'menu' }
 
-  openHelp(): void {
+  openHelp(back: ShellKind = 'none'): void {
+    this.helpReturn = back === 'help' ? 'none' : back
     this.kind = 'help'
     this.helpPage = 0
   }
 
   /** @returns 是否已经消化这次 Esc */
   esc(): boolean {
-    if (this.kind === 'help' || this.kind === 'quit') {
+    if (this.kind === 'help') {
+      this.kind = this.helpReturn
+      return true
+    }
+    if (this.kind === 'quit') {
       this.kind = 'menu'
       return true
     }
@@ -79,7 +86,7 @@ export class Shell {
       by += 32
     }
     btn('sh-resume', '继续', () => { this.kind = 'none' }, { primary: true })
-    btn('sh-help', '规则说明', () => this.openHelp())
+    btn('sh-help', '规则说明', () => this.openHelp('menu'))
     btn('sh-mute', audio.muted ? '音效：关' : '音效：开', () => audio.toggle())
     if (inRun) {
       btn('sh-quit-run', '放弃本趟', () => { this.kind = 'quit' }, { danger: true })
@@ -113,7 +120,7 @@ export class Shell {
     }, { small: true, z: Z, disabled: this.helpPage >= HELP_PAGES.length - 1 })
     app.ui.button('help-back', { x: x + w - 112, y: y + h - 40, w: 88, h: 26 }, '返回', () => {
       audio.sfx('click')
-      this.kind = 'menu'
+      this.kind = this.helpReturn
     }, { primary: true, small: true, z: Z })
   }
 

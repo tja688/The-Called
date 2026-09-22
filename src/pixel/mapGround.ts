@@ -23,6 +23,14 @@ export interface Floor {
   oy: number
 }
 
+/** 地板画布至少盖住这块（画面坐标）。房间仍按点来挖，岩壁铺到这块边上。 */
+export interface FloorCover {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 export interface LightHole {
   x: number
   y: number
@@ -118,12 +126,19 @@ function puddle(g: CanvasRenderingContext2D, x: number, y: number): void {
   g.fillRect(Math.round(x) - 7, Math.round(y) + 4, 5, 2)
 }
 
-export function mapFloor(seed: number, points: FloorPoint[], edges: FloorEdge[]): Floor {
-  const key = `${seed}|${points.map((p) => `${p.id}@${Math.round(p.x)},${Math.round(p.y)}`).join(';')}`
+export function mapFloor(
+  seed: number,
+  points: FloorPoint[],
+  edges: FloorEdge[],
+  opt: { cover?: FloorCover; scale?: number } = {},
+): Floor {
+  const sc = opt.scale ?? 1
+  const cover = opt.cover
+  const key = `${seed}|${sc.toFixed(3)}|${cover ? `${cover.x},${cover.y},${cover.w},${cover.h}` : '-'}|${points.map((p) => `${p.id}@${Math.round(p.x)},${Math.round(p.y)}`).join(';')}`
   const hit = floors.get(key)
   if (hit) return hit
 
-  const pad = 46
+  const pad = Math.max(8, Math.round(46 * sc))
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (const p of points) {
     minX = Math.min(minX, p.x)
@@ -131,10 +146,21 @@ export function mapFloor(seed: number, points: FloorPoint[], edges: FloorEdge[])
     maxX = Math.max(maxX, p.x)
     maxY = Math.max(maxY, p.y)
   }
-  const ox = minX - pad
-  const oy = minY - pad
-  const w = Math.max(8, Math.ceil(maxX - minX + pad * 2))
-  const h = Math.max(8, Math.ceil(maxY - minY + pad * 2))
+  if (!Number.isFinite(minX)) { minX = 0; minY = 0; maxX = 0; maxY = 0 }
+  minX -= pad
+  minY -= pad
+  maxX += pad
+  maxY += pad
+  if (cover) {
+    minX = Math.min(minX, cover.x)
+    minY = Math.min(minY, cover.y)
+    maxX = Math.max(maxX, cover.x + cover.w)
+    maxY = Math.max(maxY, cover.y + cover.h)
+  }
+  const ox = minX
+  const oy = minY
+  const w = Math.max(8, Math.ceil(maxX - minX))
+  const h = Math.max(8, Math.ceil(maxY - minY))
   const { c, g } = makeCanvas(w, h)
   g.fillStyle = PAL.shadow
   g.fillRect(0, 0, w, h)
@@ -144,18 +170,18 @@ export function mapFloor(seed: number, points: FloorPoint[], edges: FloorEdge[])
   for (const p of points) {
     const x = p.x - ox
     const y = p.y - oy
-    const room = p.id === 'hub' ? 36 : 26
+    const room = Math.max(8, Math.round((p.id === 'hub' ? 36 : 26) * sc))
     stampDisc(g, x, y, room, MASK)
     const jx = (hash(seed, p.x * 17 + p.y) % 17) - 8
     const jy = (hash(seed, p.y * 13 - p.x) % 15) - 7
-    stampDisc(g, x + jx, y + jy, Math.round(room * 0.62), MASK)
-    stampDisc(g, x - jy * 0.6, y + jx * 0.5, Math.round(room * 0.48), MASK)
+    stampDisc(g, x + jx * sc, y + jy * sc, Math.round(room * 0.62), MASK)
+    stampDisc(g, x - jy * 0.6 * sc, y + jx * 0.5 * sc, Math.round(room * 0.48), MASK)
   }
   for (const e of edges) {
     const a = at.get(e.a), b = at.get(e.b)
     if (!a || !b) continue
     const pts = sampleCurve(a.x - ox, a.y - oy, b.x - ox, b.y - oy, e.bow, 14)
-    for (const [x, y] of pts) stampDisc(g, x, y, 13, MASK)
+    for (const [x, y] of pts) stampDisc(g, x, y, Math.max(6, Math.round(13 * sc)), MASK)
   }
 
   const img = g.getImageData(0, 0, w, h)
@@ -179,17 +205,19 @@ export function mapFloor(seed: number, points: FloorPoint[], edges: FloorEdge[])
     for (let x = 0; x < w; x++) {
       const p = y * w + x
       if (!mask[p]) {
-        const hsh = hash(seed, x * 131 + y * 17)
-        const cx = Math.floor(x / 7), cy = Math.floor(y / 7)
-        const cell = hash(seed, cx * 50 + cy * 3)
-        const lx = x - cx * 7, ly = y - cy * 7
-        if (cell % 3 === 0 && lx >= 1 && lx <= 3 && ly >= 1 && ly <= 2) {
-          set(x, y, lx === 2 && ly === 1 ? PAL.stoneL : PAL.stone)
-        } else if (cell % 7 === 1 && lx === 5 && ly === 4) {
-          set(x, y, PAL.copperD)
-        } else if ((hsh & 19) === 0) {
-          set(x, y, PAL.slate)
+        const row = Math.floor(y / 9)
+        const oxb = (row & 1) * 5
+        const col = Math.floor((x + oxb) / 11)
+        const crack = ((x + oxb) % 11) === 0 || (y % 9) === 0
+        if (crack) {
+          set(x, y, PAL.ink)
+          continue
         }
+        const tone = hash(seed, col * 5 + row * 13)
+        const wall = [PAL.ink2, PAL.slate, PAL.tile1, PAL.ink2, PAL.tile2]
+        set(x, y, wall[tone % wall.length])
+        if ((tone & 47) === 5) set(x, y, PAL.copperD)
+        else if ((tone & 61) === 7) set(x, y, PAL.stone)
         continue
       }
       const up = y > 0 && mask[p - w] === 1
@@ -223,9 +251,9 @@ export function mapFloor(seed: number, points: FloorPoint[], edges: FloorEdge[])
     const hsh = hash(seed, i + 4)
     const x = p.x - ox
     const y = p.y - oy
-    if (hsh % 5 === 0) bones(g, x + 18, y + 10)
-    if (hsh % 7 === 0) shield(g, x - 24, y + 8)
-    if (hsh % 6 === 1) puddle(g, x + 10, y - 16)
+    if (hsh % 5 === 0) bones(g, x + 18 * sc, y + 10 * sc)
+    if (hsh % 7 === 0) shield(g, x - 24 * sc, y + 8 * sc)
+    if (hsh % 6 === 1) puddle(g, x + 10 * sc, y - 16 * sc)
   })
 
   const floor: Floor = { canvas: c, ox, oy }
@@ -288,4 +316,34 @@ export function drawVeil(g: CanvasRenderingContext2D, holes: LightHole[]): void 
   }
   fg.globalCompositeOperation = 'source-over'
   g.drawImage(veilCanvas, 0, 0)
+}
+
+let irisCanvas: HTMLCanvasElement | null = null
+
+/**
+ * 进节点：整屏压黑，只在角色身上留一个圆孔，再收到没。
+ * r ≤ 1 时是全黑。
+ */
+export function drawIris(g: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  if (!irisCanvas) irisCanvas = makeCanvas(640, 360).c
+  const fg = irisCanvas.getContext('2d')!
+  fg.setTransform(1, 0, 0, 1, 0, 0)
+  fg.globalCompositeOperation = 'source-over'
+  fg.clearRect(0, 0, 640, 360)
+  fg.fillStyle = PAL.shadow
+  fg.fillRect(0, 0, 640, 360)
+  if (r > 1) {
+    fg.globalCompositeOperation = 'destination-out'
+    const hole = Math.max(2, r)
+    const grad = fg.createRadialGradient(cx, cy, hole * 0.55, cx, cy, hole)
+    grad.addColorStop(0, 'rgba(0,0,0,1)')
+    grad.addColorStop(0.78, 'rgba(0,0,0,1)')
+    grad.addColorStop(1, 'rgba(0,0,0,0)')
+    fg.fillStyle = grad
+    fg.beginPath()
+    fg.arc(cx, cy, hole, 0, Math.PI * 2)
+    fg.fill()
+  }
+  fg.globalCompositeOperation = 'source-over'
+  g.drawImage(irisCanvas, 0, 0)
 }
