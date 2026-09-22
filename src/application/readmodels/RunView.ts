@@ -4,7 +4,7 @@ import { ANCHORS } from '../../content/anchors'
 import type { RunState } from '../../domain/run/RunAggregate'
 import type { Coord, DeckId, NodeType, Rarity, RunResult, SchoolId, Screen } from '../../domain/types'
 import { NODE_TYPE_LABEL } from '../../domain/types'
-import { adjacentNodes } from '../../domain/run/mapgen'
+import { adjacentNodes, nodeOpensContent } from '../../domain/run/mapgen'
 
 export interface EventOptionView {
   index: 0 | 1 | 2
@@ -24,6 +24,8 @@ export interface MapNodeView {
   visited: boolean
   completed: boolean
   lost: boolean
+  /** 走进去会打开内容。已完成且不能再互动的节点为假，只作落脚。 */
+  interactive: boolean
   current: boolean
   adjacent: boolean
 }
@@ -80,6 +82,7 @@ export function toRunView(state: RunState, availableNodes: string[]): RunView {
       visited: n.visited,
       completed: n.completed,
       lost: n.lost,
+      interactive: nodeOpensContent(n),
       current: n.x === state.player.x && n.y === state.player.y,
       adjacent: adj.has(n.id) || availableNodes.includes(n.id),
     }

@@ -52,6 +52,19 @@ describe('普通战斗循环', () => {
     r.returnToMap()
     expect(r.state.screen).toBe('map')
     expect(r.state.box.length).toBeGreaterThan(10)
+
+    const here = { x: node.x, y: node.y }
+    r.state.player = { x: node.x + 1, y: node.y }
+    if (!r.availableNodes().includes(node.id)) r.state.player = { x: node.x, y: node.y + 1 }
+    expect(r.availableNodes()).toContain(node.id)
+    const back = r.enterNode(node.id)
+    expect(back.some((e) => e.type === 'run.screen')).toBe(false)
+    expect(r.state.screen).toBe('map')
+    expect(r.state.player).toEqual(here)
+    const view = toRunView(r.state, r.availableNodes())
+    const shown = view.nodes.find((n) => n.id === node.id)!
+    expect(shown.interactive).toBe(false)
+    expect(shown.current).toBe(true)
   })
 
   it('只能看见相邻类型', () => {

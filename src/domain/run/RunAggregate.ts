@@ -11,7 +11,7 @@ import type { BattleResult } from '../battle/state'
 import type { Coord, DeckId, NodeType, RunResult, SchoolId, Screen } from '../types'
 import { manhattan } from '../types'
 import type { RunEvent } from './events'
-import { adjacentNodes, generateFloor, revealAround, type MapNode, type ShopStock } from './mapgen'
+import { adjacentNodes, generateFloor, nodeOpensContent, revealAround, type MapNode, type ShopStock } from './mapgen'
 
 export interface BoxCard {
   uid: string
@@ -150,8 +150,7 @@ export class RunAggregate {
 
     if (node.type === 'nextFloor') return events.concat(this.end('victory', '下层'))
 
-    const reenter = node.type === 'shop' || ((node.type === 'normal' || node.type === 'elite') && (node.lost || !node.completed))
-    if (node.completed && !reenter) return events
+    if (!nodeOpensContent(node)) return events
 
     if (node.type === 'normal' || node.type === 'elite' || node.type === 'boss') return events.concat(this.enterBattle(node))
     if (node.type === 'event') return events.concat(this.enterEvent(node))

@@ -42,6 +42,7 @@ interface Walk {
   dur: number
   nodeId: string
   flip: boolean
+  sent: boolean
 }
 
 interface EnterFx {
@@ -120,15 +121,33 @@ export class MapScene extends Scene {
           this.enterFx.sent = true
           this.app.send({ type: 'run.enterNode', node: this.enterFx.nodeId })
         }
+      } else {
+        const landed = run.nodes.find((n) => n.id === this.enterFx!.nodeId)
+        if (run.screen === 'map' && landed && !landed.interactive) {
+          this.enterFx = null
+          this.walk = null
+        }
       }
       return
     }
     if (!this.walk) return
     this.walk.t += dt * tw.speed
-    if (this.walk.t >= this.walk.dur) {
-      this.walk.t = this.walk.dur
-      this.enterFx = { nodeId: this.walk.nodeId, t: 0, dur: 0.78, sent: false }
+    if (this.walk.t < this.walk.dur) return
+    this.walk.t = this.walk.dur
+    const node = run.nodes.find((n) => n.id === this.walk!.nodeId)
+    if (!node) {
+      this.walk = null
+      return
     }
+    if (node.interactive) {
+      this.enterFx = { nodeId: node.id, t: 0, dur: 0.78, sent: false }
+      return
+    }
+    if (!this.walk.sent) {
+      this.walk.sent = true
+      this.app.send({ type: 'run.enterNode', node: node.id })
+    }
+    if (node.current) this.walk = null
   }
 
   async handle(e: DomainEvent): Promise<void> {
@@ -211,17 +230,18 @@ export class MapScene extends Scene {
     }
     glow(world, bodyX, bodyY, this.enterFx ? 22 : 14, PAL.lamp1, this.enterFx ? 0.7 : 0.4, false)
 
+    const stepping = !!this.walk && this.walk.t < this.walk.dur && !this.enterFx
     const head = ASSETS.sprite(avatarHeadId(run.avatarDefId))
     if (head) {
       drawSprite(world, head, tsx, tsy, {
-        anim: this.walk && !this.enterFx ? 'walk' : 'idle',
+        anim: stepping ? 'walk' : 'idle',
         t: this.t,
         shadow: true,
         scale: 2,
         flip: tok.flip,
       })
     }
-    if (this.walk && !this.enterFx) {
+    if (stepping) {
       world.fillStyle = PAL.stoneL
       world.fillRect(tsx - 6, tsy + 2, 2, 1)
       world.fillRect(tsx + 4, tsy + 3, 2, 1)
@@ -324,18 +344,21 @@ export class MapScene extends Scene {
     if (!n.adjacent || this.openDeck || this.walk || this.enterFx) return
     const from = this.anchorOf(run, mesh)
     const to = mesh.at(n.id)
-    audio.sfx('click')
     const dist = Math.hypot(to.x - from.x, to.y - from.y)
     if (dist < 2) {
+      if (!n.interactive) return
+      audio.sfx('click')
       this.enterFx = { nodeId: n.id, t: 0, dur: 0.78, sent: false }
       return
     }
+    audio.sfx('click')
     this.faceLeft = to.x < from.x
     this.walk = {
       from, to, t: 0,
       dur: Math.min(0.9, 0.4 + dist / 240),
       nodeId: n.id,
       flip: to.x < from.x,
+      sent: false,
     }
   }
 
