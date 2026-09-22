@@ -224,6 +224,7 @@ export class BattleAggregate {
     const out: LegalPlay[] = []
     for (const id of s.hand) {
       const card = s.cards[id]
+      if (card.defId === 'PC.X01') continue
       if (must && !card.isAvatar) continue
       const def = cardDef(card.defId)
       if (s.occupy < def.cost) continue
@@ -506,16 +507,10 @@ export class BattleAggregate {
     if (card.defId === 'PC.A02' || card.defId === 'PC.A14' || card.defId === 'PC.N03' || card.defId === 'PC.N07') {
       return boardCards(s).filter((c) => card.defId === 'PC.A02' || card.defId === 'PC.A14' ? c.owner === 'enemy' : true).map((c) => c.id)
     }
-    if (card.defId === 'PC.A05' || card.defId === 'PC.A06' || card.defId === 'PC.A10') {
-      return boardCards(s).filter((c) => c.owner === 'enemy' && hasStatus(c, 'marked') && (card.defId !== 'PC.A06' || currentPoints(s, c) <= 6)).map((c) => c.id)
-    }
-    if (card.defId === 'PC.B03') return boardCards(s).map((c) => c.id)
+    if (card.defId === 'PC.B03') return boardCards(s).filter((c) => c.kind === 'occupy').map((c) => c.id)
     if (card.defId === 'PC.C02' || card.defId === 'PC.N07') return boardCards(s).map((c) => c.id)
-    if (card.defId === 'PC.C05' || card.defId === 'PC.C11') return boardCards(s).filter((c) => c.owner === 'player').map((c) => c.id)
+    if (card.defId === 'PC.C05') return boardCards(s).filter((c) => c.owner === 'player').map((c) => c.id)
     if (card.defId === 'PC.C13') return boardCards(s).filter((c) => c.owner === 'player' && !c.isAvatar).map((c) => c.id)
-    if (card.defId === 'PC.B13') return boardCards(s).filter((c) => c.owner === 'player').map((c) => c.id)
-    if (card.defId === 'PC.X01') return boardCards(s).filter((c) => c.owner === 'player').map((c) => c.id)
-    if (card.defId === 'PC.N09') return boardCards(s).map((c) => c.id)
     if (def.effects.some((e) => e.ops.some((op) => op.op === 'discardToHand'))) return [...s.discard]
     return boardCards(s).filter((c) => c.owner === 'enemy').map((c) => c.id)
   }
@@ -563,7 +558,6 @@ export class BattleAggregate {
     if (s.result) return
     this.enterOccupy(card, cell, vp, events)
     this.runEffects(card, 'onCover', events)
-    this.fireCoverWatchers(card, events)
     if (s.mapEffect === 'ME.02') this.changePoints(card, -1, events, 'map')
   }
 
@@ -779,7 +773,7 @@ export class BattleAggregate {
         const dest = ctx.dest
         if (!t || !dest || cardAt(s, dest) || t.isAvatar || t.owner !== 'player') return
         const copy = this.spawnOnto(t.defId, 'player', dest, events)
-        copy.basePoints = Math.ceil(currentPoints(s, t) / 2)
+        copy.basePoints = currentPoints(s, t)
         copy.permanent = 0
         this.flushPoints(events, 'enter')
         return
@@ -844,7 +838,13 @@ export class BattleAggregate {
         const occ = s.hand.map((id) => s.cards[id]).filter((c) => c.kind === 'occupy')
         if (!occ.length) return
         const t = occ[nextInt(s.rng, occ.length)]
+        const before = currentPoints(s, t)
         this.changePoints(t, -op.n, events, 'turnEnd')
+        if (before > 0 && currentPoints(s, t) === 0) {
+          this.removeCard(t, 'discard', 'effect', events)
+          const av = avatarOf(s)
+          if (av) this.changePoints(av, -2, events, 'turnEnd')
+        }
         return
       }
       case 'sealHighestAdjacentOpponent': {
@@ -905,7 +905,6 @@ export class BattleAggregate {
         const allies = ADJACENT[ctx.source.cell].map((c) => cardAt(s, c)).filter((c): c is CardInst => !!c && c.owner === ctx.source.owner)
         allies.sort((a, b) => (a.cell ?? 0) - (b.cell ?? 0))
         if (allies[0]) this.changePoints(allies[0], -2, events, 'enter')
-        else this.changePoints(ctx.source, -2, events, 'enter')
         return
       }
       case 'deckThick':
@@ -981,7 +980,7 @@ export class BattleAggregate {
       return ADJACENT[ctx.source.cell].filter((c) => {
         const t = cardAt(s, c)
         return t && t.owner !== ctx.source.owner
-      }).length
+      }).length * 2
     }
     if (n === 'halfChosenCurrent' && target) return Math.ceil(currentPoints(s, target) / 2)
     return 0
@@ -1159,6 +1158,10 @@ export class BattleAggregate {
       deckLeft: s.deck.length,
       text: `抽到${cardName(entry.defId)}。`,
     })
+    if (inst.defId === 'PC.X01') {
+      this.runEffects(inst, 'play', events)
+      if (inst.zone === 'hand') this.removeCard(inst, 'discard', 'effect', events)
+    }
   }
 
   private sacrifice(n: number, events: BattleEvent[]): DeckEntry[] {
@@ -1294,7 +1297,6 @@ export class BattleAggregate {
     card.cell = dest
     s.board[dest] = card.id
     this.runEffects(card, 'onCover', events)
-    this.fireCoverWatchers(card, events)
     if (s.mapEffect === 'ME.02') this.changePoints(card, -1, events, 'map')
     this.flushPoints(events, 'cover')
     return true
@@ -1357,16 +1359,13 @@ export class BattleAggregate {
         this.changePoints(c, 1, events, 'play', { actor: c.id, defId: c.defId, timing: 'play', op: 'spellFeed' })
       }
       if (c.defId === 'EC.21' && played.kind === 'spell' && played.owner !== c.owner) {
-        this.changePoints(c, 2, events, 'play', { actor: c.id, defId: c.defId, timing: 'play', op: 'spellFeed' })
-      }
-    }
-  }
-
-  private fireCoverWatchers(coverer: CardInst, events: BattleEvent[]): void {
-    for (const c of boardCards(this.state)) {
-      if (isSealed(c) || c.id === coverer.id) continue
-      if (c.defId === 'EC.12' && coverer.owner !== c.owner) {
-        this.changePoints(c, 3, events, 'onCover', { actor: c.id, defId: c.defId, timing: 'onCover', op: 'coverFeed' })
+        const why = { actor: c.id, defId: c.defId, timing: 'play' as const, op: 'spellFeed' }
+        this.changePoints(c, 2, events, 'play', why)
+        const foes = boardCards(this.state).filter((x) => x.owner !== c.owner)
+        if (foes.length) {
+          const t = foes[nextInt(this.state.rng, foes.length)]
+          this.changePoints(t, -1, events, 'play', why)
+        }
       }
     }
   }
@@ -1374,7 +1373,7 @@ export class BattleAggregate {
   private fireLeaveWatchers(left: CardInst, events: BattleEvent[]): void {
     for (const c of boardCards(this.state)) {
       if (isSealed(c) || c.id === left.id) continue
-      if (c.defId === 'PC.B07' && c.owner === left.owner) {
+      if (c.defId === 'PC.B07' && left.kind === 'occupy') {
         this.changePoints(c, 2, events, 'leave', { actor: c.id, defId: c.defId, timing: 'leave', op: 'leaveAdjSwing' })
       }
     }

@@ -419,7 +419,7 @@ export class BattleScene extends Scene {
     a.cell = ev.cell
     a.zone = 'fly'
     const who = fictionName(ev.cause?.defId ?? a.defId)
-    audio.sfx(a.defId === 'EC.03' || a.defId === 'EC.14' ? 'buff' : 'play')
+    audio.sfx(a.defId === 'EC.03' ? 'buff' : 'play')
     await tween(a, { x: dest.x, y: dest.y, alpha: 1, scale: 1, sx: 1.2, sy: 0.75 }, 0.16, ease.outQuad)
     a.zone = 'board'
     await tween(a, { sx: 1, sy: 1 }, 0.1, ease.outBack)
@@ -442,7 +442,7 @@ export class BattleScene extends Scene {
     a.y = from.y
     a.cell = ev.cell
     a.zone = 'fly'
-    const ogre = a.defId === 'EC.01' || a.defId === 'EC.18'
+    const ogre = a.defId === 'EC.01'
     const skel = a.defId === 'EC.07' || a.defId === 'EC.05'
     audio.sfx(ogre ? 'step' : 'play')
     if (ogre) this.spark('club', from, 0.16)
@@ -918,7 +918,9 @@ export class BattleScene extends Scene {
 
   private isSwap(play: LegalPlay | undefined): boolean {
     if (!play) return false
-    return this.actors.get(play.card)?.defId === 'PC.N09'
+    const defId = this.actors.get(play.card)?.defId
+    if (!defId) return false
+    return cardDef(defId).effects.some((e) => e.ops.some((op) => op.op === 'swapChosen'))
   }
 
   private needsCellAndTarget(play: LegalPlay | undefined): boolean {

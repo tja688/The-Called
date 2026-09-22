@@ -426,11 +426,9 @@ function bakeRoom(kind: RoomKey): BakedRoom {
 const roomCache = new Map<string, BakedRoom>()
 
 export function roomOfEncounter(id: string): RoomKey {
-  if (id === 'MON.N01' || id === 'MON.N09') return 'foyer'
+  if (id === 'MON.N01') return 'foyer'
   if (id === 'MON.N02') return 'corridor'
-  if (id === 'MON.N03') return 'side'
   if (id === 'MON.E01') return 'nest'
-  if (id === 'MON.E04') return 'slime'
   if (id.includes('B')) return 'boss'
   if (id.includes('E')) return 'side'
   return 'corridor'

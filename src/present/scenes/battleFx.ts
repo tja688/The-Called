@@ -31,12 +31,11 @@ const ICON: Partial<Record<SparkKind, string>> = {
 
 export function strikeKind(defId?: string, op?: string): SparkKind {
   if (op === 'mark' || defId === 'PC.A01' || defId === 'PC.A04' || defId === 'PC.A14') return 'paw'
-  if (defId === 'EC.01' || defId === 'EC.18') return 'club'
-  if (defId === 'PC.A02' || defId === 'PC.A11' || defId === 'PC.A12' || defId === 'PC.A13') return 'arrow'
-  if (defId === 'PC.A03' || defId === 'PC.A10') return 'net'
-  if (defId === 'EC.15' || defId === 'EC.08' || defId === 'EC.03' || op === 'timerBlast') return 'boom'
+  if (defId === 'EC.01') return 'club'
+  if (defId === 'PC.A02' || defId === 'PC.A13') return 'arrow'
+  if (defId === 'PC.A03') return 'net'
+  if (defId === 'EC.03' || op === 'timerBlast') return 'boom'
   if (op === 'buff') return 'buff'
-  if (defId === 'EC.14') return 'blade'
   return 'blade'
 }
 

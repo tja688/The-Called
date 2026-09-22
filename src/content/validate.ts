@@ -11,7 +11,7 @@ export function validateContent(): void {
   if (new Set(ids).size !== ids.length) throw new Error('Card ID 不唯一')
 
   const players = playerCardIds()
-  if (players.length !== 58) throw new Error(`玩家卡应为 58 张，实际 ${players.length}`)
+  if (players.length !== 39) throw new Error(`玩家卡应为 39 张，实际 ${players.length}`)
 
   for (const deck of Object.values(STARTING_DECKS)) {
     if (deck.cards.length !== 10) throw new Error(`${deck.id} 不是 10 张`)
@@ -33,11 +33,18 @@ export function validateContent(): void {
     if (got !== enc.openingBase) throw new Error(`${enc.id} 开局基础点 ${got} ≠ ${enc.openingBase}`)
   }
 
-  const l1n = poolFor('normal', 1).map((e) => e.id).sort()
-  if (l1n.join() !== ['MON.N01', 'MON.N02', 'MON.N03'].join()) throw new Error('第 1 层普通池不对')
-  const l1e = poolFor('elite', 1).map((e) => e.id).sort()
-  if (l1e.join() !== ['MON.E01', 'MON.E04'].join()) throw new Error('第 1 层精英池不对')
-  if (poolFor('boss', 1).map((e) => e.id).join() !== 'MON.B02') throw new Error('第 1 层 BOSS 不是 MON.B02')
+  const layer1 = {
+    normal: ['MON.N01', 'MON.N02', 'MON.N04', 'MON.N05', 'MON.N06'],
+    elite: ['MON.E01'],
+    boss: ['MON.B01'],
+  }
+  for (const floor of [1, 2, 3] as const) {
+    for (const tier of ['normal', 'elite', 'boss'] as const) {
+      const got = poolFor(tier, floor).map((e) => e.id).sort().join()
+      const want = [...layer1[tier]].sort().join()
+      if (got !== want) throw new Error(`第 ${floor} 层${tier}池应为 ${want}，实际 ${got}`)
+    }
+  }
 
   for (const ev of Object.values(EVENTS)) {
     if (!ev.options.length) throw new Error(`${ev.id} 没有选项`)

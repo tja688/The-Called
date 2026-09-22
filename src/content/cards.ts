@@ -49,23 +49,8 @@ export const CARDS: Record<string, CardDef> = {
     text: '入场为所有相邻敌方卡牌添加 MK.A。',
     effects: [{ timing: 'enter', ops: [{ op: 'mark', sel: 'adjacentEnemies' }] }],
   }),
-  'PC.A05': d({
-    id: 'PC.A05', name: 'PC.A05', kind: 'spell', cost: 1, basePoints: 0, school: 'SYS.A', rarity: 'white',
-    text: '使一张拥有 MK.A 的敌方卡牌点数-3，然后将其 MK.A 转移到相邻敌方卡牌。',
-    effects: [{ timing: 'play', ops: [{ op: 'damage', sel: 'chosen', n: 3 }, { op: 'transferMark' }] }],
-  }),
-  'PC.A06': d({
-    id: 'PC.A06', name: 'PC.A06', kind: 'spell', cost: 2, basePoints: 0, school: 'SYS.A', rarity: 'blue',
-    text: '移除一张点数 ≤ 6 且拥有 MK.A 的敌方卡牌。',
-    effects: [{ timing: 'play', ops: [{ op: 'remove', sel: 'chosen', maxPoints: 6 }] }],
-  }),
-  'PC.A07': d({
-    id: 'PC.A07', name: 'PC.A07', kind: 'occupy', cost: 2, basePoints: 5, school: 'SYS.A', rarity: 'blue',
-    text: '驻场回合结束时，每有一张拥有 MK.A 的敌方卡牌，本卡点数+1。',
-    effects: [{ timing: 'turnEnd', ops: [{ op: 'buff', sel: 'self', n: 'markedCount' }] }],
-  }),
   'PC.A08': d({
-    id: 'PC.A08', name: 'PC.A08', kind: 'occupy', cost: 0, basePoints: 2, school: 'SYS.A', rarity: 'white',
+    id: 'PC.A08', name: 'PC.A08', kind: 'occupy', cost: 1, basePoints: 4, school: 'SYS.A', rarity: 'white',
     text: '入场若相邻有拥有 MK.A 的敌方卡牌，本卡点数+2。',
     effects: [{ timing: 'enter', ops: [{ op: 'ifAdjacentMarked', then: [{ op: 'buff', sel: 'self', n: 2 }] }] }],
   }),
@@ -75,30 +60,15 @@ export const CARDS: Record<string, CardDef> = {
     auras: [{ aura: 'blockMarkedMove' }],
     effects: [{ timing: 'turnStart', ops: [{ op: 'damage', sel: 'markedEnemies', n: 1 }] }],
   }),
-  'PC.A10': d({
-    id: 'PC.A10', name: 'PC.A10', kind: 'spell', cost: 1, basePoints: 0, school: 'SYS.A', rarity: 'blue',
-    text: '使一张拥有 MK.A 的敌方卡牌点数-X，X 为与它相邻的己方卡牌数量 ×2。',
-    effects: [{ timing: 'play', ops: [{ op: 'damage', sel: 'chosen', n: 'chosenAdjAllies*2' }] }],
-  }),
-  'PC.A11': d({
-    id: 'PC.A11', name: 'PC.A11', kind: 'spell', cost: 2, basePoints: 0, school: 'SYS.A', rarity: 'gold',
-    text: '所有拥有 MK.A 的敌方卡牌点数-3，然后移除它们的 MK.A。',
-    effects: [{ timing: 'play', ops: [{ op: 'damage', sel: 'markedEnemies', n: 3, ifMarked: { n: 3, unmark: true } }] }],
-  }),
-  'PC.A12': d({
-    id: 'PC.A12', name: 'PC.A12', kind: 'occupy', cost: 1, basePoints: 3, school: 'SYS.A', rarity: 'white',
-    text: '入场为一张相邻敌方卡牌添加 MK.A，并使其获得易伤。',
-    effects: [{ timing: 'enter', ops: [{ op: 'mark', sel: 'adjacentEnemies', one: true }, { op: 'status', sel: 'adjacentEnemies', status: 'vulnerable', one: true }] }],
-  }),
   'PC.A13': d({
     id: 'PC.A13', name: 'PC.A13', kind: 'occupy', cost: 2, basePoints: 6, school: 'SYS.A', rarity: 'blue', timer: 2,
     text: '计时2：使镜像格上的敌方卡牌点数-4，并为其添加 MK.A。',
     effects: [{ timing: 'timer', ops: [{ op: 'damage', sel: 'mirrorOccupant', n: 4 }, { op: 'mark', sel: 'mirrorOccupant' }] }],
   }),
   'PC.A14': d({
-    id: 'PC.A14', name: 'PC.A14', kind: 'spell', cost: 0, basePoints: 0, school: 'SYS.A', rarity: 'white',
-    text: '为一张敌方卡牌添加 MK.A；若它已拥有 MK.A，则改为抽一张牌。',
-    effects: [{ timing: 'play', ops: [{ op: 'markOrDraw' }] }],
+    id: 'PC.A14', name: 'PC.A14', kind: 'spell', cost: 0, basePoints: 0, school: 'SYS.A', rarity: 'blue',
+    text: '为一张敌方卡牌添加 MK.A，并抽一张牌。',
+    effects: [{ timing: 'play', ops: [{ op: 'mark', sel: 'chosen' }, { op: 'draw', n: 1 }] }],
   }),
 
   'PC.B00': d({
@@ -121,7 +91,7 @@ export const CARDS: Record<string, CardDef> = {
   }),
   'PC.B03': d({
     id: 'PC.B03', name: 'PC.B03', kind: 'spell', cost: 2, basePoints: 0, school: 'SYS.B', rarity: 'basic',
-    text: '选择一张卡牌，己方弃牌堆里每有一张卡牌使其点数+2。',
+    text: '选择一张占场卡，己方弃牌堆里每有一张卡牌使其点数+2。',
     effects: [{ timing: 'play', ops: [{ op: 'buff', sel: 'chosen', n: 'discardCount*2' }] }],
   }),
   'PC.B04': d({
@@ -130,7 +100,7 @@ export const CARDS: Record<string, CardDef> = {
     effects: [{ timing: 'enter', sacrifice: 2, ops: [{ op: 'buff', sel: 'self', n: 3 }] }],
   }),
   'PC.B05': d({
-    id: 'PC.B05', name: 'PC.B05', kind: 'spell', cost: 1, basePoints: 0, school: 'SYS.B', rarity: 'white',
+    id: 'PC.B05', name: 'PC.B05', kind: 'spell', cost: 0, basePoints: 0, school: 'SYS.B', rarity: 'white',
     text: '从弃牌堆中选择一张卡牌放回手牌。',
     effects: [{ timing: 'play', ops: [{ op: 'discardToHand' }] }],
   }),
@@ -141,18 +111,8 @@ export const CARDS: Record<string, CardDef> = {
   }),
   'PC.B07': d({
     id: 'PC.B07', name: 'PC.B07', kind: 'occupy', cost: 2, basePoints: 5, school: 'SYS.B', rarity: 'blue',
-    text: '驻场每当一张己方卡牌离场，本卡点数+2。',
+    text: '驻场每当一张占场卡离场，本卡点数+2。',
     effects: [],
-  }),
-  'PC.B08': d({
-    id: 'PC.B08', name: 'PC.B08', kind: 'spell', cost: 0, basePoints: 0, school: 'SYS.B', rarity: 'white',
-    text: '献祭3，抽一张牌。',
-    effects: [{ timing: 'play', sacrifice: 3, ops: [{ op: 'draw', n: 1 }] }],
-  }),
-  'PC.B09': d({
-    id: 'PC.B09', name: 'PC.B09', kind: 'occupy', cost: 3, basePoints: 8, school: 'SYS.B', rarity: 'gold', burn: true,
-    text: '燃尽。入场将弃牌堆中的所有卡牌洗回牌组。',
-    effects: [{ timing: 'enter', ops: [{ op: 'shuffleDiscardToDeck' }] }],
   }),
   'PC.B10': d({
     id: 'PC.B10', name: 'PC.B10', kind: 'occupy', cost: 0, basePoints: 2, school: 'SYS.B', rarity: 'white',
@@ -161,7 +121,7 @@ export const CARDS: Record<string, CardDef> = {
   }),
   'PC.B11': d({
     id: 'PC.B11', name: 'PC.B11', kind: 'spell', cost: 2, basePoints: 0, school: 'SYS.B', rarity: 'blue',
-    text: '选择一张己方非化身卡，在一个空格位生成它的半点复制。',
+    text: '选择一张己方非化身卡，在一个空格位生成它的复制，点数用该卡当前点数。',
     effects: [{ timing: 'play', ops: [{ op: 'spawnHalfCopy' }] }],
   }),
   'PC.B12': d({
@@ -171,11 +131,6 @@ export const CARDS: Record<string, CardDef> = {
       { timing: 'enter', ops: [{ op: 'buff', sel: 'self', n: 'occupyDiscardCount' }] },
       { timing: 'leave', ops: [{ op: 'shuffleSelfToDeck' }] },
     ],
-  }),
-  'PC.B13': d({
-    id: 'PC.B13', name: 'PC.B13', kind: 'spell', cost: 3, basePoints: 0, school: 'SYS.B', rarity: 'gold',
-    text: '献祭4，选择一张己方卡牌，点数+被献祭卡基础点之和。',
-    effects: [{ timing: 'play', sacrifice: 4, ops: [{ op: 'buff', sel: 'chosen', n: 'sacrificeBaseSum' }] }],
   }),
   'PC.B14': d({
     id: 'PC.B14', name: 'PC.B14', kind: 'occupy', cost: 1, basePoints: 4, school: 'SYS.B', rarity: 'blue',
@@ -207,7 +162,7 @@ export const CARDS: Record<string, CardDef> = {
     effects: [{ timing: 'turnStart', spendRes: 1, ops: [{ op: 'buff', sel: 'self', n: 2 }] }],
   }),
   'PC.C04': d({
-    id: 'PC.C04', name: 'PC.C04', kind: 'occupy', cost: 1, basePoints: 3, school: 'SYS.C', rarity: 'white',
+    id: 'PC.C04', name: 'PC.C04', kind: 'occupy', cost: 1, basePoints: 4, school: 'SYS.C', rarity: 'white',
     text: '入场获得 2 点 RES.A。',
     effects: [{ timing: 'enter', ops: [{ op: 'gainRes', n: 2 }] }],
   }),
@@ -215,36 +170,6 @@ export const CARDS: Record<string, CardDef> = {
     id: 'PC.C05', name: 'PC.C05', kind: 'spell', cost: 0, basePoints: 0, school: 'SYS.C', rarity: 'white',
     text: '消耗 2 点 RES.A，使一张己方卡牌点数+3。',
     effects: [{ timing: 'play', spendRes: 2, ops: [{ op: 'buff', sel: 'chosen', n: 3 }] }],
-  }),
-  'PC.C06': d({
-    id: 'PC.C06', name: 'PC.C06', kind: 'occupy', cost: 1, basePoints: 4, school: 'SYS.C', rarity: 'white',
-    text: '驻场回合结束时，若 RES.A ≥ 3，本卡+1；否则获得 1 点 RES.A。',
-    effects: [{ timing: 'turnEnd', ops: [{ op: 'ifResAtLeast', n: 3, then: [{ op: 'buff', sel: 'self', n: 1 }], else: [{ op: 'gainRes', n: 1 }] }] }],
-  }),
-  'PC.C07': d({
-    id: 'PC.C07', name: 'PC.C07', kind: 'occupy', cost: 2, basePoints: 5, school: 'SYS.C', rarity: 'blue',
-    text: '入场消耗至多 4 点 RES.A，每点使一张不同的其他己方卡牌+2。',
-    effects: [{ timing: 'enter', spendResUpTo: 4, ops: [{ op: 'buffDifferentAlliesByRes' }] }],
-  }),
-  'PC.C08': d({
-    id: 'PC.C08', name: 'PC.C08', kind: 'spell', cost: 1, basePoints: 0, school: 'SYS.C', rarity: 'blue',
-    text: '消耗 3 点 RES.A，将一张任意归属的卡牌移动到指定相邻空格。',
-    effects: [{ timing: 'play', spendRes: 3, ops: [{ op: 'moveChosenAdjacent' }] }],
-  }),
-  'PC.C09': d({
-    id: 'PC.C09', name: 'PC.C09', kind: 'occupy', cost: 3, basePoints: 7, school: 'SYS.C', rarity: 'gold',
-    text: '驻场每回合开始时消耗 2 点 RES.A，使一张相邻敌方卡牌点数-3。',
-    effects: [{ timing: 'turnStart', spendRes: 2, ops: [{ op: 'damage', sel: 'adjacentEnemies', n: 3, one: true }] }],
-  }),
-  'PC.C10': d({
-    id: 'PC.C10', name: 'PC.C10', kind: 'occupy', cost: 0, basePoints: 2, school: 'SYS.C', rarity: 'white',
-    text: '离场获得 2 点 RES.A。',
-    effects: [{ timing: 'leave', ops: [{ op: 'gainRes', n: 2 }] }],
-  }),
-  'PC.C11': d({
-    id: 'PC.C11', name: 'PC.C11', kind: 'spell', cost: 2, basePoints: 0, school: 'SYS.C', rarity: 'blue',
-    text: '消耗全部 RES.A（至多 6 点），每点使一张己方卡牌+2。',
-    effects: [{ timing: 'play', spendResAll: 6, ops: [{ op: 'buff', sel: 'chosen', n: 'resSpent*2' }] }],
   }),
   'PC.C12': d({
     id: 'PC.C12', name: 'PC.C12', kind: 'occupy', cost: 2, basePoints: 5, school: 'SYS.C', rarity: 'blue',
@@ -255,13 +180,13 @@ export const CARDS: Record<string, CardDef> = {
     }],
   }),
   'PC.C13': d({
-    id: 'PC.C13', name: 'PC.C13', kind: 'spell', cost: 2, basePoints: 0, school: 'SYS.C', rarity: 'gold',
+    id: 'PC.C13', name: 'PC.C13', kind: 'spell', cost: 1, basePoints: 0, school: 'SYS.C', rarity: 'gold',
     text: '消耗 4 点 RES.A，使一张己方非化身卡获得返魂，并+2。',
     effects: [{ timing: 'play', spendRes: 4, ops: [{ op: 'status', sel: 'chosen', status: 'rebirth' }, { op: 'buff', sel: 'chosen', n: 2 }] }],
   }),
   'PC.C14': d({
-    id: 'PC.C14', name: 'PC.C14', kind: 'occupy', cost: 1, basePoints: 5, school: 'SYS.C', rarity: 'white', timer: 3,
-    text: '计时3：获得 3 点 RES.A。',
+    id: 'PC.C14', name: 'PC.C14', kind: 'occupy', cost: 2, basePoints: 6, school: 'SYS.C', rarity: 'white', timer: 2,
+    text: '计时2：获得 3 点 RES.A。',
     effects: [{ timing: 'timer', ops: [{ op: 'gainRes', n: 3 }] }],
   }),
 
@@ -283,14 +208,9 @@ export const CARDS: Record<string, CardDef> = {
     id: 'PC.N04', name: 'PC.N04', kind: 'occupy', cost: 0, basePoints: 1, school: 'neutral', rarity: 'basic',
     text: '占场。牌组下限补足。', effects: [],
   }),
-  'PC.N05': d({
-    id: 'PC.N05', name: 'PC.N05', kind: 'occupy', cost: 1, basePoints: 3, school: 'neutral', rarity: 'white',
-    text: '入场若本卡在角落格，点数+3。',
-    effects: [{ timing: 'enter', ops: [{ op: 'ifCorner', then: [{ op: 'buff', sel: 'self', n: 3 }] }] }],
-  }),
   'PC.N06': d({
     id: 'PC.N06', name: 'PC.N06', kind: 'occupy', cost: 2, basePoints: 8, school: 'neutral', rarity: 'white',
-    text: '入场使一张相邻己方卡牌-2（没有则本卡-2）。',
+    text: '入场使一张相邻己方卡牌点数-2。',
     effects: [{ timing: 'enter', ops: [{ op: 'n06Tax' }] }],
   }),
   'PC.N07': d({
@@ -298,31 +218,15 @@ export const CARDS: Record<string, CardDef> = {
     text: '使一张卡牌获得保护，并抽一张牌。',
     effects: [{ timing: 'play', ops: [{ op: 'status', sel: 'chosen', status: 'protected' }, { op: 'draw', n: 1 }] }],
   }),
-  'PC.N08': d({
-    id: 'PC.N08', name: 'PC.N08', kind: 'occupy', cost: 1, basePoints: 4, school: 'neutral', rarity: 'blue',
-    text: '驻场镜像格上的己方卡牌点数+2。',
-    auras: [{ aura: 'mirrorAlly', n: 2 }],
-    effects: [],
-  }),
-  'PC.N09': d({
-    id: 'PC.N09', name: 'PC.N09', kind: 'spell', cost: 2, basePoints: 0, school: 'neutral', rarity: 'gold',
-    text: '交换两张任意归属的卡牌的格位。',
-    effects: [{ timing: 'play', ops: [{ op: 'swapChosen' }] }],
-  }),
-  'PC.N10': d({
-    id: 'PC.N10', name: 'PC.N10', kind: 'spell', cost: 1, basePoints: 0, school: 'neutral', rarity: 'white', burn: true,
-    text: '燃尽。获得 10 金币。',
-    effects: [{ timing: 'play', ops: [{ op: 'gold', n: 10 }, { op: 'burn' }] }],
-  }),
   'PC.N11': d({
-    id: 'PC.N11', name: 'PC.N11', kind: 'occupy', cost: 2, basePoints: 4, school: 'neutral', rarity: 'blue',
+    id: 'PC.N11', name: 'PC.N11', kind: 'occupy', cost: 2, basePoints: 4, school: 'neutral', rarity: 'gold',
     text: '驻场每当己方打出一张其他卡牌，本卡点数+1。',
     effects: [],
   }),
   'PC.X01': d({
     id: 'PC.X01', name: 'PC.X01', kind: 'spell', cost: 0, basePoints: 0, school: 'neutral', rarity: 'white', extra: 'negative',
-    text: '使一张己方卡牌点数-1。',
-    effects: [{ timing: 'play', ops: [{ op: 'damage', sel: 'chosen', n: 1 }] }],
+    text: '抽到时，己方化身卡点数-2，然后将本卡移入弃牌堆。',
+    effects: [{ timing: 'play', ops: [{ op: 'damage', sel: 'playerAvatar', n: 2 }] }],
   }),
   'PC.X02': d({
     id: 'PC.X02', name: 'PC.X02', kind: 'occupy', cost: 1, basePoints: 0, school: 'neutral', rarity: 'white', extra: 'negative',
@@ -333,8 +237,8 @@ export const CARDS: Record<string, CardDef> = {
 
   'EC.01': d({
     id: 'EC.01', name: 'EC.01', kind: 'occupy', cost: 0, basePoints: 30, school: 'neutral', rarity: 'basic',
-    text: '回合结束：相邻敌方-2，并向化身方向移动一格。',
-    effects: [{ timing: 'turnEnd', ops: [{ op: 'damage', sel: 'adjacentEnemies', n: 2, one: true }, { op: 'moveTowardAvatar' }] }],
+    text: '回合结束：相邻敌方-3，并向化身方向移动一格。',
+    effects: [{ timing: 'turnEnd', ops: [{ op: 'damage', sel: 'adjacentEnemies', n: 3, one: true }, { op: 'moveTowardAvatar' }] }],
   }),
   'EC.02': d({
     id: 'EC.02', name: 'EC.02', kind: 'occupy', cost: 0, basePoints: 10, school: 'neutral', rarity: 'basic', timer: 2,
@@ -364,87 +268,45 @@ export const CARDS: Record<string, CardDef> = {
   }),
   'EC.06': d({
     id: 'EC.06', name: 'EC.06', kind: 'occupy', cost: 0, basePoints: 18, school: 'neutral', rarity: 'basic',
-    text: '驻场本列敌方-2。',
-    auras: [{ aura: 'columnOpponents', n: -2 }],
+    text: '驻场本排敌方-2。',
+    auras: [{ aura: 'rowOpponents', n: -2 }],
     effects: [],
   }),
   'EC.07': d({
     id: 'EC.07', name: 'EC.07', kind: 'occupy', cost: 0, basePoints: 20, school: 'neutral', rarity: 'basic',
-    text: '驻场本排敌方-1。回合结束随机左右移动。',
-    auras: [{ aura: 'rowOpponents', n: -1 }],
+    text: '驻场本列敌方-2。回合结束随机左右移动。',
+    auras: [{ aura: 'columnOpponents', n: -2 }],
     effects: [{ timing: 'turnEnd', ops: [{ op: 'moveRowRandom' }] }],
-  }),
-  'EC.08': d({
-    id: 'EC.08', name: 'EC.08', kind: 'occupy', cost: 0, basePoints: 6, school: 'neutral', rarity: 'basic',
-    text: '离场相邻敌方-3。',
-    effects: [{ timing: 'leave', ops: [{ op: 'leaveAdjSwing', enemy: -3, ally: 0 }] }],
-  }),
-  'EC.09': d({
-    id: 'EC.09', name: 'EC.09', kind: 'occupy', cost: 0, basePoints: 8, school: 'neutral', rarity: 'basic',
-    text: '驻场点数额外 + 镜像格敌方当前点数。',
-    auras: [{ aura: 'mirrorOpponentCurrent' }],
-    effects: [],
   }),
   'EC.10': d({
     id: 'EC.10', name: 'EC.10', kind: 'occupy', cost: 0, basePoints: 24, school: 'neutral', rarity: 'basic',
-    text: '回合开始每有一张相邻敌方，本卡+1。',
+    text: '回合开始每有一张相邻敌方，本卡+2。',
     effects: [{ timing: 'turnStart', ops: [{ op: 'buff', sel: 'self', n: 'adjacentEnemiesToSelf' }] }],
   }),
   'EC.11': d({
-    id: 'EC.11', name: 'EC.11', kind: 'occupy', cost: 0, basePoints: 14, school: 'neutral', rarity: 'basic',
+    id: 'EC.11', name: 'EC.11', kind: 'occupy', cost: 0, basePoints: 10, school: 'neutral', rarity: 'basic',
     text: '回合结束将一张 PC.X01 洗入敌方牌组。',
     effects: [{ timing: 'turnEnd', ops: [{ op: 'pollute', defId: 'PC.X01' }] }],
   }),
-  'EC.12': d({
-    id: 'EC.12', name: 'EC.12', kind: 'occupy', cost: 0, basePoints: 16, school: 'neutral', rarity: 'basic',
-    text: '每当敌方作为覆盖者完成一次覆盖，本卡+3。',
-    effects: [],
-  }),
-  'EC.13': d({
-    id: 'EC.13', name: 'EC.13', kind: 'occupy', cost: 0, basePoints: 12, school: 'neutral', rarity: 'basic',
-    text: '离场在相邻空格各生成一张 EC.14，最多两张。',
-    effects: [{ timing: 'leave', ops: [{ op: 'spawnAdjacent', defId: 'EC.14', max: 2 }] }],
-  }),
-  'EC.14': d({
-    id: 'EC.14', name: 'EC.14', kind: 'occupy', cost: 0, basePoints: 4, school: 'neutral', rarity: 'basic',
-    text: '回合结束向化身移动；已相邻则化身-1。',
-    effects: [{ timing: 'turnEnd', ops: [{ op: 'moveTowardAvatar', pokeIfAdjacent: true }] }],
-  }),
-  'EC.15': d({
-    id: 'EC.15', name: 'EC.15', kind: 'occupy', cost: 0, basePoints: 8, school: 'neutral', rarity: 'basic', timer: 3,
-    text: '计时3：相邻敌方-4，本卡-4。',
-    effects: [{ timing: 'timer', ops: [{ op: 'timerBlast', adj: 4, self: 4 }] }],
-  }),
   'EC.16': d({
     id: 'EC.16', name: 'EC.16', kind: 'occupy', cost: 0, basePoints: 18, school: 'neutral', rarity: 'basic',
-    text: '回合结束使敌方手牌一张占场-1。',
-    effects: [{ timing: 'turnEnd', ops: [{ op: 'nibbleHandOccupy', n: 1 }] }],
+    text: '回合结束使敌方手牌一张占场-2；降到 0 则弃牌，化身-2。',
+    effects: [{ timing: 'turnEnd', ops: [{ op: 'nibbleHandOccupy', n: 2 }] }],
   }),
   'EC.17': d({
     id: 'EC.17', name: 'EC.17', kind: 'occupy', cost: 0, basePoints: 16, school: 'neutral', rarity: 'basic',
     text: '回合开始（解封后）封印相邻敌方中点数最高者。',
     effects: [{ timing: 'turnStart', ops: [{ op: 'sealHighestAdjacentOpponent' }] }],
   }),
-  'EC.18': d({
-    id: 'EC.18', name: 'EC.18', kind: 'occupy', cost: 0, basePoints: 40, school: 'neutral', rarity: 'basic',
-    text: '回合开始本卡-5。',
-    effects: [{ timing: 'turnStart', ops: [{ op: 'damage', sel: 'self', n: 5 }] }],
-  }),
   'EC.19': d({
-    id: 'EC.19', name: 'EC.19', kind: 'occupy', cost: 0, basePoints: 6, school: 'neutral', rarity: 'basic',
-    text: '驻场敌方不能打出到与本卡相邻的空格。',
+    id: 'EC.19', name: 'EC.19', kind: 'occupy', cost: 0, basePoints: 2, school: 'neutral', rarity: 'basic',
+    text: '驻场敌方不能打出到与本卡相邻的空格。离场化身-2。',
     auras: [{ aura: 'fence' }],
-    effects: [],
-  }),
-  'EC.20': d({
-    id: 'EC.20', name: 'EC.20', kind: 'occupy', cost: 0, basePoints: 14, school: 'neutral', rarity: 'basic',
-    text: '驻场斜交相邻敌方-3。',
-    auras: [{ aura: 'diagOpponents', n: -3 }],
-    effects: [],
+    effects: [{ timing: 'leave', ops: [{ op: 'damage', sel: 'playerAvatar', n: 2 }] }],
   }),
   'EC.21': d({
-    id: 'EC.21', name: 'EC.21', kind: 'occupy', cost: 0, basePoints: 12, school: 'neutral', rarity: 'basic',
-    text: '每当敌方打出一张法术，本卡+2。',
+    id: 'EC.21', name: 'EC.21', kind: 'occupy', cost: 0, basePoints: 26, school: 'neutral', rarity: 'basic',
+    text: '每当敌方打出一张法术，本卡+2，并随机一张敌方卡牌-1。',
     effects: [],
   }),
   'EC.22': d({

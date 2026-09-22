@@ -22,11 +22,9 @@ describe('开局与化身', () => {
     expect(b.state.occupy).toBe(1)
   })
 
-  it('开战敌方回合开始会跳：EC.18 先 -5，计时从开战减', () => {
-    const { aggregate: b } = startBattle('MON.B02', fat(['PC.A02']))
-    expect(currentPoints(b.state, boardByDef(b, 'EC.18')!)).toBe(35)
-    const { aggregate: n03 } = startBattle('MON.N03')
-    expect(boardByDef(n03, 'EC.15')!.timer).toBe(2)
+  it('开战先减计时', () => {
+    const { aggregate: b } = startBattle('MON.B01', fat(['PC.A02']))
+    expect(boardByDef(b, 'EC.04')!.timer).toBe(2)
   })
 })
 
@@ -90,16 +88,16 @@ describe('SYS.A 基础与胜负', () => {
   it('场上没有敌方卡立刻胜', () => {
     const { aggregate: b } = startBattle('MON.N02', fat(['PC.N01', 'PC.N01', 'PC.N01', 'PC.N01']))
     playDef(b, 'PC.A00', 5)
-    const bait = boardByDef(b, 'EC.08')!
+    const acid = boardByDef(b, 'EC.06')!
     const n01 = handByDef(b, 'PC.N01')!
-    n01.basePoints = currentPoints(b.state, bait) + 1
-    playDef(b, 'PC.N01', bait.cell)
+    n01.basePoints = currentPoints(b.state, acid) + 1
+    playDef(b, 'PC.N01', acid.cell)
     expect(b.state.result).toBeUndefined()
     b.playerEndTurn()
-    const row = boardByDef(b, 'EC.07')!
+    const col = boardByDef(b, 'EC.07')!
     const n2 = handByDef(b, 'PC.N01')!
-    n2.basePoints = currentPoints(b.state, row) + 1
-    playDef(b, 'PC.N01', row.cell)
+    n2.basePoints = currentPoints(b.state, col) + 1
+    playDef(b, 'PC.N01', col.cell)
     expect(b.state.result).toMatchObject({ outcome: 'win', reason: 'clear' })
   })
 
@@ -123,7 +121,7 @@ describe('SYS.A 基础与胜负', () => {
   it('0 点敌卡不自动离场', () => {
     const { aggregate: b } = startBattle('MON.N02', ['PC.A02', 'PC.A02', 'PC.A02', 'PC.A02'])
     playDef(b, 'PC.A00', 5)
-    const bait = boardByDef(b, 'EC.08')!
+    const bait = boardByDef(b, 'EC.06')!
     bait.permanent = -99
     expect(currentPoints(b.state, bait)).toBe(0)
     expect(bait.zone).toBe('board')
@@ -131,7 +129,12 @@ describe('SYS.A 基础与胜负', () => {
   })
 
   it('封印仍提供占领费用，总点数计 0', () => {
-    const { aggregate: b } = startBattle('MON.N07', fat(['PC.N01']))
+    const { aggregate: b } = startBattle('MON.N01', fat(['PC.N01']))
+    const statue = boardByDef(b, 'EC.01')!
+    statue.defId = 'EC.17'
+    if (statue.cell && b.state.board[statue.cell] === statue.id) b.state.board[statue.cell] = null
+    statue.cell = 5
+    b.state.board[5] = statue.id
     playDef(b, 'PC.A00', 2)
     b.playerEndTurn()
     const av = avatar(b)
@@ -139,6 +142,15 @@ describe('SYS.A 基础与胜负', () => {
     expect(b.state.occupyCap).toBe(1)
     expect(finalPoints(b.state, 'player')).toBe(0)
     expect(currentPoints(b.state, av)).toBeGreaterThan(0)
+  })
+
+  it('PC.X01 抽到时化身 -2，然后进弃牌堆', () => {
+    const { aggregate: b } = startBattle('MON.N01', ['PC.X01', 'PC.A02', 'PC.A02', 'PC.A02', 'PC.A02'])
+    expect(b.state.hand.some((id) => b.state.cards[id].defId === 'PC.X01')).toBe(false)
+    const curse = Object.values(b.state.cards).find((c) => c.defId === 'PC.X01')
+    expect(curse?.zone).toBe('discard')
+    expect(currentPoints(b.state, avatar(b))).toBe(8)
+    expect(b.legalPlays().some((p) => b.state.cards[p.card].defId === 'PC.X01')).toBe(false)
   })
 
   it('化身未入场时代价按初始化身点数计', () => {
@@ -164,9 +176,10 @@ describe('SYS.A 基础与胜负', () => {
   })
 
   it('A09 驻场时被标记的敌卡不能移动', () => {
-    const { aggregate: b } = startBattle('MON.N02', fat(['PC.A08', 'PC.A08', 'PC.A09', 'PC.A14']))
+    const { aggregate: b } = startBattle('MON.N02', fat(['PC.A08', 'PC.A09', 'PC.A14', 'PC.A08']))
     playDef(b, 'PC.A00', 5)
     playDef(b, 'PC.A08', 4)
+    b.playerEndTurn()
     playDef(b, 'PC.A08', 6)
     b.playerEndTurn()
     playDef(b, 'PC.A09', 8)
@@ -227,21 +240,21 @@ describe('结算因果', () => {
     expect(refill).toBeTruthy()
   })
 
-  it('引爆前能从 turnStarted.timers 看到 EC.15 剩余', () => {
-    const { events } = startBattle('MON.N03')
+  it('引爆前能从 turnStarted.timers 看到 EC.04 剩余', () => {
+    const { events } = startBattle('MON.B01')
     const turn = events.find((e) => e.type === 'battle.turnStarted' && e.opening)
     expect(turn && turn.type === 'battle.turnStarted' ? turn.timers : []).toEqual(
-      expect.arrayContaining([expect.objectContaining({ defId: 'EC.15', left: 2 })]),
+      expect.arrayContaining([expect.objectContaining({ defId: 'EC.04', left: 2 })]),
     )
   })
 
-  it('横排驻场把减点记在 auras 上', () => {
-    const { aggregate: b } = startBattle('MON.N02', fat(['PC.N01', 'PC.N09', 'PC.N01', 'PC.N01']))
+  it('横排与竖列驻场把减点记在 auras 上', () => {
+    const { aggregate: b } = startBattle('MON.N02', fat(['PC.N01']))
     playDef(b, 'PC.A00', 5)
     playDef(b, 'PC.N01', 1)
-    b.playerEndTurn()
-    const events = playDef(b, 'PC.N09', undefined, 'PC.A00', 'PC.N01')
-    const down = events.find((e) => e.type === 'battle.pointsChanged' && e.after < e.before && e.auras?.some((a) => a.defId === 'EC.07' && a.n === -1))
+    expect(currentPoints(b.state, boardByDef(b, 'PC.N01')!)).toBe(3)
+    const events = b.playerEndTurn()
+    const down = events.find((e) => e.type === 'battle.pointsChanged' && e.auras?.some((a) => a.defId === 'EC.07' && a.n === -2))
     expect(down).toBeTruthy()
   })
 

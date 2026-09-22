@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { RunAggregate } from './RunAggregate'
 import { startRun } from '../../test/helpers'
-import { isRewardable, playerCardIds } from '../../content/cards'
+import { cardDef, isRewardable, playerCardIds } from '../../content/cards'
 import { eventsForFloor, eventDef, eventOptionEnabled } from '../../content/events'
 import { mapEffectsFor } from '../../content/mapEffects'
 import { rewardableIds, drawExact } from '../../content/rewards'
@@ -90,9 +90,9 @@ describe('事件商店疗养锻造宝箱', () => {
     expect(r.state.gold).toBe(15)
   })
 
-  it('开局没有白卡时 EV.07.A 置灰；本体系蓝不掺中立', () => {
+  it('开局卡盒没有白卡；本体系蓝不掺中立', () => {
     const { aggregate: r } = RunAggregate.start(4, 'DK.A')
-    expect(eventOptionEnabled(eventDef('EV.07'), 0, r.state)).toBe(false)
+    expect(r.state.box.some((c) => cardDef(c.defId).rarity === 'white')).toBe(false)
     const rng = seedRng(1)
     const id = drawExact(rng, 'SYS.A', 'blue', new Set(), { schoolOnly: true })
     expect(id).toBeTruthy()
@@ -100,12 +100,23 @@ describe('事件商店疗养锻造宝箱', () => {
     expect(rewardableIds('SYS.A', 'blue', { schoolOnly: true }).every((x) => x.startsWith('PC.A'))).toBe(true)
   })
 
-  it('全选项置灰的事件不进抽取，改为空事件', () => {
+  it('全选项进不了池的事件改为空事件', () => {
     const { aggregate: r } = RunAggregate.start(4, 'DK.A')
-    r.state.seenEvents = eventsForFloor(1).filter((e) => e.id !== 'EV.07').map((e) => e.id)
+    r.state.seenEvents = eventsForFloor(1).filter((e) => e.id !== 'EV.10').map((e) => e.id)
     const node = approach(r, 'event')
     r.enterNode(node.id)
     expect(r.state.eventId).toBe('EV.EMPTY')
+  })
+
+  it('EV.13 按卡盒张数置灰', () => {
+    const { aggregate: r } = RunAggregate.start(4, 'DK.A')
+    expect(r.state.box.length).toBeLessThanOrEqual(12)
+    expect(eventOptionEnabled(eventDef('EV.13'), 0, r.state)).toBe(true)
+    expect(eventOptionEnabled(eventDef('EV.13'), 1, r.state)).toBe(false)
+    while (r.state.box.length < 18) r.state.box.push({ uid: `pad${r.state.box.length}`, defId: 'PC.N01', baseBonus: 0 })
+    expect(eventOptionEnabled(eventDef('EV.13'), 0, r.state)).toBe(false)
+    expect(eventOptionEnabled(eventDef('EV.13'), 1, r.state)).toBe(true)
+    expect(eventOptionEnabled(eventDef('EV.13'), 2, r.state)).toBe(true)
   })
 
   it('EV.04.C / EV.11.B 可空手离开；金币不够时 EV.11.A 置灰', () => {
@@ -125,12 +136,12 @@ describe('事件商店疗养锻造宝箱', () => {
     expect(r2.state.gold).toBe(0)
   })
 
-  it('EV.09.B 从三张中立里挑并给 15 金', () => {
+  it('EV.09.B 从三张中立里挑，不另给金币', () => {
     const { aggregate: r } = RunAggregate.start(4, 'DK.A')
     r.state.screen = 'event'
     r.state.eventId = 'EV.09'
     r.eventOption(1)
-    expect(r.state.gold).toBe(15)
+    expect(r.state.gold).toBe(0)
     expect(r.state.screen).toBe('reward')
     expect(r.state.pendingReward).toHaveLength(3)
     expect(r.state.pendingReward!.every((id) => id.startsWith('PC.N'))).toBe(true)
@@ -180,7 +191,7 @@ describe('精英 BOSS 下层与内容池', () => {
     const { aggregate: r } = RunAggregate.start(10, 'DK.A')
     const node = approach(r, 'elite')
     r.enterNode(node.id)
-    expect(['MON.E01', 'MON.E04']).toContain(r.state.pendingEncounter)
+    expect(r.state.pendingEncounter).toBe('MON.E01')
     r.applyBattleResult({ outcome: 'win', reason: 'lead', avatarCost: 0 })
     expect(r.state.gold).toBe(25)
     expect(r.state.relics.includes('RL.01') || r.state.gold >= 25).toBe(true)
@@ -191,7 +202,7 @@ describe('精英 BOSS 下层与内容池', () => {
     const { aggregate: r } = RunAggregate.start(12, 'DK.A')
     const boss = approach(r, 'boss')
     r.enterNode(boss.id)
-    expect(r.state.pendingEncounter).toBe('MON.B02')
+    expect(r.state.pendingEncounter).toBe('MON.B01')
     r.applyBattleResult({ outcome: 'win', reason: 'clear', avatarCost: 0 })
     expect(r.state.gold).toBe(80)
     const next = r.state.nodes.find((n) => n.type === 'nextFloor')
@@ -217,13 +228,13 @@ describe('精英 BOSS 下层与内容池', () => {
     expect(r.state.ended).toBe('defeat')
   })
 
-  it('本层地图效果来自 ME.01–03；58 张玩家卡除基础负面进池', () => {
+  it('本层地图效果来自 ME.01–03；39 张玩家卡除基础负面进池', () => {
     expect(mapEffectsFor(1).map((m) => m.id).sort()).toEqual(['ME.01', 'ME.02', 'ME.03'])
     const { aggregate: r } = RunAggregate.start(1, 'DK.A')
     expect(['ME.01', 'ME.02', 'ME.03']).toContain(r.state.floorEffect)
-    expect(playerCardIds()).toHaveLength(58)
+    expect(playerCardIds()).toHaveLength(39)
     const pool = rewardableIds('SYS.A')
-    expect(pool.length).toBeGreaterThan(20)
+    expect(pool).toHaveLength(11)
     expect(pool.every((id) => isRewardable(id))).toBe(true)
     expect(pool.some((id) => id.startsWith('PC.N'))).toBe(true)
   })

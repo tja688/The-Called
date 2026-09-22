@@ -61,16 +61,17 @@ describe('SYS.B 基础', () => {
   it('B03 按己方弃牌堆张数加点，敌弃不计入', () => {
     const { aggregate: b } = startBattle('MON.N02', fat(['PC.B03', 'PC.N01', 'PC.N01', 'PC.B03']), { avatarDefId: 'PC.B00' })
     playDef(b, 'PC.B00', 5)
-    const bait = boardByDef(b, 'EC.08')!
+    const acid = boardByDef(b, 'EC.06')!
     const n01 = handByDef(b, 'PC.N01')!
-    n01.basePoints = currentPoints(b.state, bait) + 1
-    playDef(b, 'PC.N01', bait.cell)
+    n01.basePoints = currentPoints(b.state, acid) + 1
+    playDef(b, 'PC.N01', acid.cell)
     expect(b.state.enemyDiscard.length).toBe(1)
     expect(b.state.discard.length).toBe(0)
     b.playerEndTurn()
-    const av = currentPoints(b.state, avatar(b))
-    playDef(b, 'PC.B03', undefined, 'PC.B00')
-    expect(currentPoints(b.state, avatar(b))).toBe(av)
+    const ally = boardByDef(b, 'PC.N01')!
+    const before = currentPoints(b.state, ally)
+    playDef(b, 'PC.B03', undefined, 'PC.N01')
+    expect(currentPoints(b.state, ally)).toBe(before)
   })
 
   it('B06 可叠己方非化身，不能叠化身', () => {
@@ -150,31 +151,6 @@ describe('SYS.C 基础', () => {
     playDef(b, 'PC.C03', 9)
     expect(boardByDef(b, 'PC.C03')).toBeTruthy()
     expect(currentPoints(b.state, boardByDef(b, 'PC.C03')!)).toBe(6)
-  })
-
-  it('C08 必须移动到所选卡的相邻空格', () => {
-    const { aggregate: b } = startBattle('MON.N01', fat(['PC.C08', 'PC.N01', 'PC.C08', 'PC.N01']), { avatarDefId: 'PC.C00' })
-    playDef(b, 'PC.C00', 7)
-    playDef(b, 'PC.N01', 9)
-    b.playerEndTurn()
-    b.state.resA = 3
-    expect(() => playDef(b, 'PC.C08', 6, 'PC.C00')).toThrow(/不能移动/)
-    playDef(b, 'PC.C08', 8, 'PC.C00')
-    expect(avatar(b).cell).toBe(8)
-  })
-
-  it('B09 燃尽留在场上，并从卡盒标记拿掉', () => {
-    const { aggregate: b } = startBattle('MON.N01', fat(['PC.N01', 'PC.N01', 'PC.B09', 'PC.N01']), { avatarDefId: 'PC.B00' })
-    playDef(b, 'PC.B00', 7)
-    playDef(b, 'PC.N01', 8)
-    b.playerEndTurn()
-    playDef(b, 'PC.N01', 9)
-    b.playerEndTurn()
-    const card = handByDef(b, 'PC.B09')!
-    card.boxUid = 'burn-b09'
-    playDef(b, 'PC.B09', 4)
-    expect(boardByDef(b, 'PC.B09')?.zone).toBe('board')
-    expect(b.state.burnedUids).toContain('burn-b09')
   })
 
   it('B01 镜像格被占时仍可打出，但不献祭', () => {
