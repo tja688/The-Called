@@ -108,6 +108,11 @@ export class App {
 
   private map(run: RunView): HTMLElement {
     const nodes = el('div', { class: 'nodes' })
+    if (run.availableNodes.includes('hub')) {
+      const back = el('button', { class: 'node go' }, ['入口 (0,0)', el('div', { class: 'muted' }, ['可回'])])
+      back.onclick = () => void this.send({ type: 'run.enterNode', node: 'hub' })
+      nodes.append(back)
+    }
     for (const n of run.nodes) {
       const can = n.adjacent
       const box = el('button', { class: `node${can ? ' go' : ''}${n.completed ? ' done' : ''}`, disabled: can ? undefined : true }, [

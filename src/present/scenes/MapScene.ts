@@ -134,6 +134,15 @@ export class MapScene extends Scene {
     this.walk.t += dt * tw.speed
     if (this.walk.t < this.walk.dur) return
     this.walk.t = this.walk.dur
+    if (this.walk.nodeId === 'hub') {
+      if (!this.walk.sent) {
+        this.walk.sent = true
+        this.app.send({ type: 'run.enterNode', node: 'hub' })
+      }
+      const now = this.app.view()
+      if (now?.player.x === 0 && now.player.y === 0) this.walk = null
+      return
+    }
     const node = run.nodes.find((n) => n.id === this.walk!.nodeId)
     if (!node) {
       this.walk = null
@@ -176,15 +185,19 @@ export class MapScene extends Scene {
 
     const holes: LightHole[] = []
     let hover: { n: MapNodeView; x: number; y: number } | null = null
+    const busy = this.openDeck || !!this.walk || !!this.enterFx
 
     const hub = spots[0]
+    const hubOpen = run.availableNodes.includes('hub')
     this.drawMarker(world, 'icon.hub', hub.sx, hub.sy, 'visited')
     holes.push({ x: hub.sx, y: hub.sy, r: 54, k: 1 })
+    if (hubOpen && !busy) this.torch(world, hub.sx, hub.sy)
     if (this.labelOk(hub.sx, hub.sy)) {
       text.draw('入口', hub.sx, hub.sy + 16, { size: 8, align: 'center', color: PAL.cream, bold: true, ...READ })
     }
+    this.app.ui.hit('node-hub', { x: hub.sx - 16, y: hub.sy - 16, w: 32, h: 32 }, () => this.goHub(run, mesh), hubOpen && !busy ? 4 : 2, hubOpen && !busy ? 'pointer' : 'default')
+    const hubHover = hubOpen && !busy && this.app.input.isHover('node-hub')
 
-    const busy = this.openDeck || !!this.walk || !!this.enterFx
     for (const s of spots) {
       if (s.id === 'hub' || !s.node) continue
       const n = s.node
@@ -255,7 +268,9 @@ export class MapScene extends Scene {
     if (!this.openDeck) this.drawCardBox(ui, text)
 
     if (this.openDeck) this.deck.render(ui, text, run, () => { this.openDeck = false })
-    else if (hover && !busy) {
+    else if (hubHover && !busy) {
+      drawHint(ui, text, '入口', '可以走回来。', hub.sx + 18, hub.sy - 36)
+    } else if (hover && !busy) {
       const title = hover.n.type === 'unknown' ? '？' : hover.n.label
       drawHint(ui, text, title, NODE_HINT[hover.n.type] ?? '', hover.x + 18, hover.y - 36)
     }
@@ -338,6 +353,23 @@ export class MapScene extends Scene {
     if (sy < 26 || sy > 332 || sx < 8 || sx > 632) return false
     if (sx > 540 && sy > 268) return false
     return true
+  }
+
+  private goHub(run: RunView, mesh: Mesh): void {
+    if (!run.availableNodes.includes('hub') || this.openDeck || this.walk || this.enterFx) return
+    const from = this.anchorOf(run, mesh)
+    const to = mesh.at('hub')
+    const dist = Math.hypot(to.x - from.x, to.y - from.y)
+    if (dist < 2) return
+    audio.sfx('click')
+    this.faceLeft = to.x < from.x
+    this.walk = {
+      from, to, t: 0,
+      dur: Math.min(0.9, 0.4 + dist / 240),
+      nodeId: 'hub',
+      flip: to.x < from.x,
+      sent: false,
+    }
   }
 
   private go(run: RunView, mesh: Mesh, n: MapNodeView): void {

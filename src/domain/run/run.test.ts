@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { startRun } from '../../test/helpers'
 import { generateFloor } from './mapgen'
+import { RunAggregate } from './RunAggregate'
 import { seedRng } from '../../core/Rng'
 import { ANCHORS } from '../../content/anchors'
 
@@ -34,6 +35,22 @@ describe('第 1 层大地图', () => {
     await game.dispatch({ type: 'run.enterNode', node: first })
     const after = game.ask({ type: 'run.view' })!
     expect(['battle', 'event', 'shop', 'rest', 'forge', 'chest']).toContain(after.screen)
+  })
+
+  it('离开入口后，站在相邻格可以走回入口', () => {
+    const { aggregate: r } = RunAggregate.start(11, 'DK.A')
+    expect(r.state.player).toEqual({ x: 0, y: 0 })
+    expect(r.availableNodes()).not.toContain('hub')
+    const near = r.state.nodes.find((n) => Math.abs(n.x) + Math.abs(n.y) === 1)!
+    r.state.player = { x: near.x, y: near.y }
+    expect(r.availableNodes()).toContain('hub')
+    expect(r.enterNode('hub')).toEqual([])
+    expect(r.state.player).toEqual({ x: 0, y: 0 })
+    expect(r.state.screen).toBe('map')
+    expect(() => r.enterNode('hub')).toThrow()
+    const far = r.state.nodes.find((n) => Math.abs(n.x) + Math.abs(n.y) > 1)!
+    r.state.player = { x: far.x, y: far.y }
+    expect(r.availableNodes()).not.toContain('hub')
   })
 
   it('仅大地图可编组，下限 10，化身不在卡盒', async () => {

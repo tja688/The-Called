@@ -28,6 +28,9 @@ export interface ShopStock {
   relicSold?: boolean
 }
 
+/** 入口格。不是地图节点，开局站在这里；离开后只要正交相邻就能走回来，只落脚。 */
+export const HUB_ID = 'hub'
+
 /** 走进去会打开内容。商店可反复进；战败的普通/精英可再打；其余互动结束后只是落脚。 */
 export function nodeOpensContent(node: Pick<MapNode, 'type' | 'completed' | 'lost'>): boolean {
   if (node.type === 'nextFloor' || node.type === 'shop') return true

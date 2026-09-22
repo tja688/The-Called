@@ -11,7 +11,7 @@ import type { BattleResult } from '../battle/state'
 import type { Coord, DeckId, NodeType, RunResult, SchoolId, Screen } from '../types'
 import { manhattan } from '../types'
 import type { RunEvent } from './events'
-import { adjacentNodes, generateFloor, nodeOpensContent, revealAround, type MapNode, type ShopStock } from './mapgen'
+import { HUB_ID, adjacentNodes, generateFloor, nodeOpensContent, revealAround, type MapNode, type ShopStock } from './mapgen'
 
 export interface BoxCard {
   uid: string
@@ -127,6 +127,7 @@ export class RunAggregate {
     const ids = adjacentNodes(this.state.nodes, this.state.player).map((n) => n.id)
     const here = this.state.nodes.find((n) => n.x === this.state.player.x && n.y === this.state.player.y)
     if (here && !ids.includes(here.id)) ids.unshift(here.id)
+    if (manhattan(this.state.player, { x: 0, y: 0 }) === 1) ids.push(HUB_ID)
     return ids
   }
 
@@ -143,6 +144,12 @@ export class RunAggregate {
     const s = this.state
     if (s.ended) throw new Error('这趟已经结束')
     if (s.screen !== 'map') throw new Error('只能在地图上进入节点')
+    if (nodeId === HUB_ID) {
+      if (!this.availableNodes().includes(HUB_ID)) throw new Error('只能走正交相邻')
+      s.player = { x: 0, y: 0 }
+      revealAround(s.nodes, s.player)
+      return []
+    }
     const node = this.nodeById(nodeId)
     if (!node) throw new Error('没有这个节点')
     if (!this.availableNodes().includes(nodeId)) throw new Error('只能走正交相邻')
