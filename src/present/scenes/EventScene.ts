@@ -42,7 +42,8 @@ export class EventScene extends Scene {
       const locked = ev?.chosen !== undefined || !opt.enabled
       const name = fictionName(`${ev?.eventId}.${String.fromCharCode(65 + opt.index)}`)
       const need = opt.needsCard2 ? (!this.pickUid || !this.pickUid2) : opt.needsCard ? !this.pickUid : false
-      const label = `${name}  ·  ${opt.text}`
+      const detail = !opt.text || opt.text === '无' ? '' : `  ·  ${opt.text}`
+      const label = `${name}${detail}`
       this.app.ui.button(`opt-${opt.index}`, { x: x + 20, y: y + 88 + opt.index * 36, w: w - 40, h: 32 }, label, () => {
         if (locked) return
         if (need) {

@@ -181,7 +181,7 @@ export class MapScene extends Scene {
     this.drawMarker(world, 'icon.hub', hub.sx, hub.sy, 'visited')
     holes.push({ x: hub.sx, y: hub.sy, r: 54, k: 1 })
     if (this.labelOk(hub.sx, hub.sy)) {
-      text.draw('内厅', hub.sx, hub.sy + 16, { size: 8, align: 'center', color: PAL.cream, bold: true, ...READ })
+      text.draw('入口', hub.sx, hub.sy + 16, { size: 8, align: 'center', color: PAL.cream, bold: true, ...READ })
     }
 
     const busy = this.openDeck || !!this.walk || !!this.enterFx

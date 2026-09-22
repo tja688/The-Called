@@ -2,6 +2,7 @@
  * 结算插槽用的像素火花。光效可以半透明；图标走 ShapeIcon。
  */
 import { ASSETS } from '../../pixel/assets'
+import { STATUS_NAME } from '../fiction'
 import { glow } from '../../pixel/light'
 import { PAL, rgba } from '../../pixel/palette'
 import type { Sfx } from '../../audio/audio'
@@ -51,13 +52,8 @@ export function sfxForKind(kind: SparkKind): Sfx {
 }
 
 export function statusWord(status: string, add: boolean): string {
-  const name = status === 'marked' ? '猎印'
-    : status === 'vulnerable' ? '易伤'
-    : status === 'sealed' ? '封印'
-    : status === 'protected' ? '保护'
-    : status === 'rebirth' ? '返魂'
-    : status
-  if (!add && status === 'marked') return '揭印'
+  const name = STATUS_NAME[status] ?? status
+  if (!add && status === 'marked') return `${name}消失`
   if (!add && status === 'sealed') return '解封'
   if (!add && status === 'rebirth') return '返魂'
   return add ? name : `-${name}`

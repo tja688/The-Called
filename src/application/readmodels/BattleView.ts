@@ -33,6 +33,8 @@ export interface BattleView {
   cards: Record<string, CardView>
   hand: string[]
   deckLeft: number
+  /** 还没抽到的牌。下标 0 是下一张，界面按名字汇总，不按这个顺序摆。 */
+  deck: { defId: string; basePoints: number }[]
   discardCount: number
   enemyDiscardCount: number
   occupy: number
@@ -85,6 +87,7 @@ export function toBattleView(
     cards,
     hand: [...state.hand],
     deckLeft: state.deck.length,
+    deck: state.deck.map((e) => ({ defId: e.defId, basePoints: e.basePoints })),
     discardCount: state.discard.length,
     enemyDiscardCount: state.enemyDiscard.length,
     occupy: state.occupy,

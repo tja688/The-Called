@@ -25,7 +25,7 @@ export class ShopScene extends Scene {
     const { x, y, w, h } = PANEL
     panel(ui, x, y, w, h, 'stone')
     text.occlude(x, y, w, h)
-    text.draw(`锈牙当铺 · ${run?.gold ?? 0} 金`, x + 20, y + 16, { size: 18, bold: true, color: PAL.lamp1 })
+    text.draw(`商店 · ${run?.gold ?? 0} 金`, x + 20, y + 16, { size: 18, bold: true, color: PAL.lamp1 })
     text.draw('指向货品看说明。复制要先点卡盒里的一张。', x + 20, y + 40, { size: 11, color: PAL.cream })
     let tipDef: string | undefined
     let tipX = x + 220, tipY = y + 52

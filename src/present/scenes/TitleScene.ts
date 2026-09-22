@@ -5,7 +5,7 @@ import { Scenery, GROUND_Y } from '../../pixel/scenery'
 import { ASSETS } from '../../pixel/assets'
 import { blit, drawSprite, type Baked } from '../../pixel/dsl'
 import { audio } from '../../audio/audio'
-import { avatarSpriteId, emphasizeKeywords, fictionName, KIND_NAME, RARITY_NAME } from '../fiction'
+import { avatarSpriteId, DECK_BLURB, emphasizeKeywords, fictionName, KIND_NAME, RARITY_NAME } from '../fiction'
 import { cardFrame, panel } from '../../pixel/ui'
 import { startingDeck } from '../../content/decks'
 import type { DeckId } from '../../domain/types'
@@ -360,7 +360,7 @@ export class TitleScene extends Scene {
     text.draw('TheCall', 32, 16, {
       size: 40, bold: true, color: PAL.lamp1, stroke: PAL.ink, strokeWidth: 5, shadow: true,
     })
-    text.draw('深渊的呼唤', 34, 60, {
+    text.draw('地下城冒险', 34, 60, {
       size: 18, bold: true, color: PAL.cream, stroke: PAL.ink, strokeWidth: 3,
     })
     ui.fillStyle = PAL.copper
@@ -461,9 +461,13 @@ export class TitleScene extends Scene {
         world.fillRect(x + 8, top - 6, CARD_W - 16, 4)
         world.restore()
       }
-      text.draw(fictionName(d.school), x + 12, top + 16, {
-        size: 11, bold: true, color: hot ? color : PAL.gray3,
-      })
+      const school = fictionName(d.school)
+      const hero = fictionName(d.who)
+      if (school !== hero) {
+        text.draw(school, x + 12, top + 16, {
+          size: 11, bold: true, color: hot ? color : PAL.gray3,
+        })
+      }
       text.draw(String(i + 1), x + CARD_W - 16, top + 14, {
         size: 12, bold: true, align: 'center', color: hot ? PAL.lamp1 : PAL.gray2,
       })
@@ -474,7 +478,7 @@ export class TitleScene extends Scene {
         ui.fillRect(x + 28, ground, CARD_W - 56, 2)
         paintPlanted(ui, sprite, x + CARD_W / 2, ground, hot ? 3.3 : 2.8, this.t + i)
       }
-      text.draw(fictionName(d.who), x + CARD_W / 2, top + CARD_H - 18, {
+      text.draw(hero, x + CARD_W / 2, top + CARD_H - 18, {
         size: 14, bold: true, align: 'center', color: hot ? PAL.cream : PAL.gray3,
         stroke: PAL.ink, strokeWidth: 3,
       })
@@ -488,9 +492,8 @@ export class TitleScene extends Scene {
       }, 12)
     })
 
-    const who = DECKS.find((d) => d.id === this.deckId)?.who ?? 'PC.A00'
-    text.draw(`${fictionName(who)}的卡组`, 320, 174, {
-      size: 12, align: 'center', color: PAL.cream, stroke: PAL.ink, strokeWidth: 3,
+    text.draw(DECK_BLURB[this.deckId] ?? '', 320, 174, {
+      size: 11, align: 'center', color: PAL.cream, stroke: PAL.ink, strokeWidth: 3, maxWidth: 600,
     })
 
     const cards = startingDeck(this.deckId).cards
@@ -526,7 +529,7 @@ export class TitleScene extends Scene {
     this.app.ui.hit('ov-panel', { x, y, w, h }, () => {}, 45, 'default')
     panel(ui, x, y, w, h, 'stone')
     text.draw('开始游戏？', x + w / 2, y + 18, { size: 16, bold: true, align: 'center', color: PAL.lamp1 })
-    text.draw(`以${name}开始这一趟。`, x + w / 2, y + 52, { size: 13, align: 'center', color: PAL.cream })
+    text.draw(`以${name}进入地下城。`, x + w / 2, y + 52, { size: 13, align: 'center', color: PAL.cream })
     this.app.ui.button('start-no', { x: x + 28, y: y + h - 48, w: 124, h: 30 }, '再看看', () => {
       audio.sfx('click')
       this.confirm = false

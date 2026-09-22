@@ -20,9 +20,9 @@ export class ChestScene extends Scene {
     const { x, y, w, h } = PANEL
     panel(ui, x, y, w, h, 'stone')
     text.occlude(x, y, w, h)
-    text.draw('箱室', x + 20, y + 16, { size: 18, bold: true, color: PAL.lamp1 })
+    text.draw('宝箱', x + 20, y + 16, { size: 18, bold: true, color: PAL.lamp1 })
     const relics = run?.relics.map(fictionName).join('、')
-    text.draw(relics ? `铁箱里是：${relics}` : '铁箍木箱里是 15 枚驻军铜币。', x + 20, y + 80, { size: 14, color: PAL.cream })
+    text.draw(relics ? `箱子里是：${relics}` : '箱子里是 15 金币。', x + 20, y + 80, { size: 14, color: PAL.cream })
     this.app.ui.button('back', { x: x + w - 120, y: y + h - 40, w: 100, h: 28 }, '回地图', () => {
       this.app.send({ type: 'run.finishFlow' })
     }, { primary: true })

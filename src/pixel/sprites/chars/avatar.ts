@@ -1,7 +1,7 @@
 import { PAL } from '../../palette'
 import type { SpriteDef } from '../../dsl'
 
-/** 巡猎者：皮甲、短披风、弓斜背、腰上金漆罐。 */
+/** 游侠：皮甲、短披风、弓斜背、腰上金漆罐。印记画成金漆。 */
 export const RANGER: SpriteDef = {
   id: 'char.pca00',
   size: [16, 20],
@@ -101,7 +101,7 @@ export const RANGER: SpriteDef = {
   },
 }
 
-/** 唤骨者：灰袍活人、骨灰扑面、骨杖、领口肋骨饰。 */
+/** 死灵法师：灰袍活人、骨灰扑面、骨杖、领口肋骨饰。 */
 export const NECRO: SpriteDef = {
   id: 'char.pcb00',
   size: [16, 20],
@@ -200,7 +200,7 @@ export const NECRO: SpriteDef = {
   },
 }
 
-/** 司油者：锈白法衣、油渍、铜香炉。 */
+/** 牧师：锈白法衣、油渍、铜香炉。法力画成灯油。 */
 export const PRIEST: SpriteDef = {
   id: 'char.pcc00',
   size: [16, 20],

@@ -222,7 +222,7 @@ class Folder {
         this.onOccupy(ev)
         break
       case 'battle.resourceChanged':
-        this.add(`圣油 ${ev.current}`, ev.cause)
+        this.add(`${fictionName('RES.A')} ${ev.current}`, ev.cause)
         break
       case 'battle.effectResolved':
         this.follow({ actor: ev.card, defId: ev.defId, timing: ev.timing as Cause['timing'], op: ev.timing })
@@ -391,9 +391,9 @@ function statusBody(status: string, add: boolean, name: string): string {
   if (!add && status === 'protected') return `${name} 的保护挡住了`
   if (!add && status === 'vulnerable') return `${name} 易伤消退`
   if (!add && status === 'sealed') return `${name} 解封，重新计入总点`
-  if (!add && status === 'marked') return `${name} 猎印被揭掉`
+  if (!add && status === 'marked') return `${name} ${fictionName('MK.A')}消失`
   if (!add && status === 'rebirth') return `${name} 返魂，回到手牌`
-  if (add && status === 'marked') return `${name} 被印上猎印`
+  if (add && status === 'marked') return `${name} 获得${fictionName('MK.A')}`
   if (add && status === 'vulnerable') return `${name} 易伤`
   if (add && status === 'sealed') return `${name} 被封印，暂不计入总点`
   if (add && status === 'protected') return `${name} 获得保护`

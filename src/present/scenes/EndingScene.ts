@@ -28,9 +28,9 @@ export class EndingScene extends Scene {
     this.scenery.drawFront(world, 20, this.t)
     const run = this.app.view()
     const win = run?.ended === 'victory'
-    text.draw(win ? '锈门开了' : '没能出去', 320, 110, { size: 32, bold: true, align: 'center', color: win ? PAL.lamp1 : PAL.fruR, stroke: PAL.ink, strokeWidth: 4 })
+    text.draw(win ? '走出地下城' : '倒在地下城', 320, 110, { size: 32, bold: true, align: 'center', color: win ? PAL.lamp1 : PAL.fruR, stroke: PAL.ink, strokeWidth: 4 })
     text.draw(`血 ${run?.hp ?? 0}/${run?.hpMax ?? 30}`, 320, 160, { size: 14, align: 'center', color: PAL.cream })
-    this.app.ui.button('again', { x: 248, y: 210, w: 144, h: 32 }, '再开一趟', () => {
+    this.app.ui.button('again', { x: 248, y: 210, w: 144, h: 32 }, '再来一局', () => {
       audio.sfx('click')
       this.app.send({ type: 'run.start', seed: (run?.seed ?? 0) + 1, deckId: run?.deckId ?? 'DK.A' })
     }, { primary: true })

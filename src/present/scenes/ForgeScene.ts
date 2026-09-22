@@ -22,8 +22,8 @@ export class ForgeScene extends Scene {
     const { x, y, w, h } = PANEL
     panel(ui, x, y, w, h, 'stone')
     text.occlude(x, y, w, h)
-    text.draw('铁砧窝', x + 20, y + 16, { size: 18, bold: true, color: PAL.lamp1 })
-    text.draw('强化是砸牌面。重铸是把牌扔回炉里再夹出来。', x + 20, y + 42, { size: 12, color: PAL.cream })
+    text.draw('铁匠铺', x + 20, y + 16, { size: 18, bold: true, color: PAL.lamp1 })
+    text.draw('强化给选中的牌 +2 点。重铸换成同稀有度的另一张。', x + 20, y + 42, { size: 12, color: PAL.cream })
     run?.boxCards.slice(0, 12).forEach((c, i) => {
       const col = i % 2
       const row = Math.floor(i / 2)
