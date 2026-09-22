@@ -165,6 +165,65 @@ export function fictionText(str: string): string {
   return out
 }
 
+/** 词条。卡面上加粗，悬停给解释。效果名不算词条。 */
+export interface GlossaryEntry {
+  name: string
+  text: string
+}
+
+export const GLOSSARY: GlossaryEntry[] = [
+  { name: '主动触发', text: '点这张牌发动，这一场只能用一次。' },
+  { name: '角落格', text: '四个角：格 1、3、7、9。' },
+  { name: '镜像格', text: '正对面那一格。1 对 9，2 对 8，3 对 7，4 对 6。' },
+  { name: '入场', text: '打出或被生成到战场时发动一次。被移动过去不算。' },
+  { name: '驻场', text: '在场且没被封印时一直生效。离场或被封印就停。' },
+  { name: '离场', text: '离开战场时发动。被覆盖或被效果移走都算。' },
+  { name: '相邻', text: '上下左右紧挨的格子，斜角不算。' },
+  { name: '镜像', text: '两张牌分别在对面的格子上。' },
+  { name: '覆盖', text: '点数更大才能打到对方那格。大的留下并扣掉小的点数，小的进弃牌堆。点数相同则都进弃牌堆。' },
+  { name: '移动', text: '走到上下左右的空格。那格有牌就走不了。' },
+  { name: '封印', text: '不计点数，驻场效果也停。下回合开始时解开。' },
+  { name: '返魂', text: '被移走时回到手牌。手牌满了就进弃牌堆。' },
+  { name: '易伤', text: '点数减少时再额外减四分之一，向上取整。回合结束去掉。' },
+  { name: '保护', text: '挡住一次点数减少，然后这个状态消失。' },
+  { name: '圣油', text: '牧师这场攒的资源，战斗结束清零。不够时效果不发动，牌仍然打出。' },
+  { name: '献祭', text: '从牌组里随机丢进弃牌堆。牌组不够时效果不发动。' },
+  { name: '燃尽', text: '打出后这一局删除，卡盒里也不留。' },
+  { name: '计时', text: '回合开始减 1，到 0 就发动，然后回到最初的数字。' },
+  { name: '猎印', text: '涂在猎物上的标记。有的牌只对带着它的目标生效。' },
+]
+
+const GLOSSARY_BY_LENGTH = [...GLOSSARY].sort((a, b) => b.name.length - a.name.length)
+
+/** 正文里出现的词条。长的先匹配，避免「镜像格」再拆出「镜像」。 */
+export function keywordTips(raw: string, extraNames: string[] = []): GlossaryEntry[] {
+  let rest = fictionText(raw)
+  const found: GlossaryEntry[] = []
+  for (const entry of GLOSSARY_BY_LENGTH) {
+    const inText = rest.includes(entry.name)
+    if (!inText && !extraNames.includes(entry.name)) continue
+    found.push(entry)
+    if (inText) rest = rest.split(entry.name).join('\u0000'.repeat(entry.name.length))
+  }
+  return found
+}
+
+/** 把词条包成 **名字**，供纸面加粗。 */
+export function emphasizeKeywords(raw: string): string {
+  let rest = fictionText(raw)
+  const slots: string[] = []
+  for (const entry of GLOSSARY_BY_LENGTH) {
+    if (!rest.includes(entry.name)) continue
+    const token = `\u0000${slots.length}\u0000`
+    slots.push(`**${entry.name}**`)
+    rest = rest.split(entry.name).join(token)
+  }
+  slots.forEach((slot, i) => {
+    rest = rest.split(`\u0000${i}\u0000`).join(slot)
+  })
+  return rest
+}
+
 export const STATUS_NAME: Record<string, string> = {
   sealed: '封印',
   marked: '猎印',
@@ -212,15 +271,15 @@ export const HELP_PAGES: { title: string; body: string }[] = [
   },
   {
     title: '费用与代价',
-    body: '占领费用：场上每张己方占场或化身，每回合开始提供 1 点。化身入场立刻再 +1。手牌右下角是费用。\n化身代价：战后扣血 = 初始化身点数 − 终局当前点数。化身离场则终局为 0。\n普通/精英里化身离场只负本场；BOSS 里化身离场或无牌可出则整局失败。血条归零也失败。',
+    body: '占领费用：场上每张己方占场或化身，每回合开始提供 1 点。化身入场立刻再 +1。画面写着「费用」，亮着的蓝晶体还能用，暗掉的是已经花掉的。\n化身代价：战后扣血 = 初始化身点数 − 终局当前点数。化身离场则终局为 0。\n普通/精英里化身离场只负本场；BOSS 里化身离场或无牌可出则整局失败。血条归零也失败。',
   },
   {
     title: '地图与卡盒',
-    body: '大地图是锈门层的走廊网，整面岩壁铺在画面上。只能走正交相邻的节点。\n没走进去的房间是暗的，走到隔壁才看清类型；看过的类型会留着。走过的房间更亮。\n卡盒是本局拿到的牌；牌组才是战斗抽的那叠。奖励、商店、事件进卡盒，不自动进牌组。回地图后点右下角的卡盒再编，下限 10 张。放弃这一趟在菜单里。\n本层天气（狭廊 / 血砖 / 墙根）写在顶栏，双方都吃。',
+    body: '大地图是锈门层的走廊网，整面岩壁铺在画面上。只能走正交相邻的节点。\n没走进去的房间是暗的，走到隔壁才看清类型；看过的类型会留着。走过的房间更亮。\n卡盒是本局拿到的牌；牌组才是战斗里抽的那叠。奖励、商店、事件进卡盒，不自动进牌组。回地图后点右下角的卡盒再编。牌组至少 10 张，不够就加碎砖补满。放弃这一趟在菜单里。\n本层天气（狭廊 / 血砖 / 墙根）写在顶栏，双方都吃。',
   },
   {
     title: '按键',
-    body: '主菜单用 ↑↓ 选择，Enter 确认。选行囊用 1 2 3 或 ←→，Enter 开局，Esc 返回。\n局内 Esc 打开或关上菜单。已经选中卡牌时，Esc 先取消选择。\n空格快进演出。M 开关音效。F1 或 H 看规则。\n右键等同 Esc。指向卡牌可看说明；费用不够的牌也能看，只是打不出去。',
+    body: '主菜单用 ↑↓ 选择，Enter 确认。选角色用 1 2 3 或 ←→，点角色或再按 Enter，确认后才开局，Esc 返回。\n局内 Esc 打开或关上菜单。已经选中卡牌时，Esc 先取消选择。\n空格快进演出。M 开关音效。F1 或 H 看规则。\n右键等同 Esc。指向卡牌可看说明；费用不够的牌也能看，只是打不出去。',
   },
 ]
 

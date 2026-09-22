@@ -3,19 +3,19 @@ import type { TextLayer } from '../../pixel/text'
 import { PAL, rgba, SCHOOL_COLOR } from '../../pixel/palette'
 import { Scenery, GROUND_Y } from '../../pixel/scenery'
 import { ASSETS } from '../../pixel/assets'
-import { drawSprite, blit } from '../../pixel/dsl'
+import { blit, drawSprite, type Baked } from '../../pixel/dsl'
 import { audio } from '../../audio/audio'
-import { fictionName, avatarSpriteId, DECK_BLURB } from '../fiction'
-import { bannerBg, panel } from '../../pixel/ui'
+import { avatarSpriteId, emphasizeKeywords, fictionName, KIND_NAME, RARITY_NAME } from '../fiction'
+import { cardFrame, panel } from '../../pixel/ui'
 import { startingDeck } from '../../content/decks'
 import type { DeckId } from '../../domain/types'
+import type { CardDef } from '../../content/cards'
 import {
   paintDeckCard,
   paintGateShaft,
   paintMenuButton,
   paintMenuCursor,
   paintMenuLights,
-  paintWaxSeal,
   type MenuIcon,
 } from '../menuPaint'
 
@@ -47,38 +47,139 @@ const DECKS: { id: DeckId; school: string; who: string }[] = [
 ]
 
 const CARD_W = 184
-const CARD_H = 176
-const CARD_Y = 70
+const CARD_H = 122
+const CARD_Y = 36
+
+const PILE_W = 56
+const PILE_H = 86
+const PILE_GAP = 4
+const PILE_Y = 192
 
 function cardX(i: number): number {
   return 30 + i * (CARD_W + 14)
 }
 
-function signatureOf(id: DeckId): string[] {
-  const seen: string[] = []
-  for (const c of startingDeck(id).cards) {
-    if (!seen.includes(c)) seen.push(c)
-    if (seen.length === 3) break
+function paintPileCard(
+  ui: CanvasRenderingContext2D,
+  text: TextLayer,
+  def: CardDef,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  hot: boolean,
+): void {
+  const edge = def.kind === 'spell' ? PAL.sig : (SCHOOL_COLOR[def.school] ?? PAL.stoneL)
+  cardFrame(ui, x, y, w, h, edge, PAL.paper, { selected: hot })
+  const icon = ASSETS.card(def.id)
+  blit(ui, icon, x + Math.round((w - icon.width) / 2), y + 6)
+  text.draw(fictionName(def.id), x + w / 2, y + 32, {
+    size: 11, align: 'center', color: PAL.ink, bold: true, maxWidth: w - 8,
+  })
+  const sub = def.kind === 'spell' ? '法术' : `${def.basePoints}点`
+  text.draw(`${sub} · ${def.cost}费`, x + w / 2, y + h - 16, {
+    size: 9, align: 'center', color: PAL.wood1, maxWidth: w - 6,
+  })
+}
+
+/** 卡组下方的效果条。只占牌列下面的空档，不盖住其他牌，方便接着指下一张。 */
+function paintPileTip(ui: CanvasRenderingContext2D, text: TextLayer, def: CardDef): void {
+  const iw = 600
+  const body = emphasizeKeywords(def.text)
+  const lines = text.wrapRich(body, iw - 16, 10).slice(0, 2)
+  const ih = 38 + Math.max(1, lines.length) * 14
+  const ix = Math.round((640 - iw) / 2)
+  const iy = PILE_Y + PILE_H + 4
+  text.occlude(ix, iy, iw, ih)
+  panel(ui, ix, iy, iw, ih, 'paper')
+  const kind = KIND_NAME[def.kind] ?? def.kind
+  const rare = RARITY_NAME[def.rarity] ?? ''
+  const meta = def.kind === 'spell'
+    ? `${kind} · ${def.cost}费 · ${rare}`
+    : `${kind} · ${def.basePoints}点 · ${def.cost}费 · ${rare}`
+  text.draw(fictionName(def.id), ix + 8, iy + 6, { size: 12, bold: true, color: PAL.ink, maxWidth: 160 })
+  text.draw(meta, ix + 168, iy + 8, { size: 10, color: PAL.wood1, maxWidth: iw - 180 })
+  lines.forEach((ln, i) => text.rich(ln, ix + 8, iy + 24 + i * 14, { size: 10, color: PAL.ink2, hl: PAL.blueD }))
+}
+
+/** 锚点到不透明脚底的距离。立绘脚底以上有空行，不补上的话人会悬在影子上。 */
+const footInsetCache = new Map<string, number>()
+function footInset(sprite: Baked): number {
+  const cached = footInsetCache.get(sprite.def.id)
+  if (cached !== undefined) return cached
+  const src = sprite.still
+  const g = src.getContext('2d')
+  let inset = 0
+  if (g) {
+    const { data, width, height } = g.getImageData(0, 0, src.width, src.height)
+    for (let y = height - 1; y >= 0; y--) {
+      let opaque = false
+      for (let x = 0; x < width; x++) {
+        if (data[(y * width + x) * 4 + 3] > 16) { opaque = true; break }
+      }
+      if (opaque) {
+        inset = sprite.anchor[1] - (y + 1)
+        break
+      }
+    }
   }
-  return seen
+  if (inset < 0) inset = 0
+  footInsetCache.set(sprite.def.id, inset)
+  return inset
+}
+
+/** 待机第 2 帧整个人下移 1 像素。补回去，脚才一直踩在影子上。 */
+function idleDrop(t: number): number {
+  const seq = [0, 1, 0, 2]
+  return seq[Math.floor(t * 3) % seq.length] === 1 ? 1 : 0
+}
+
+function paintFootShadow(g: CanvasRenderingContext2D, sprite: Baked, x: number, groundY: number, scale: number): void {
+  const bottom = sprite.anchor[1] - footInset(sprite)
+  g.save()
+  g.translate(Math.round(x), Math.round(groundY + 1))
+  g.globalAlpha = 0.62
+  g.scale(scale * 0.92, scale * 0.18)
+  g.drawImage(sprite.shadow, -sprite.anchor[0], -bottom)
+  g.restore()
+}
+
+function paintPlanted(
+  g: CanvasRenderingContext2D,
+  sprite: Baked,
+  x: number,
+  groundY: number,
+  scale: number,
+  t: number,
+): void {
+  const inset = footInset(sprite) - idleDrop(t)
+  paintFootShadow(g, sprite, x, groundY, scale)
+  drawSprite(g, sprite, x, groundY + inset * scale, {
+    anim: 'idle',
+    t,
+    shadow: false,
+    scale,
+  })
 }
 
 export class TitleScene extends Scene {
   readonly name = 'title' as const
   private scenery = new Scenery('gate')
   private t = 0
-  private seed = 1
   private deckId: DeckId = 'DK.A'
   private mode: Mode = 'menu'
   private focus = 0
   private overlay: Overlay = 'none'
   private quitPick = 0
-  /** 切入选行囊后的一小段时间不吃 Enter，避免按键连发直接开局。 */
+  /** 点角色后问要不要开始。0 开始，1 再看看。 */
+  private confirm = false
+  private confirmPick = 0
+  /** 切入选角色后的一小段时间不吃 Enter，避免按键连发直接弹出确认。 */
   private deckArm = 0
   /** 一次确认后短暂忽略下一次 Enter，按键连发不会把刚打开的层立刻关掉或跳过。 */
   private confirmArm = 0
   private seenHover: string | null = null
-  /** 刚进入选行囊时指针还停在「开始游戏」上，先别把那一格当成选中。 */
+  /** 刚进入选角色时指针还停在「开始游戏」上，先别把那一格当成选中。 */
   private deckHold: { x: number; y: number } | null = null
 
   enter(): void {
@@ -91,20 +192,24 @@ export class TitleScene extends Scene {
     const hover = this.app.input.hover
     if (this.deckArm > 0) this.deckArm = Math.max(0, this.deckArm - dt)
     if (this.confirmArm > 0) this.confirmArm = Math.max(0, this.confirmArm - dt)
+    if (this.confirm) {
+      if (hover === 'start-yes') this.confirmPick = 0
+      else if (hover === 'start-no') this.confirmPick = 1
+    }
     if (hover !== this.seenHover) {
       this.seenHover = hover
       if (this.mode === 'menu' && this.overlay === 'none') {
         const i = MENU.findIndex((row) => hover === `menu-${row.id}`)
         if (i >= 0) this.focus = i
       }
-      if (this.mode === 'deck') {
+      if (this.mode === 'deck' && !this.confirm) {
         const hold = this.deckHold
         if (hold && Math.hypot(this.app.input.x - hold.x, this.app.input.y - hold.y) < 6) {
           /* 指针还没动 */
         } else {
           this.deckHold = null
           for (const d of DECKS) {
-            if (hover === `deck-${d.id}`) this.chooseDeck(d.id, true)
+            if (hover === `role-${d.id}`) this.chooseDeck(d.id, true)
           }
         }
       }
@@ -121,7 +226,7 @@ export class TitleScene extends Scene {
     const glowAt = row
       ? { x: row.x + row.w / 2, y: row.y + row.h / 2 }
       : deckI >= 0
-        ? { x: cardX(deckI) + CARD_W / 2, y: CARD_Y + 24 }
+        ? { x: cardX(deckI) + CARD_W / 2, y: CARD_Y + 36 }
         : undefined
     paintMenuLights(world, this.t, glowAt)
 
@@ -140,14 +245,23 @@ export class TitleScene extends Scene {
       else this.doQuit()
       return
     }
+    if (this.confirm) {
+      if (this.confirmPick === 0) this.startRun()
+      else this.confirm = false
+      return
+    }
     if (this.mode === 'deck') {
-      if (this.deckArm <= 0) this.startRun()
+      if (this.deckArm <= 0) this.openConfirm()
       return
     }
     this.activate(MENU[this.focus].id)
   }
 
   onCancel(): boolean {
+    if (this.confirm) {
+      this.confirm = false
+      return true
+    }
     if (this.overlay !== 'none') {
       this.overlay = 'none'
       return true
@@ -165,14 +279,18 @@ export class TitleScene extends Scene {
       return
     }
     if (this.overlay === 'settings') return
+    if (this.confirm) {
+      if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'a' || k === 'd' || k === 'A' || k === 'D') {
+        this.confirmPick = this.confirmPick ? 0 : 1
+      }
+      return
+    }
     if (this.mode === 'deck') {
       if (k === '1') this.chooseDeck('DK.A', true)
       else if (k === '2') this.chooseDeck('DK.B', true)
       else if (k === '3') this.chooseDeck('DK.C', true)
       else if (k === 'ArrowLeft' || k === 'a' || k === 'A') this.stepDeck(-1)
       else if (k === 'ArrowRight' || k === 'd' || k === 'D') this.stepDeck(1)
-      else if (k === '-' || k === '_') this.seed = Math.max(1, this.seed - 1)
-      else if (k === '=' || k === '+') this.seed += 1
       return
     }
     if (k === 'ArrowUp' || k === 'w' || k === 'W') this.focus = (this.focus + MENU.length - 1) % MENU.length
@@ -197,6 +315,7 @@ export class TitleScene extends Scene {
     if (id === 'start') {
       this.mode = 'deck'
       this.deckArm = 0.45
+      this.confirm = false
       this.deckHold = { x: this.app.input.x, y: this.app.input.y }
     }
     else if (id === 'settings') this.overlay = 'settings'
@@ -207,9 +326,16 @@ export class TitleScene extends Scene {
     }
   }
 
+  private openConfirm(): void {
+    this.confirm = true
+    this.confirmPick = 0
+    this.confirmArm = 0.35
+    audio.sfx('click')
+  }
+
   private startRun(): void {
     audio.sfx('click')
-    this.app.send({ type: 'run.start', seed: this.seed, deckId: this.deckId })
+    this.app.send({ type: 'run.start', deckId: this.deckId })
   }
 
   private doQuit(): void {
@@ -222,28 +348,15 @@ export class TitleScene extends Scene {
 
   private drawParty(world: CanvasRenderingContext2D): void {
     const spots = [168, 252, 336]
+    const scale = 3.6
     spots.forEach((x, i) => {
       const sprite = ASSETS.sprite(avatarSpriteId(DECKS[i].who))
       if (!sprite) return
-      const bob = Math.sin(this.t * 2.2 + i * 1.4)
-      drawSprite(world, sprite, x, GROUND_Y + Math.round(bob), {
-        anim: 'idle',
-        t: this.t + i * 0.4,
-        shadow: true,
-        scale: 3.6,
-        squash: [1 + bob * 0.03, 1 - bob * 0.05],
-      })
+      paintPlanted(world, sprite, x, GROUND_Y, scale, this.t + i * 0.4)
     })
   }
 
   private drawMenu(ui: CanvasRenderingContext2D, text: TextLayer): void {
-    if (this.overlay === 'none') {
-      paintWaxSeal(ui, 268, 46, this.t)
-      text.draw('锈门', 268, 38, {
-        size: 13, bold: true, align: 'center', color: PAL.goldL, stroke: PAL.redD, strokeWidth: 3,
-      })
-    }
-
     text.draw('TheCall', 32, 16, {
       size: 40, bold: true, color: PAL.lamp1, stroke: PAL.ink, strokeWidth: 5, shadow: true,
     })
@@ -254,7 +367,6 @@ export class TitleScene extends Scene {
     ui.fillRect(34, 86, 148, 1)
     ui.fillStyle = PAL.lamp1
     ui.fillRect(34, 86, 36, 1)
-    text.draw('灰石堡地下  ·  锈门层', 34, 94, { size: 12, color: PAL.tanL })
 
     MENU.forEach((row, i) => {
       const hot = i === this.focus && this.overlay === 'none'
@@ -278,11 +390,7 @@ export class TitleScene extends Scene {
       }
     })
 
-    if (this.overlay === 'none') {
-      bannerBg(ui, 332, 28, 0.72)
-      text.draw('↑ ↓ 选择    ·    Enter 确认', 320, 340, { size: 11, align: 'center', color: PAL.gray3 })
-      return
-    }
+    if (this.overlay === 'none') return
 
     text.occlude(0, 0, 640, 360)
     ui.fillStyle = rgba(PAL.shadow, 0.66)
@@ -328,17 +436,17 @@ export class TitleScene extends Scene {
   }
 
   private drawDeck(world: CanvasRenderingContext2D, ui: CanvasRenderingContext2D, text: TextLayer): void {
-    text.draw('选一套行囊', 320, 12, {
+    text.draw('选择角色', 320, 12, {
       size: 22, bold: true, align: 'center', color: PAL.lamp1, stroke: PAL.ink, strokeWidth: 4,
     })
-    text.draw('灰石堡地下。选一套，清掉垂死巨人。', 320, 40, {
-      size: 12, align: 'center', color: PAL.cream,
-    })
 
-    this.app.ui.button('deck-back', { x: 16, y: 12, w: 72, h: 26 }, '返回', () => {
-      audio.sfx('click')
-      this.mode = 'menu'
-    }, { small: true, z: 12 })
+    if (!this.confirm) {
+      this.app.ui.button('deck-back', { x: 16, y: 12, w: 72, h: 26 }, '返回', () => {
+        audio.sfx('click')
+        this.confirm = false
+        this.mode = 'menu'
+      }, { small: true, z: 12 })
+    }
 
     DECKS.forEach((d, i) => {
       const x = cardX(i)
@@ -360,55 +468,71 @@ export class TitleScene extends Scene {
         size: 12, bold: true, align: 'center', color: hot ? PAL.lamp1 : PAL.gray2,
       })
       const sprite = ASSETS.sprite(avatarSpriteId(d.who))
+      const ground = top + CARD_H - 28
       if (sprite) {
-        const bob = hot ? Math.sin(this.t * 3) : 0
-        drawSprite(ui, sprite, x + CARD_W / 2, top + CARD_H - 68 + Math.round(bob), {
-          anim: 'idle',
-          t: this.t + i,
-          shadow: true,
-          scale: hot ? 4 : 3.2,
-        })
+        ui.fillStyle = rgba(PAL.ink, 0.45)
+        ui.fillRect(x + 28, ground, CARD_W - 56, 2)
+        paintPlanted(ui, sprite, x + CARD_W / 2, ground, hot ? 3.3 : 2.8, this.t + i)
       }
-      text.draw(fictionName(d.id), x + CARD_W / 2, top + CARD_H - 64, {
-        size: 13, bold: true, align: 'center', color: hot ? PAL.cream : PAL.gray3,
+      text.draw(fictionName(d.who), x + CARD_W / 2, top + CARD_H - 18, {
+        size: 14, bold: true, align: 'center', color: hot ? PAL.cream : PAL.gray3,
         stroke: PAL.ink, strokeWidth: 3,
-      })
-      const icons = signatureOf(d.id)
-      const rowW = icons.length * 24 + Math.max(0, icons.length - 1) * 8
-      icons.forEach((id, k) => {
-        const icon = ASSETS.card(id)
-        const ix = x + Math.round((CARD_W - rowW) / 2) + k * 32
-        blit(ui, icon, ix, top + CARD_H - 40, 1)
       })
       if (!hot) {
         ui.fillStyle = rgba(PAL.shadow, 0.16)
         ui.fillRect(x + 3, top + 3, CARD_W - 6, CARD_H - 6)
       }
-      this.app.ui.hit(`deck-${d.id}`, { x, y: CARD_Y - (hot ? 8 : 0), w: CARD_W, h: CARD_H }, () => {
-        this.chooseDeck(d.id, true)
+      this.app.ui.hit(`role-${d.id}`, { x, y: top, w: CARD_W, h: CARD_H }, () => {
+        this.deckId = d.id
+        this.openConfirm()
       }, 12)
     })
 
-    const blurb = DECK_BLURB[this.deckId] ?? ''
-    bannerBg(ui, 254, 24, 0.78, 36, 568)
-    text.draw(blurb, 320, 258, { size: 12, align: 'center', color: PAL.cream })
-
-    this.app.ui.button('seed-', { x: 108, y: 290, w: 28, h: 28 }, '−', () => {
-      this.seed = Math.max(1, this.seed - 1)
-    }, { small: true })
-    text.draw(`种子 ${this.seed}`, 196, 296, { size: 13, align: 'center', color: PAL.cream, bold: true })
-    this.app.ui.button('seed+', { x: 248, y: 290, w: 28, h: 28 }, '+', () => {
-      this.seed += 1
-    }, { small: true })
-
-    const go = paintMenuButton(ui, 360, 284, 220, 40, { icon: 'start', primary: true, hot: true })
-    text.draw('开一趟', go.x, go.y, {
-      size: 16, bold: true, align: 'left', baseline: 'middle', color: PAL.ink,
+    const who = DECKS.find((d) => d.id === this.deckId)?.who ?? 'PC.A00'
+    text.draw(`${fictionName(who)}的卡组`, 320, 174, {
+      size: 12, align: 'center', color: PAL.cream, stroke: PAL.ink, strokeWidth: 3,
     })
-    this.app.ui.hit('deck-go', { x: 360, y: 284, w: 220, h: 40 }, () => this.startRun(), 12)
 
-    text.draw('1 2 3 选行囊    ·    Enter 开局    ·    Esc 返回', 320, 342, {
-      size: 11, align: 'center', color: PAL.gray3,
+    const cards = startingDeck(this.deckId).cards
+    const total = cards.length * PILE_W + Math.max(0, cards.length - 1) * PILE_GAP
+    const x0 = Math.round((640 - total) / 2)
+    let hoverDef: string | undefined
+    cards.forEach((defId, i) => {
+      const hot = this.app.input.isHover(`pile-${i}`)
+      const x = x0 + i * (PILE_W + PILE_GAP)
+      const y = PILE_Y - (hot ? 6 : 0)
+      const def = this.app.ask({ type: 'content.card', defId })
+      paintPileCard(ui, text, def, x, y, PILE_W, PILE_H, hot)
+      this.app.ui.hit(`pile-${i}`, { x, y: PILE_Y - 6, w: PILE_W, h: PILE_H + 6 }, () => {}, 14)
+      if (hot) hoverDef = defId
+    })
+
+    if (hoverDef && !this.confirm) {
+      const def = this.app.ask({ type: 'content.card', defId: hoverDef })
+      paintPileTip(ui, text, def)
+    }
+
+    if (this.confirm) this.drawConfirm(ui, text)
+  }
+
+  private drawConfirm(ui: CanvasRenderingContext2D, text: TextLayer): void {
+    const who = DECKS.find((d) => d.id === this.deckId)?.who ?? 'PC.A00'
+    const name = fictionName(who)
+    const x = 156, y = 96, w = 328, h = 148
+    text.occlude(0, 0, 640, 360)
+    ui.fillStyle = rgba(PAL.shadow, 0.66)
+    ui.fillRect(0, 0, 640, 360)
+    this.app.ui.hit('ov-block', { x: 0, y: 0, w: 640, h: 360 }, () => { this.confirm = false }, 40)
+    this.app.ui.hit('ov-panel', { x, y, w, h }, () => {}, 45, 'default')
+    panel(ui, x, y, w, h, 'stone')
+    text.draw('开始游戏？', x + w / 2, y + 18, { size: 16, bold: true, align: 'center', color: PAL.lamp1 })
+    text.draw(`以${name}开始这一趟。`, x + w / 2, y + 52, { size: 13, align: 'center', color: PAL.cream })
+    this.app.ui.button('start-no', { x: x + 28, y: y + h - 48, w: 124, h: 30 }, '再看看', () => {
+      audio.sfx('click')
+      this.confirm = false
+    }, { primary: this.confirmPick === 1, z: 50 })
+    this.app.ui.button('start-yes', { x: x + w - 152, y: y + h - 48, w: 124, h: 30 }, '开始', () => this.startRun(), {
+      primary: this.confirmPick === 0, z: 50,
     })
   }
 }

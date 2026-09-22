@@ -4,7 +4,7 @@ import { blit } from '../pixel/dsl'
 import { cardFrame, pxRoundRect, panel } from '../pixel/ui'
 import type { TextLayer } from '../pixel/text'
 import type { CardDef } from '../content/cards'
-import { fictionName, fictionText, KIND_NAME, RARITY_NAME, STATUS_NAME } from './fiction'
+import { emphasizeKeywords, fictionName, keywordTips, KIND_NAME, RARITY_NAME, STATUS_NAME } from './fiction'
 
 type G = CanvasRenderingContext2D
 
@@ -29,7 +29,44 @@ export function drawHandCard(
   blit(g, icon, x + Math.round((w - icon.width) / 2), y + 8, 1)
   text.draw(fictionName(def.id), x + w / 2, y + 34, { size: 10, align: 'center', color: PAL.ink, bold: true, maxWidth: w - 6 })
   const sub = def.kind === 'spell' ? '法术' : `${opt.points ?? def.basePoints}点`
-  text.draw(`${sub} · ${def.cost}费`, x + w / 2, y + h - 16, { size: 9, align: 'center', color: PAL.wood1, maxWidth: w - 6 })
+  text.draw(sub, x + 4, y + h - 14, { size: 9, color: PAL.wood1, maxWidth: Math.max(16, w - 8 - def.cost * 9) })
+  drawCostGems(g, def.cost, x + w - 4, y + h - 15, opt.dim)
+}
+
+/** 卡盒里的牌面：上面名字，中间卡面，下面效果。金边表示已在牌组。 */
+export function drawFaceCard(
+  g: G,
+  text: TextLayer,
+  def: CardDef,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  opt: { inDeck?: boolean; negative?: boolean; bonus?: number } = {},
+): void {
+  const edge = opt.negative ? PAL.fruR : edgeOf(def)
+  cardFrame(g, x, y, w, h, edge, PAL.paper, { selected: opt.inDeck })
+  const name = `${fictionName(def.id)}${opt.bonus ? `+${opt.bonus}` : ''}`
+  text.draw(name, x + w / 2, y + 4, { size: 11, align: 'center', bold: true, color: PAL.ink, maxWidth: w - 10 })
+  const icon = ASSETS.card(def.id)
+  blit(g, icon, x + Math.round((w - icon.width) / 2), y + 18, 1)
+  const lines = text.wrapRich(emphasizeKeywords(def.text), w - 10, 8)
+  const max = 3
+  const shown = lines.slice(0, max)
+  if (lines.length > max && shown.length) {
+    const plain = shown[max - 1].replace(/\*\*/g, '')
+    shown[max - 1] = `${plain.slice(0, Math.max(0, plain.length - 1))}…`
+  }
+  shown.forEach((ln, i) => text.rich(ln, x + 5, y + 46 + i * 12, { size: 8, color: PAL.ink2, hl: PAL.blueD }))
+}
+
+function drawCostGems(g: G, cost: number, right: number, y: number, dim?: boolean): void {
+  if (cost <= 0) return
+  const gem = ASSETS.icon('icon.occupy', 8, 8)
+  g.save()
+  if (dim) g.globalAlpha *= 0.45
+  for (let i = 0; i < cost; i++) blit(g, gem, right - (cost - i) * 9, y)
+  g.restore()
 }
 
 const STATUS_ICON: Record<string, string> = {
@@ -55,15 +92,17 @@ export function drawBoardToken(
   x: number,
   y: number,
   size: number,
-  opt: { points: number; sealed?: boolean; player?: boolean; selected?: boolean; statuses?: string[] },
+  opt: { points: number; sealed?: boolean; player?: boolean; selected?: boolean; statuses?: string[]; hidePoints?: boolean },
 ): void {
   const edge = opt.player ? PAL.fruG : PAL.fruR
   cardFrame(g, x, y, size, size, edge, PAL.paper, { selected: opt.selected, dim: opt.sealed })
   const icon = ASSETS.card(def.id)
   blit(g, icon, x + Math.round((size - icon.width) / 2), y + 4)
-  text.draw(String(opt.points), x + size / 2, y + size - 14, {
-    size: 14, align: 'center', bold: true, color: opt.player ? PAL.fruG : PAL.fruR, stroke: PAL.ink, strokeWidth: 3,
-  })
+  if (!opt.hidePoints) {
+    text.draw(String(opt.points), x + size / 2, y + size - 14, {
+      size: 14, align: 'center', bold: true, color: opt.player ? PAL.fruG : PAL.fruR, stroke: PAL.ink, strokeWidth: 3,
+    })
+  }
   const sts = opt.statuses ?? (opt.sealed ? ['sealed'] : [])
   if (sts.length) drawStatuses(g, sts, x + 2, y + 2)
 }
@@ -107,12 +146,22 @@ export interface InspectBits {
 }
 
 function inspectBody(bits: InspectBits): string {
-  return fictionText(bits.def.text)
+  return emphasizeKeywords(bits.def.text)
+}
+
+function glossaryLines(text: TextLayer, bits: InspectBits, w: number): string[] {
+  const extra = (bits.statuses ?? []).map((s) => STATUS_NAME[s] ?? '').filter(Boolean)
+  const tips = keywordTips(bits.def.text, extra)
+  if (!tips.length) return []
+  const lines = ['词条']
+  for (const tip of tips) lines.push(...text.wrap(`${tip.name}：${tip.text}`, w - 16, 10))
+  return lines
 }
 
 export function inspectHeight(text: TextLayer, bits: InspectBits, w: number): number {
-  const lines = text.wrap(inspectBody(bits), w - 16, 10)
-  return 50 + lines.length * 14 + (bits.statuses?.length ? 18 : 0)
+  const lines = text.wrap(inspectBody(bits).replace(/\*\*/g, ''), w - 16, 10)
+  const gloss = glossaryLines(text, bits, w)
+  return 50 + lines.length * 14 + (bits.statuses?.length ? 18 : 0) + (gloss.length ? 4 + gloss.length * 13 : 0)
 }
 
 /** 固定位置的卡牌说明。先 occlude 再画，避免邻卡文字穿帮。 */
@@ -143,7 +192,18 @@ export function drawInspectPanel(
     })
     ty += 18
   }
-  text.paragraph(body, x + 8, ty, w - 16, { size: 10, color: PAL.ink2, lineHeight: 14 })
+  const bodyLines = text.paragraph(body, x + 8, ty, w - 16, { size: 10, color: PAL.ink2, hl: PAL.blueD, lineHeight: 14 })
+  ty += bodyLines * 14 + 4
+  const gloss = glossaryLines(text, bits, w)
+  gloss.forEach((ln, i) => {
+    if (ty + i * 13 > y + hh - 12) return
+    text.draw(ln, x + 8, ty + i * 13, {
+      size: 10,
+      color: i === 0 ? PAL.wood1 : PAL.ink2,
+      bold: i === 0,
+      maxWidth: w - 16,
+    })
+  })
   return { w, h: hh }
 }
 

@@ -10,14 +10,14 @@ import { PAL, rgba } from '../../pixel/palette'
 import { ASSETS } from '../../pixel/assets'
 import { bakeTable } from '../../pixel/terrain'
 import { Scenery, roomOfEncounter } from '../../pixel/scenery'
-import { pxRoundRect, pxFrame, dashedLine, bannerBg } from '../../pixel/ui'
+import { cardFrame, pxRoundRect, pxFrame, dashedLine, bannerBg } from '../../pixel/ui'
 import { drawSprite, blit } from '../../pixel/dsl'
-import { tween, wait, ease, osc, clamp } from '../../pixel/tween'
+import { tween, wait, ease, osc, clamp, type Ease } from '../../pixel/tween'
 import { cardDef } from '../../content/cards'
 import { encounterDef } from '../../content/encounters'
 import { fictionName, avatarSpriteId } from '../fiction'
 import { audio } from '../../audio/audio'
-import { BATTLE, TOPBAR_H, INSPECT } from '../layout'
+import { BATTLE, TOPBAR_H, INSPECT, PILES } from '../layout'
 import { drawHandCard, drawBoardToken, drawHpBar, drawWoundChip, drawInspectPanel, drawStatuses, drawHint } from '../widgets'
 import type { LegalPlay } from '../../domain/battle/BattleAggregate'
 import { mapEffectDef } from '../../content/mapEffects'
@@ -46,6 +46,8 @@ interface Actor {
   ox: number
   oy: number
   zone: 'hand' | 'board' | 'fly' | 'gone'
+  /** tl 是手牌左上角，mid 是战场或牌堆的中心。 */
+  anchor: 'tl' | 'mid'
   cell?: Cell
   points: number
   sealed: boolean
@@ -64,7 +66,11 @@ const cellCenter = (cell: number) => {
   const p = CELL_POS(cell)
   return { x: p.x + BATTLE.cell / 2, y: p.y + BATTLE.cell / 2 }
 }
-const DECK = { x: 600, y: 318 }
+/** 结算演出统一放慢。空格快进仍走 tween.speed。 */
+const PACE = 3
+function pileCenter(r: { x: number; y: number; w: number; h: number }) {
+  return { x: r.x + r.w / 2, y: r.y + r.h / 2 }
+}
 function tableOf(id: string) {
   return roomOfEncounter(id)
 }
@@ -120,12 +126,12 @@ export class BattleScene extends Scene {
   update(dt: number): void {
     this.t += dt
     for (const a of this.actors.values()) {
-      a.flash = Math.max(0, a.flash - dt * 3)
-      a.glow = Math.max(0, a.glow - dt * 2.4)
+      a.flash = Math.max(0, a.flash - (dt * 3) / PACE)
+      a.glow = Math.max(0, a.glow - (dt * 2.4) / PACE)
     }
     this.floaters = this.floaters.filter((f) => (f.t += dt) < f.life)
     this.sparks = this.sparks.filter((s) => (s.t += dt) < s.life)
-    this.drips = this.drips.filter((d) => (d.t += dt) < 0.55)
+    this.drips = this.drips.filter((d) => (d.t += dt) < 0.55 * PACE)
     this.lockLines = this.lockLines.filter((l) => (l.t -= dt) > 0)
   }
 
@@ -162,7 +168,24 @@ export class BattleScene extends Scene {
   }
 
   private async beat(sec: number): Promise<void> {
-    await wait(sec)
+    await wait(sec * PACE)
+  }
+
+  private glide(obj: object, to: Record<string, number>, sec: number, e: Ease = ease.outQuad): Promise<void> {
+    return tween(obj, to, sec * PACE, e)
+  }
+
+  private async banner(title: string, sub: string, hold: number, color: string): Promise<void> {
+    await this.app.showBanner(title, sub, hold * PACE, color)
+  }
+
+  /** 手牌坐标是左上角。飞去战场或牌堆之前，改成图像中心。 */
+  private asMid(a: Actor): void {
+    if (a.anchor === 'tl') {
+      a.x += BATTLE.cardW / 2
+      a.y += BATTLE.cardH / 2
+      a.anchor = 'mid'
+    }
   }
 
   private makeActor(id: string, defId: string, owner: Actor['owner'], x: number, y: number): Actor {
@@ -170,7 +193,7 @@ export class BattleScene extends Scene {
     const a: Actor = {
       id, defId, owner, kind: def.kind, isAvatar: def.kind === 'avatar',
       x, y, sx: 1, sy: 1, alpha: 1, scale: 1, lift: 0, glow: 0, flash: 0, ox: 0, oy: 0,
-      zone: 'fly', points: def.basePoints, sealed: false, statuses: [], z: this.zc++,
+      zone: 'fly', anchor: 'mid', points: def.basePoints, sealed: false, statuses: [], z: this.zc++,
     }
     this.actors.set(id, a)
     return a
@@ -186,27 +209,30 @@ export class BattleScene extends Scene {
   }
 
   private async layoutHand(): Promise<void> {
-    await Promise.all(this.hand.map((id, i) => {
+    await Promise.all(this.hand.map(async (id, i) => {
       const a = this.actors.get(id)
-      if (!a) return Promise.resolve()
+      if (!a || a.zone === 'gone') return
       const p = this.handSlot(i, this.hand.length)
+      const arriving = a.zone !== 'hand'
       a.z = 100 + i
+      a.anchor = 'tl'
+      await this.glide(a, { x: p.x, y: p.y, alpha: 1, scale: 1 }, arriving ? 0.32 : 0.14, ease.outQuad)
       a.zone = 'hand'
-      return tween(a, { x: p.x, y: p.y, alpha: 1, scale: 1 }, 0.18, ease.outQuad)
     }))
   }
 
   /** 同一时刻只留这一条字，等它读完再往下。 */
   private async caption(p: { x: number; y: number } | undefined, text: string, color: string, sec = 0.18): Promise<void> {
+    const d = sec * PACE
     this.floaters = []
     const at = p ?? { x: 320, y: 150 }
-    this.floaters.push({ x: at.x, y: at.y - 12, text, color, t: 0, life: sec + 0.04 })
-    await wait(sec)
+    this.floaters.push({ x: at.x, y: at.y - 12, text, color, t: 0, life: d + 0.08 })
+    await wait(d)
     this.floaters = []
   }
 
   private spark(kind: SparkKind, p: { x: number; y: number } | undefined, life = 0.22): Spark {
-    const s: Spark = { kind, x: p?.x ?? 320, y: p?.y ?? 160, t: 0, life }
+    const s: Spark = { kind, x: p?.x ?? 320, y: p?.y ?? 160, t: 0, life: life * PACE }
     this.sparks.push(s)
     return s
   }
@@ -228,20 +254,20 @@ export class BattleScene extends Scene {
     const dx = toward.x - a.x
     const dy = toward.y - a.y
     const len = Math.hypot(dx, dy) || 1
-    await tween(a, { ox: (dx / len) * dist, oy: (dy / len) * dist, sx: 1.18, sy: 0.84 }, 0.07, ease.outQuad)
-    await tween(a, { ox: 0, oy: 0, sx: 1, sy: 1 }, 0.08, ease.outQuad)
+    await this.glide(a, { ox: (dx / len) * dist, oy: (dy / len) * dist, sx: 1.18, sy: 0.84 }, 0.07, ease.outQuad)
+    await this.glide(a, { ox: 0, oy: 0, sx: 1, sy: 1 }, 0.08, ease.outQuad)
   }
 
   private async flinch(a: Actor): Promise<void> {
     a.flash = 1
-    await tween(a, { sx: 0.82, sy: 1.16, ox: 4 }, 0.05, ease.outQuad)
-    await tween(a, { sx: 1, sy: 1, ox: 0 }, 0.07, ease.outQuad)
+    await this.glide(a, { sx: 0.82, sy: 1.16, ox: 4 }, 0.05, ease.outQuad)
+    await this.glide(a, { sx: 1, sy: 1, ox: 0 }, 0.07, ease.outQuad)
   }
 
   private async pulse(a: Actor): Promise<void> {
     a.glow = 1
-    await tween(a, { sx: 1.16, sy: 0.88 }, 0.06, ease.outQuad)
-    await tween(a, { sx: 1, sy: 1 }, 0.08, ease.outBack)
+    await this.glide(a, { sx: 1.16, sy: 0.88 }, 0.06, ease.outQuad)
+    await this.glide(a, { sx: 1, sy: 1 }, 0.08, ease.outBack)
   }
 
   private async onStart(ev: BE<'battle.started'>): Promise<void> {
@@ -255,25 +281,27 @@ export class BattleScene extends Scene {
     this.result = null
     audio.atmosphere(ev.encounterId)
     const enc = encounterDef(ev.encounterId)
-    await this.app.showBanner(fictionName(enc.id), ev.text.replace(/^[^。]+。/, ''), 0.7, enc.tier === 'boss' ? PAL.lamp2 : PAL.lamp1)
+    await this.banner(fictionName(enc.id), ev.text.replace(/^[^。]+。/, ''), 0.7, enc.tier === 'boss' ? PAL.lamp2 : PAL.lamp1)
   }
 
   private async onDealt(ev: BE<'battle.avatarDealt'>): Promise<void> {
-    const a = this.makeActor(ev.card, ev.defId, 'player', DECK.x, DECK.y)
+    const a = this.makeActor(ev.card, ev.defId, 'player', 300, 372)
+    a.anchor = 'tl'
+    a.scale = 0.8
     this.hand.push(ev.card)
     audio.sfx('draw')
     await this.layoutHand()
-    a.sy = 0.7; a.sx = 1.25
-    await tween(a, { sx: 1, sy: 1 }, 0.16, ease.outBack)
   }
 
   private async onDrawn(ev: BE<'battle.cardDrawn'>): Promise<void> {
-    const a = this.makeActor(ev.card, ev.defId, 'player', DECK.x, DECK.y)
+    const a = this.makeActor(ev.card, ev.defId, 'player', PILES.draw.x, PILES.draw.y)
+    a.anchor = 'tl'
+    a.scale = 0.72
     this.hand.push(ev.card)
     this.drew = true
     audio.sfx('draw')
     await this.layoutHand()
-    await this.beat(0.04)
+    await this.beat(0.06)
   }
 
   private async onTurn(ev: BE<'battle.turnStarted'>): Promise<void> {
@@ -288,7 +316,7 @@ export class BattleScene extends Scene {
     }
     if (ev.won) {
       audio.sfx('lead')
-      await this.app.showBanner('总点数更大', '称重通过', 0.7, PAL.lamp1)
+      await this.banner('总点数更大', '称重通过', 0.7, PAL.lamp1)
       return
     }
     if (!ev.opening) await this.beat(0.06)
@@ -364,17 +392,17 @@ export class BattleScene extends Scene {
     this.hand = this.hand.filter((id) => id !== ev.card)
     audio.sfx('play')
     if (!a) return
+    this.asMid(a)
     if (ev.kind === 'spell') {
-      this.lastCast = { x: a.x + BATTLE.cardW / 2, y: a.y, defId: ev.defId }
+      this.lastCast = { x: a.x, y: a.y, defId: ev.defId }
       a.zone = 'fly'
-      await tween(a, { y: a.y - 24, alpha: 0.2, scale: 1.15 }, 0.22, ease.outQuad)
-      a.zone = 'gone'
+      await this.glide(a, { y: a.y - 28, scale: 1.08 }, 0.16, ease.outQuad)
       await this.layoutHand()
       return
     }
     a.lift = 8
     a.zone = 'fly'
-    await tween(a, { lift: 0 }, 0.1, ease.outQuad)
+    await this.glide(a, { lift: 0 }, 0.1, ease.outQuad)
   }
 
   private async onCovered(ev: BE<'battle.cardCovered'>): Promise<void> {
@@ -387,7 +415,7 @@ export class BattleScene extends Scene {
     const word = ev.tied ? '平点' : `压住 -${ev.victimPoints}`
     if (v) {
       v.glow = 1
-      await tween(v, { sy: 0.2, sx: 1.35, alpha: 0.35 }, 0.16, ease.inQuad)
+      await this.glide(v, { sy: 0.2, sx: 1.35, alpha: 0.35 }, 0.16, ease.inQuad)
     }
     await this.caption(c, word, PAL.lamp3, 0.14)
   }
@@ -416,13 +444,14 @@ export class BattleScene extends Scene {
       if (slot) this.pendingSetup = this.pendingSetup.filter((s) => s !== slot)
     }
     this.hand = this.hand.filter((id) => id !== ev.card)
+    this.asMid(a)
     a.cell = ev.cell
     a.zone = 'fly'
     const who = fictionName(ev.cause?.defId ?? a.defId)
     audio.sfx(a.defId === 'EC.03' ? 'buff' : 'play')
-    await tween(a, { x: dest.x, y: dest.y, alpha: 1, scale: 1, sx: 1.2, sy: 0.75 }, 0.16, ease.outQuad)
+    await this.glide(a, { x: dest.x, y: dest.y, alpha: 1, scale: 1, sx: 1.2, sy: 0.75 }, 0.16, ease.outQuad)
     a.zone = 'board'
-    await tween(a, { sx: 1, sy: 1 }, 0.1, ease.outBack)
+    await this.glide(a, { sx: 1, sy: 1 }, 0.1, ease.outBack)
     if (ev.covered) await this.caption(dest, `${who} 落地`, PAL.lamp2, 0.1)
     else if (ev.cause) await this.caption(dest, `${who} 落地`, PAL.cream, 0.1)
     await this.layoutHand()
@@ -446,31 +475,61 @@ export class BattleScene extends Scene {
     const skel = a.defId === 'EC.07' || a.defId === 'EC.05'
     audio.sfx(ogre ? 'step' : 'play')
     if (ogre) this.spark('club', from, 0.16)
-    await tween(a, { x: dest.x, y: dest.y, sx: ogre ? 1.28 : skel ? 1.05 : 1.12, sy: ogre ? 0.72 : 0.9 }, 0.14, ease.outQuad)
+    await this.glide(a, { x: dest.x, y: dest.y, sx: ogre ? 1.28 : skel ? 1.05 : 1.12, sy: ogre ? 0.72 : 0.9 }, 0.14, ease.outQuad)
     a.zone = 'board'
-    await tween(a, { sx: 1, sy: 1 }, 0.08, ease.outBack)
+    await this.glide(a, { sx: 1, sy: 1 }, 0.08, ease.outBack)
     if (ogre) this.app.shake = 3
     await this.caption(dest, `${fictionName(a.defId)} →${ev.cell}`, PAL.cream, 0.1)
   }
 
   private async onRemoved(ev: BE<'battle.cardRemoved'>): Promise<void> {
     this.noteCause(ev.cause)
-    const a = this.actors.get(ev.card)
+    let a = this.actors.get(ev.card)
     const c = a ? this.spot(a) : cellCenter(ev.cell)
     const who = fictionName(ev.cause?.defId ?? ev.defId)
+    if (ev.to !== 'hand') this.hand = this.hand.filter((id) => id !== ev.card)
+    if (ev.to === 'hand' && a) {
+      if (a.anchor === 'mid') {
+        a.x -= BATTLE.cardW / 2
+        a.y -= BATTLE.cardH / 2
+      }
+      a.anchor = 'tl'
+      a.cell = undefined
+      a.zone = 'fly'
+      a.alpha = 1
+      a.scale = 1
+      if (!this.hand.includes(a.id)) this.hand.push(a.id)
+      audio.sfx('draw')
+      await this.layoutHand()
+      await this.caption(c, `${who} 回手`, PAL.cream, 0.12)
+      return
+    }
+    if (!a && (ev.to === 'discard' || ev.to === 'deck')) {
+      const owner = ev.defId.startsWith('EC.') ? 'enemy' : 'player'
+      const from = pileCenter(owner === 'enemy' ? PILES.enemy : PILES.draw)
+      a = this.makeActor(ev.card, ev.defId, owner, from.x, from.y)
+      a.scale = 0.55
+      a.zone = 'fly'
+    }
     if (a && (a.isAvatar || ev.to === 'gone')) {
       audio.sfx('banish')
       a.flash = 1
+      a.zone = 'fly'
       this.spark('boom', c, 0.2)
-      await tween(a, { scale: 1.4, alpha: 0, sy: 0.2 }, 0.2, ease.inQuad)
+      await this.glide(a, { scale: 1.4, alpha: 0, sy: 0.2 }, 0.2, ease.inQuad)
     } else if (a) {
-      const to = ev.to === 'discard' ? { x: 40, y: 330 } : { x: 40, y: 40 }
+      const pile = ev.to === 'deck' ? PILES.draw : (a.owner === 'enemy' ? PILES.enemy : PILES.discard)
+      const to = pileCenter(pile)
+      this.asMid(a)
+      a.zone = 'fly'
+      a.alpha = 1
       audio.sfx('play')
-      await tween(a, { x: to.x, y: to.y, alpha: 0, scale: 0.4 }, 0.16, ease.inQuad)
+      await this.glide(a, { x: to.x, y: to.y, scale: 0.48, alpha: 1 }, 0.32, ease.inOutQuad)
+      await this.glide(a, { alpha: 0, scale: 0.16 }, 0.1, ease.inQuad)
     }
     if (a) a.zone = 'gone'
-    const word = ev.reason === 'tie' ? '平点离场' : ev.to === 'gone' ? '驱离' : '离场'
-    await this.caption(c, `${who} ${word}`, PAL.gray3, 0.1)
+    const word = ev.reason === 'tie' ? '平点离场' : ev.to === 'hand' ? '回手' : ev.to === 'deck' ? '洗回牌组' : ev.to === 'gone' ? '驱离' : '进弃牌堆'
+    await this.caption(c, `${who} ${word}`, PAL.gray3, 0.12)
   }
 
   private async onPoints(ev: BE<'battle.pointsChanged'>): Promise<void> {
@@ -509,7 +568,7 @@ export class BattleScene extends Scene {
       await this.lunge(actor, target ? { x: target.x, y: target.y } : p, kind === 'club' ? 16 : 12)
     } else if (kind === 'arrow' && this.lastCast && target) {
       const bolt = this.spark('arrow', this.lastCast, 0.28)
-      await tween(bolt, { x: target.x, y: target.y - 8 }, 0.1, ease.outQuad)
+      await this.glide(bolt, { x: target.x, y: target.y - 8 }, 0.1, ease.outQuad)
       flew = true
     } else if (target && (actor?.id === ev.card || !actor)) {
       await this.pulse(target)
@@ -605,7 +664,7 @@ export class BattleScene extends Scene {
     audio.sfx(ev.outcome === 'win' ? 'win' : 'lose')
     this.app.flashA = 0.4
     const why = ev.reason === 'lead' ? '称重' : ev.reason === 'clear' ? '清场' : ev.reason === 'avatarGone' ? '化身离场' : '无牌可出'
-    await this.app.showBanner(ev.outcome === 'win' ? '胜利' : '失败', `${why} · 化身代价 ${ev.avatarCost}`, 0.9, ev.outcome === 'win' ? PAL.lamp1 : PAL.fruR)
+    await this.banner(ev.outcome === 'win' ? '胜利' : '失败', `${why} · 化身代价 ${ev.avatarCost}`, 0.9, ev.outcome === 'win' ? PAL.lamp1 : PAL.fruR)
   }
 
   render(world: G, ui: G, text: TextLayer): void {
@@ -617,6 +676,7 @@ export class BattleScene extends Scene {
     this.drawHand(ui, text)
     this.drawDiscardPick(ui, text)
     this.drawInspect(ui, text)
+    this.drawPiles(ui, text)
     this.drawAimHint(ui, text)
     this.drawResult(ui, text)
     this.log.draw(ui, text, this.app.ui)
@@ -682,13 +742,13 @@ export class BattleScene extends Scene {
   }
 
   private drawActors(g: G, ui: G, text: TextLayer): void {
-    const list = [...this.actors.values()].filter((a) => a.zone !== 'gone' && a.zone !== 'hand').sort((a, b) => a.z - b.z)
+    const inHand = new Set(this.hand)
+    const list = [...this.actors.values()].filter((a) => a.zone !== 'gone' && !inHand.has(a.id)).sort((a, b) => a.z - b.z)
     const play = this.selectedPlay()
-    const view = this.app.ask({ type: 'battle.view' })
     const acts = this.activateAim ? this.app.ask({ type: 'battle.legalActivates' })[0] : undefined
     for (const a of list) {
       const x = a.x + a.ox, y = a.y + a.oy + a.lift
-      const inst = view?.cards[a.id]
+      const onBoard = a.zone === 'board' && a.cell != null
       const statuses = a.statuses.length ? a.statuses : (a.sealed ? ['sealed'] : [])
       const aimed = !!(play?.targets.includes(a.id) || acts?.targets.includes(a.id) || this.pickedTarget === a.id)
       g.save()
@@ -696,34 +756,47 @@ export class BattleScene extends Scene {
         const b = ASSETS.sprite(avatarSpriteId(a.defId))
         if (b) {
           const bob = a.zone === 'board' ? Math.sin(this.t * 2.2) * 0.03 : 0
-          drawSprite(g, b, x, y + 18, {
+          drawSprite(g, b, x, y + (onBoard ? 30 : 18), {
             anim: a.flash > 0 ? 'hurt' : 'idle',
             t: this.t,
             squash: [a.sx * (1 - bob), a.sy * (1 + bob)],
             alpha: a.alpha,
-            scale: a.scale * 2.4,
+            scale: a.scale * (onBoard ? 2.15 : 2.4),
             shadow: true,
             tintHex: a.flash > 0 ? PAL.red : undefined,
           })
         }
-        text.draw(String(a.points), x, y - 22, { size: 14, align: 'center', bold: true, color: PAL.lamp1, stroke: PAL.ink, strokeWidth: 3, alpha: a.alpha })
-        if (statuses.length) drawStatuses(g, statuses, x - 20, y - 40)
+        if (!onBoard) {
+          text.draw(String(a.points), x, y - 22, { size: 14, align: 'center', bold: true, color: PAL.lamp1, stroke: PAL.ink, strokeWidth: 3, alpha: a.alpha })
+        }
+        if (statuses.length) drawStatuses(g, statuses, x - 16, y - 4)
       } else if (a.owner === 'enemy') {
         const icon = ASSETS.npc(a.defId)
         g.save()
         g.globalAlpha *= a.alpha
-        g.translate(Math.round(x), Math.round(y))
-        g.scale(a.sx * a.scale * 1.6, a.sy * a.scale * 1.6)
+        g.translate(Math.round(x), Math.round(y + (onBoard ? 6 : 0)))
+        g.scale(a.sx * a.scale * (onBoard ? 1.28 : 1.5), a.sy * a.scale * (onBoard ? 1.28 : 1.5))
         g.drawImage(icon, -icon.width / 2, -icon.height / 2)
         g.restore()
-        text.draw(fictionName(a.defId), x, y + 18, { size: 9, align: 'center', color: PAL.cream, alpha: a.alpha })
-        text.draw(String(a.points), x, y - 16, { size: 13, align: 'center', bold: true, color: a.sealed ? PAL.gray2 : PAL.fruR, stroke: PAL.ink, strokeWidth: 3, alpha: a.alpha })
-        if (statuses.length) drawStatuses(g, statuses, x + 10, y - 22)
+        text.draw(fictionName(a.defId), x, y + (onBoard ? 20 : 18), { size: 9, align: 'center', color: PAL.cream, alpha: a.alpha })
+        if (!onBoard) {
+          text.draw(String(a.points), x, y - 16, { size: 13, align: 'center', bold: true, color: a.sealed ? PAL.gray2 : PAL.fruR, stroke: PAL.ink, strokeWidth: 3, alpha: a.alpha })
+        }
+        if (statuses.length) drawStatuses(g, statuses, x + 12, y - 2)
       } else {
         const def = cardDef(a.defId)
-        drawBoardToken(ui, text, def, x - 24, y - 24, 48, {
-          points: a.points, sealed: a.sealed, player: true, selected: aimed, statuses,
+        const size = onBoard ? 40 : 48
+        ui.save()
+        ui.globalAlpha *= a.alpha
+        if (!onBoard && a.scale !== 1) {
+          ui.translate(Math.round(x), Math.round(y))
+          ui.scale(a.scale, a.scale)
+          ui.translate(-Math.round(x), -Math.round(y))
+        }
+        drawBoardToken(ui, text, def, x - size / 2, onBoard ? y - 12 : y - size / 2, size, {
+          points: a.points, sealed: a.sealed, player: true, selected: aimed, statuses, hidePoints: onBoard,
         })
+        ui.restore()
       }
       if (aimed) {
         pxFrame(g, Math.round(x - 28), Math.round(y - 28), 56, 56, this.pickedTarget === a.id ? PAL.lamp2 : PAL.lamp1, 2)
@@ -733,17 +806,35 @@ export class BattleScene extends Scene {
         this.app.ui.hit(`board-${a.id}`, { x: x - 26, y: y - 26, w: 52, h: 52 }, () => this.onBoard(a.id), 7)
       }
     }
-    void ui
+    this.drawCellPoints(ui, text)
+  }
+
+  /** 点数钉在格子顶上，不压住格子里的图像。 */
+  private drawCellPoints(ui: G, text: TextLayer): void {
+    for (const a of this.actors.values()) {
+      if (a.zone !== 'board' || a.cell == null) continue
+      const p = CELL_POS(a.cell)
+      const label = String(a.points)
+      const cx = p.x + BATTLE.cell / 2
+      const y = p.y + 2
+      const bw = Math.max(18, label.length * 7 + 6)
+      ui.fillStyle = rgba(PAL.ink, 0.82)
+      ui.fillRect(cx - bw / 2, y, bw, 12)
+      const color = a.sealed ? PAL.gray2 : a.owner === 'player' ? (a.isAvatar ? PAL.lamp1 : PAL.fruG) : PAL.fruR
+      text.draw(String(a.points), cx, y + 1, {
+        size: 10, align: 'center', bold: true, color, stroke: PAL.ink, strokeWidth: 2, alpha: a.alpha,
+      })
+    }
   }
 
   private drawFx(g: G, text: TextLayer): void {
     drawSparks(g, this.sparks)
     for (const f of this.floaters) {
       const k = clamp(1 - f.t / f.life, 0, 1)
-      text.draw(f.text, f.x, f.y - f.t * 18, { size: 14, align: 'center', bold: true, color: f.color, stroke: PAL.ink, strokeWidth: 3, alpha: k })
+      text.draw(f.text, f.x, f.y - (f.t / f.life) * 14, { size: 14, align: 'center', bold: true, color: f.color, stroke: PAL.ink, strokeWidth: 3, alpha: k })
     }
     for (const d of this.drips) {
-      const k = d.t / 0.55
+      const k = d.t / (0.55 * PACE)
       g.fillStyle = rgba(PAL.red, 1 - k)
       g.fillRect(Math.round(d.x + Math.sin(k * 6) * 4), Math.round(lerp(d.y, 18, k)), 2, 3)
     }
@@ -761,22 +852,27 @@ export class BattleScene extends Scene {
     const pf = view?.playerFinal ?? 0, ef = view?.enemyFinal ?? 0
     text.draw(`己${pf}`, 10, 32, { size: 13, bold: true, color: PAL.fruG })
     text.draw(`敌${ef}`, 70, 32, { size: 13, bold: true, color: PAL.fruR })
-    if (view?.leading) blit(ui, ASSETS.icon('icon.lead', 16, 16), 118, 30)
-    for (let i = 0; i < Math.max(this.manaCap, 1); i++) {
-      const icon = ASSETS.icon('icon.occupy', 16, 16)
-      ui.save()
-      ui.globalAlpha = i < this.mana ? 1 : 0.25
-      blit(ui, icon, 150 + i * 14, 30)
-      ui.restore()
+    if (view?.leading) blit(ui, ASSETS.icon('icon.lead', 16, 16), 104, 30)
+    text.draw('费用：', 124, 32, { size: 12, color: PAL.cream, bold: true })
+    const gem = ASSETS.icon('icon.occupy', 14, 14)
+    if (this.manaCap <= 0) {
+      text.draw('0', 166, 32, { size: 12, color: PAL.gray3, bold: true })
+    } else {
+      for (let i = 0; i < this.manaCap; i++) {
+        const spent = i >= this.mana
+        ui.save()
+        ui.globalAlpha = spent ? 0.42 : 1
+        blit(ui, gem, 166 + i * 16, 30)
+        ui.restore()
+      }
     }
     const oil = view?.resA ?? 0
     if (oil > 0 || (run?.deckId === 'DK.C')) {
-      blit(ui, ASSETS.icon('icon.oil', 16, 16), 150 + Math.max(this.manaCap, 1) * 14 + 8, 30)
-      text.draw(`${oil}`, 150 + Math.max(this.manaCap, 1) * 14 + 26, 32, { size: 11, color: PAL.gold, bold: true })
+      const ox = 166 + Math.max(this.manaCap, 1) * 16 + 10
+      text.draw('圣油', ox, 32, { size: 11, color: PAL.gold, bold: true })
+      blit(ui, ASSETS.icon('icon.oil', 14, 14), ox + 28, 31)
+      text.draw(`${oil}`, ox + 44, 32, { size: 11, color: PAL.gold, bold: true })
     }
-    text.draw(`牌${view?.deckLeft ?? 0} 弃${view?.discardCount ?? 0} 敌弃${view?.enemyDiscardCount ?? 0}`, 400, 32, {
-      size: 10, color: PAL.gray3,
-    })
     if (view?.mustPlaceAvatar) text.draw('先落下化身', 320, 52, { size: 12, align: 'center', color: PAL.lamp1, bold: true })
     this.app.ui.button('battle-log', { x: 552, y: 172, w: 76, h: 26 }, this.log.open ? '收起' : '记录', () => {
       audio.sfx('click')
@@ -795,6 +891,40 @@ export class BattleScene extends Scene {
     }
   }
 
+  private drawPiles(ui: G, text: TextLayer): void {
+    const view = this.app.ask({ type: 'battle.view' })
+    this.drawPile(ui, text, PILES.draw, view?.deckLeft ?? 0, '牌组', 'back', 'pile-draw', '还没抽到的牌。回合开始时从这里抽一张。')
+    this.drawPile(ui, text, PILES.discard, view?.discardCount ?? 0, '弃牌堆', 'discard', 'pile-discard', '打出或离场的牌放这里。只有效果能把它们捡回来。')
+    this.drawPile(ui, text, PILES.enemy, view?.enemyDiscardCount ?? 0, '敌方弃牌', 'enemy', 'pile-enemy', '对方离场的牌。不算进你的弃牌堆。')
+  }
+
+  private drawPile(
+    ui: G,
+    text: TextLayer,
+    r: { x: number; y: number; w: number; h: number },
+    count: number,
+    label: string,
+    kind: 'back' | 'discard' | 'enemy',
+    id: string,
+    hint: string,
+  ): void {
+    text.occlude(r.x - 6, r.y - 8, r.w + 20, r.h + 20)
+    const edge = kind === 'back' ? PAL.dai : kind === 'enemy' ? PAL.fruR : PAL.copper
+    const face = kind === 'back' ? PAL.blueD : kind === 'enemy' ? PAL.ink2 : PAL.slate
+    const layers = count <= 0 ? 0 : Math.min(3, count)
+    if (layers === 0) cardFrame(ui, r.x, r.y, r.w, r.h, PAL.slate, PAL.tile1, { dim: true })
+    for (let i = layers - 1; i >= 0; i--) cardFrame(ui, r.x + i * 2, r.y - i * 2, r.w, r.h, edge, face)
+    if (kind === 'back' && count > 0) {
+      ui.fillStyle = PAL.blueL
+      ui.fillRect(r.x + 10, r.y + 12, r.w - 20, 2)
+      ui.fillRect(r.x + Math.round(r.w / 2) - 1, r.y + 8, 2, r.h - 20)
+    }
+    text.draw(String(count), r.x + r.w / 2, r.y + 16, { size: 14, align: 'center', bold: true, color: PAL.cream, stroke: PAL.ink, strokeWidth: 3 })
+    text.draw(label, r.x + r.w / 2, r.y + r.h + 2, { size: 10, align: 'center', bold: true, color: PAL.cream, stroke: PAL.ink, strokeWidth: 3 })
+    this.app.ui.hit(id, { x: r.x - 4, y: r.y - 6, w: r.w + 14, h: r.h + 20 }, () => {}, 3, 'default')
+    if (this.app.input.isHover(id)) drawHint(ui, text, label, hint, r.x - 20, r.y - 36, 168)
+  }
+
   private drawHand(ui: G, text: TextLayer): void {
     const plays = this.legal()
     const hover = this.app.input.hover
@@ -806,21 +936,24 @@ export class BattleScene extends Scene {
     }
     for (const id of order) {
       const a = this.actors.get(id)
-      if (!a) continue
+      if (!a || a.zone === 'gone') continue
       const i = this.hand.indexOf(id)
       const p = this.handSlot(i, this.hand.length)
-      a.x = p.x; a.y = p.y
+      const flying = a.zone !== 'hand'
+      if (!flying && !this.app.busy) { a.x = p.x; a.y = p.y }
       const def = cardDef(a.defId)
       const playable = plays.some((x) => x.card === id)
       const over = hover === `hand-${id}`
-      const lift = this.selected === id || over ? 10 : 0
-      drawHandCard(ui, text, def, a.x, a.y - lift, BATTLE.cardW, BATTLE.cardH, {
+      const lift = !flying && !this.app.busy && (this.selected === id || over) ? 10 : 0
+      const x = flying || this.app.busy ? a.x : p.x
+      const y = (flying || this.app.busy ? a.y : p.y) - lift
+      drawHandCard(ui, text, def, x, y, BATTLE.cardW, BATTLE.cardH, {
         selected: this.selected === id,
-        dim: !playable,
+        dim: !playable && !flying,
         points: a.points,
       })
-      if (!this.app.busy) {
-        this.app.ui.hit(`hand-${id}`, { x: a.x, y: a.y - 10, w: BATTLE.cardW, h: BATTLE.cardH + 10 }, () => {
+      if (!this.app.busy && !flying) {
+        this.app.ui.hit(`hand-${id}`, { x, y: y - 10, w: BATTLE.cardW, h: BATTLE.cardH + 10 }, () => {
           this.onHand(id)
         }, 8)
       }

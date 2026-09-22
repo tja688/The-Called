@@ -20,6 +20,13 @@ export const BATTLE = {
   boardCard: 48,
 }
 
+/** 战斗里的牌组、己方弃牌堆、敌方弃牌堆。 */
+export const PILES = {
+  draw: { x: 8, y: 286, w: 46, h: 54 },
+  discard: { x: 586, y: 286, w: 46, h: 54 },
+  enemy: { x: 468, y: 88, w: 46, h: 50 },
+}
+
 export const MAP = {
   padX: 48,
   padY: 44,

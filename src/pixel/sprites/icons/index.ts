@@ -5,9 +5,10 @@ export const ICONS: Record<string, ShapeIcon> = {
     id: 'icon.occupy',
     size: [16, 16],
     ops: [
-      { c: 'rect', x: 7, y: 3, w: 2, h: 10, f: 'copper' },
-      { c: 'poly', pts: [[9, 3], [14, 6], [9, 8]], f: 'gold' },
-      { c: 'rect', x: 5, y: 12, w: 6, h: 2, f: 'stone' },
+      { c: 'poly', pts: [[8, 2], [13, 6], [11, 13], [5, 13], [3, 6]], f: 'dai' },
+      { c: 'poly', pts: [[8, 3], [4, 7], [6, 12], [8, 12]], f: 'blueD' },
+      { c: 'poly', pts: [[8, 3], [12, 6], [8, 8]], f: 'blueL' },
+      { c: 'px', pts: [[7, 5]], f: 'cream' },
     ],
   },
   seal: {

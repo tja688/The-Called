@@ -1,6 +1,6 @@
 /**
- * 主菜单 / 选行囊的像素件：蜡封印、门缝光、键帽横幅。
- * 光效可以渐变；按钮和印章只 fillRect。
+ * 主菜单 / 选角色的像素件：门缝光、键帽横幅、角色卡。
+ * 光效可以渐变；按钮只 fillRect。
  */
 import { PAL, rgba } from '../pixel/palette'
 import { glow, steam } from '../pixel/light'
@@ -169,9 +169,9 @@ export interface DeckCardPaint {
   color: string
 }
 
-/** 行囊卡。返回抬起后的顶边，立绘和字都跟着它走。 */
+/** 角色卡。返回抬起后的顶边，立绘和字都跟着它走。 */
 export function paintDeckCard(g: G, card: DeckCardPaint, w: number, h: number): number {
-  const lift = card.hot ? 8 : 0
+  const lift = card.hot ? 4 : 0
   const x = card.x
   const y = card.y - lift
   if (card.hot) {
@@ -183,9 +183,5 @@ export function paintDeckCard(g: G, card: DeckCardPaint, w: number, h: number): 
   pxRoundRect(g, x + 2, y + 2, w - 4, h - 4, PAL.tile1, 2)
   g.fillStyle = card.color
   g.fillRect(x + 8, y + 8, w - 16, 3)
-  g.fillStyle = card.hot ? PAL.stoneL : PAL.slate
-  g.fillRect(x + 16, y + h - 76, w - 32, 2)
-  g.fillStyle = PAL.ink2
-  g.fillRect(x + 10, y + h - 44, w - 20, 32)
   return y
 }
