@@ -13,7 +13,9 @@ export abstract class Scene {
   update(_dt: number): void {}
   abstract render(world: CanvasRenderingContext2D, ui: CanvasRenderingContext2D, text: TextLayer): void
   handle(_e: DomainEvent): Promise<void> | void {}
-  onCancel(): void {}
+  /** @returns 是否已经消化这次取消（选中的牌、打开的卡盒等） */
+  onCancel(): boolean { return false }
   onConfirm(): void {}
+  onKey(_k: string): void {}
   onAnyClick(_x: number, _y: number, _hit: string | null): void {}
 }

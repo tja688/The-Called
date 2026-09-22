@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { currentPoints, avatarCostOf } from './points'
+import { currentPoints, avatarCostOf, finalPoints, markedMoveBlocked } from './points'
 import { avatar, boardByDef, fat, handByDef, playDef, startBattle, startRun } from '../../test/helpers'
+import { nextInt } from '../../core/Rng'
 
 describe('开局与化身', () => {
   it('PC.A00 在手牌，未入场不能打其他牌也不能结束回合', () => {
@@ -20,24 +21,47 @@ describe('开局与化身', () => {
     expect(avatar(b).zone).toBe('board')
     expect(b.state.occupy).toBe(1)
   })
+
+  it('开战敌方回合开始会跳：EC.18 先 -5，计时从开战减', () => {
+    const { aggregate: b } = startBattle('MON.B02', fat(['PC.A02']))
+    expect(currentPoints(b.state, boardByDef(b, 'EC.18')!)).toBe(35)
+    const { aggregate: n03 } = startBattle('MON.N03')
+    expect(boardByDef(n03, 'EC.15')!.timer).toBe(2)
+  })
 })
 
 describe('覆盖', () => {
-  it('平点覆盖：双方进各自弃牌堆，格变空', () => {
+  it('打出覆盖必须自己当前点更大，平点格不可打出', () => {
     const { aggregate: b } = startBattle('MON.E01')
-    playDef(b, 'PC.A00', 1)
-    expect(b.state.board[1]).toBeNull()
-    expect(b.state.enemyDiscard.length).toBe(1)
-    expect(b.state.discard.some((id) => b.state.cards[id].isAvatar)).toBe(true)
-    expect(b.state.result).toMatchObject({ outcome: 'lose', reason: 'avatarGone', avatarCost: 10 })
+    const av = b.legalPlays().find((p) => b.state.cards[p.card].isAvatar)!
+    expect(av.cells.includes(1)).toBe(false)
+    expect(av.cells.includes(4)).toBe(true)
+    playDef(b, 'PC.A00', 7)
+    const a01 = handByDef(b, 'PC.A01')
+    if (a01) expect(b.legalPlays().find((p) => p.card === a01.id)?.cells.includes(3)).toBeFalsy()
   })
 
-  it('必须自己当前点更大才能盖', () => {
-    const { aggregate: b } = startBattle('MON.N01')
-    playDef(b, 'PC.A00', 7)
-    expect(() => playDef(b, 'PC.A00', 3)).toThrow()
-    const a01 = handByDef(b, 'PC.A01')
-    if (a01) expect(() => playDef(b, 'PC.A01', 3)).toThrow()
+  it('点数相同的移动覆盖：双方进各自弃牌堆，格变空', () => {
+    const { aggregate: b } = startBattle('MON.B01', fat(['PC.A02']))
+    for (const c of Object.values(b.state.cards)) {
+      if (c.owner === 'enemy' && !(c.defId === 'EC.05' && c.cell === 4)) {
+        if (c.cell && b.state.board[c.cell] === c.id) b.state.board[c.cell] = null
+        c.zone = 'gone'
+        c.cell = undefined
+      }
+    }
+    const mover = boardByDef(b, 'EC.05')!
+    const peek = { s: b.state.rng.s }
+    const dest = nextInt(peek, 2) === 0 ? 1 : 7
+    playDef(b, 'PC.A00', dest as 1 | 7)
+    const av = avatar(b)
+    av.permanent += currentPoints(b.state, mover) - currentPoints(b.state, av)
+    expect(currentPoints(b.state, av)).toBe(currentPoints(b.state, mover))
+    b.playerEndTurn()
+    expect(b.state.board[dest as 1 | 7]).toBeNull()
+    expect(av.zone).not.toBe('board')
+    expect(mover.zone).not.toBe('board')
+    expect(b.state.result).toMatchObject({ outcome: 'lose', reason: 'avatarGone' })
   })
 
   it('化身可以被效果指定', () => {
@@ -106,6 +130,17 @@ describe('SYS.A 基础与胜负', () => {
     expect(b.state.board[bait.cell!]).toBe(bait.id)
   })
 
+  it('封印仍提供占领费用，总点数计 0', () => {
+    const { aggregate: b } = startBattle('MON.N07', fat(['PC.N01']))
+    playDef(b, 'PC.A00', 2)
+    b.playerEndTurn()
+    const av = avatar(b)
+    expect(av.statuses.includes('sealed')).toBe(true)
+    expect(b.state.occupyCap).toBe(1)
+    expect(finalPoints(b.state, 'player')).toBe(0)
+    expect(currentPoints(b.state, av)).toBeGreaterThan(0)
+  })
+
   it('化身未入场时代价按初始化身点数计', () => {
     const { aggregate: b } = startBattle('MON.N01')
     expect(avatarCostOf(b.state)).toBe(10)
@@ -116,8 +151,8 @@ describe('SYS.A 基础与胜负', () => {
   it('EC.02 回合结束生成 EC.03', () => {
     const { aggregate: b } = startBattle('MON.E01', fat(['PC.A02']))
     playDef(b, 'PC.A00', 7)
-    b.playerEndTurn()
-    expect(boardByDef(b, 'EC.03')).toBeTruthy()
+    const events = b.playerEndTurn()
+    expect(events.some((e) => e.type === 'battle.cardEntered' && b.state.cards[e.card].defId === 'EC.03')).toBe(true)
   })
 
   it('ME.01 相邻己方各 +1', () => {
@@ -126,6 +161,22 @@ describe('SYS.A 基础与胜负', () => {
     playDef(b, 'PC.N01', 8)
     expect(currentPoints(b.state, avatar(b))).toBe(11)
     expect(currentPoints(b.state, boardByDef(b, 'PC.N01')!)).toBe(6)
+  })
+
+  it('A09 驻场时被标记的敌卡不能移动', () => {
+    const { aggregate: b } = startBattle('MON.N02', fat(['PC.A08', 'PC.A08', 'PC.A09', 'PC.A14']))
+    playDef(b, 'PC.A00', 5)
+    playDef(b, 'PC.A08', 4)
+    playDef(b, 'PC.A08', 6)
+    b.playerEndTurn()
+    playDef(b, 'PC.A09', 8)
+    playDef(b, 'PC.A14', undefined, 'EC.07')
+    const row = boardByDef(b, 'EC.07')!
+    expect(row.statuses.includes('marked')).toBe(true)
+    expect(markedMoveBlocked(b.state, row)).toBe(true)
+    const cell = row.cell
+    b.playerEndTurn()
+    expect(boardByDef(b, 'EC.07')!.cell).toBe(cell)
   })
 })
 

@@ -40,8 +40,14 @@ export class Input {
     const el = stage.display
     el.style.touchAction = 'none'
     el.addEventListener('pointermove', (e) => { const p = stage.toLogical(e.clientX, e.clientY); this.x = p.x; this.y = p.y })
+    el.addEventListener('contextmenu', (e) => e.preventDefault())
     el.addEventListener('pointerdown', (e) => {
       const p = stage.toLogical(e.clientX, e.clientY); this.x = p.x; this.y = p.y
+      if (e.button === 2) {
+        e.preventDefault()
+        this.onKey?.('Escape', e as unknown as KeyboardEvent)
+        return
+      }
       this.down = true
       if (this.locked) return
       const r = this.pick(p.x, p.y)

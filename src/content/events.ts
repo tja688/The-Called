@@ -1,4 +1,5 @@
 import type { FloorId } from '../domain/types'
+import { cardDef, isNegative } from './cards'
 
 export type EventWeight = 'high' | 'mid' | 'low'
 
@@ -49,6 +50,7 @@ export const EVENTS: Record<string, EventDef> = {
     options: [
       { index: 0, label: 'EV.04.A', text: '移除卡盒中一张非负面卡', needsCard: true },
       { index: 1, label: 'EV.04.B', text: '一张卡基础点 +1 并复制一份', needsCard: true },
+      { index: 2, label: 'EV.04.C', text: '无' },
     ],
   },
   'EV.05': {
@@ -77,7 +79,7 @@ export const EVENTS: Record<string, EventDef> = {
     id: 'EV.09', name: 'EV.09', floors: [1, 2, 3], weight: 'high',
     options: [
       { index: 0, label: 'EV.09.A', text: '从三张本体系蓝卡中挑选一张' },
-      { index: 1, label: 'EV.09.B', text: '获得一张随机中立卡和 15 金币' },
+      { index: 1, label: 'EV.09.B', text: '从三张随机中立卡中挑选一张，并获得 15 金币' },
     ],
   },
   'EV.10': {
@@ -92,6 +94,7 @@ export const EVENTS: Record<string, EventDef> = {
     id: 'EV.11', name: 'EV.11', floors: [1, 2, 3], weight: 'low',
     options: [
       { index: 0, label: 'EV.11.A', text: '支付 30 金币：50% 本体系金卡，50% PC.X01' },
+      { index: 1, label: 'EV.11.B', text: '无' },
     ],
   },
   'EV.14': {
@@ -131,4 +134,44 @@ export function eventDef(id: string): EventDef {
 
 export function eventsForFloor(floor: FloorId): EventDef[] {
   return Object.values(EVENTS).filter((e) => e.id !== 'EV.EMPTY' && e.floors.includes(floor))
+}
+
+export function eventCardEligible(ev: EventDef, index: number, defId: string): boolean {
+  const def = cardDef(defId)
+  if (ev.id === 'EV.04' && index === 0) return !isNegative(defId)
+  if (ev.id === 'EV.06' && index === 0) return !isNegative(defId)
+  if (ev.id === 'EV.07' && index === 0) return def.rarity === 'white' && !isNegative(defId)
+  if (ev.id === 'EV.07' && index === 1) return def.rarity === 'blue'
+  if (ev.id === 'EV.07' && index === 2) return def.rarity === 'gold'
+  if (ev.id === 'EV.14') return !isNegative(defId)
+  if (ev.id === 'EV.17' && index === 0) return def.rarity === 'blue' || def.rarity === 'gold'
+  if (ev.id === 'EV.17' && index === 1) return def.rarity === 'white' && !isNegative(defId)
+  return true
+}
+
+export function eventOptionEnabled(
+  ev: EventDef,
+  index: number,
+  ctx: { gold: number; box: Array<{ defId: string }> },
+): boolean {
+  const opt = ev.options[index]
+  if (!opt) return false
+  if (ev.id === 'EV.06' && index === 1) return ctx.gold >= 40
+  if (ev.id === 'EV.07' && index === 1) return ctx.box.some((c) => cardDef(c.defId).rarity === 'blue')
+  if (ev.id === 'EV.07' && index === 2) return ctx.box.some((c) => cardDef(c.defId).rarity === 'gold')
+  if (ev.id === 'EV.10' && index === 1) {
+    const n = ctx.box.filter((c) => isNegative(c.defId)).length
+    return ctx.gold >= n * 25
+  }
+  if (ev.id === 'EV.11' && index === 0) return ctx.gold >= 30
+  if (ev.id === 'EV.17' && index === 0) return ctx.box.some((c) => ['blue', 'gold'].includes(cardDef(c.defId).rarity))
+  if (ev.id === 'EV.17' && index === 1) {
+    return ctx.box.filter((c) => cardDef(c.defId).rarity === 'white' && !isNegative(c.defId)).length >= 2
+  }
+  if (opt.needsCard) {
+    const eligible = ctx.box.filter((c) => eventCardEligible(ev, index, c.defId))
+    if (!eligible.length) return false
+    if (opt.needsCard2 && eligible.length < 2) return false
+  }
+  return true
 }

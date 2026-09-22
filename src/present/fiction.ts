@@ -204,6 +204,76 @@ export function fictionTxt(key: string): string {
   return FICTION_TXT[`${key}.TXT`] ?? FICTION_TXT[key] ?? ''
 }
 
+const FICTION_KEYS = Object.keys(FICTION).sort((a, b) => b.length - a.length)
+
+/** 把规则正文里的 Key 换成玩家可见名（猎印、圣油等）。 */
+export function fictionText(str: string): string {
+  let out = str
+  for (const k of FICTION_KEYS) {
+    if (out.includes(k)) out = out.split(k).join(FICTION[k])
+  }
+  return out
+}
+
+export const STATUS_NAME: Record<string, string> = {
+  sealed: '封印',
+  marked: '猎印',
+  vulnerable: '易伤',
+  protected: '保护',
+  rebirth: '返魂',
+}
+
+export const KIND_NAME: Record<string, string> = {
+  occupy: '占场',
+  spell: '法术',
+  avatar: '化身',
+}
+
+export const RARITY_NAME: Record<string, string> = {
+  basic: '基础',
+  white: '白',
+  blue: '蓝',
+  gold: '金',
+}
+
+export const DECK_BLURB: Record<string, string> = {
+  'DK.A': '给猎物涂猎印，再打带印的。狗、箭、网。',
+  'DK.B': '牌组当祭品，弃牌堆当粮仓。孪尸会分到对面那格。',
+  'DK.C': '积圣油。灯是油井，盾和加持都靠油。',
+}
+
+export const NODE_HINT: Record<string, string> = {
+  normal: '普通战斗。打赢拿奖励。',
+  elite: '精英。更难，奖更好。',
+  boss: '层主。打赢才能离开锈门层。',
+  event: '随机事件。看旁白再选。',
+  shop: '锈牙当铺。买卡、复制、遗物。',
+  chest: '铁箍木箱。遗物或铜币。',
+  rest: '渗泉龛。舀水回血，或把化身磨硬。',
+  forge: '铁砧窝。砸牌面强化，或重铸成同稀有度另一张。',
+  nextFloor: '向下的石阶。打赢层主才是出口。',
+  unknown: '走近才看得见是什么。',
+}
+
+export const HELP_PAGES: { title: string; body: string }[] = [
+  {
+    title: '怎么赢',
+    body: '九宫格战场。打出占场卡占格，己方总点数更大就赢。\n化身是你本人，必须先落下才能打其他牌或结束回合。封印的卡总点数计 0，但仍提供占领费用。\n覆盖：打到对方格必须自己当前点数更大。大的占格并扣掉小的当前点。点数相同则双方都进弃牌堆。',
+  },
+  {
+    title: '费用与代价',
+    body: '占领费用：场上每张己方占场或化身，每回合开始提供 1 点。化身入场立刻再 +1。手牌右下角是费用。\n化身代价：战后扣血 = 初始化身点数 − 终局当前点数。化身离场则终局为 0。\n普通/精英里化身离场只负本场；BOSS 里化身离场或无牌可出则整局失败。血条归零也失败。',
+  },
+  {
+    title: '地图与卡盒',
+    body: '大地图是锈门层的走廊网。只能走正交相邻的节点。\n卡盒是本局拿到的牌；牌组才是战斗抽的那叠。奖励、商店、事件进卡盒，不自动进牌组。回地图后打开卡盒再编，下限 10 张。\n本层天气（狭廊 / 血砖 / 墙根）写在顶栏，双方都吃。',
+  },
+  {
+    title: '按键',
+    body: 'Esc 打开或关上菜单。已经选中卡牌时，Esc 先取消选择。\n空格快进演出。Enter 确认（标题开局、结算离开）。\nM 开关音效。F1 或 H 看规则。\n右键等同 Esc。指向卡牌可看说明；费用不够的牌也能看，只是打不出去。',
+  },
+]
+
 export function avatarSpriteId(defId: string): string {
   if (defId === 'PC.B00') return 'char.pcb00'
   if (defId === 'PC.C00') return 'char.pcc00'

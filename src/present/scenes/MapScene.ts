@@ -7,9 +7,9 @@ import { ASSETS } from '../../pixel/assets'
 import { blit, drawSprite } from '../../pixel/dsl'
 import { panel, pxRoundRect } from '../../pixel/ui'
 import { audio } from '../../audio/audio'
-import { drawHpBar } from '../widgets'
+import { drawHpBar, drawHint } from '../widgets'
 import { DeckEditor } from '../overlays/DeckEditor'
-import { fictionName, avatarSpriteId } from '../fiction'
+import { fictionName, avatarSpriteId, NODE_HINT } from '../fiction'
 import { MAP } from '../layout'
 import type { DomainEvent } from '../../core/messages'
 import type { MapNodeView } from '../../application/readmodels/RunView'
@@ -94,8 +94,15 @@ export class MapScene extends Scene {
     blit(world, ASSETS.icon('icon.hub', 24, 24), hx - 12, hy - 14)
     text.draw('锈门内厅', hx, hy + 12, { size: 8, align: 'center', color: PAL.cream, bold: true })
 
+    let hoverNode: MapNodeView | null = null
+    let hoverAt = { x: 0, y: 0 }
     for (const n of run.nodes) {
-      this.drawNode(world, ui, text, n, toX(n.x), toY(n.y))
+      const nx = toX(n.x), ny = toY(n.y)
+      this.drawNode(world, ui, text, n, nx, ny)
+      if (this.app.input.isHover(`node-${n.id}`)) {
+        hoverNode = n
+        hoverAt = { x: Math.round(nx), y: Math.round(ny) }
+      }
     }
 
     const px = Math.round(toX(run.player.x)), py = Math.round(toY(run.player.y))
@@ -108,12 +115,14 @@ export class MapScene extends Scene {
 
     vignette(world, 0.28)
 
-    panel(ui, 8, 6, 340, 36, 'stone')
+    panel(ui, 8, 6, 420, 36, 'stone')
+    text.occlude(8, 6, 420, 36)
     drawHpBar(ui, text, 16, 18, 90, run.hp, run.hpMax)
     text.draw(`${run.gold}金`, 170, 16, { size: 11, color: PAL.gold, bold: true })
     const me = ASSETS.icon(`icon.${run.floorEffect.toLowerCase().replace('.', '')}`, 16, 16)
     blit(ui, me, 220, 14)
     text.draw(fictionName(run.floorEffect), 240, 16, { size: 10, color: PAL.gray3 })
+    if (run.relics.length) text.draw(run.relics.map(fictionName).join('、'), 320, 16, { size: 10, color: PAL.copperL, maxWidth: 100 })
 
     this.app.ui.button('open-deck', { x: 520, y: 318, w: 104, h: 26 }, '打开卡盒', () => {
       audio.sfx('click')
@@ -121,10 +130,11 @@ export class MapScene extends Scene {
     }, { primary: true, small: true })
     this.app.ui.button('abandon', { x: 16, y: 318, w: 72, h: 26 }, '放弃', () => {
       audio.sfx('click')
-      this.app.send({ type: 'run.abandon' })
+      this.app.shell.kind = 'quit'
     }, { danger: true, small: true })
 
     if (this.openDeck) this.deck.render(ui, text, run, () => { this.openDeck = false })
+    else if (hoverNode) drawHint(ui, text, hoverNode.label, NODE_HINT[hoverNode.type] ?? '', hoverAt.x + 20, hoverAt.y - 48)
   }
 
   private drawNode(world: CanvasRenderingContext2D, ui: CanvasRenderingContext2D, text: TextLayer, n: MapNodeView, x: number, y: number): void {
@@ -144,16 +154,19 @@ export class MapScene extends Scene {
     const icon = ASSETS.icon(NODE_ICON[n.type] ?? 'icon.unknown', 16, 16)
     blit(world, icon, x - 8, y - 8)
     text.draw(n.label, x, r.y + 16, { size: 8, align: 'center', color: PAL.cream, bold: true })
-    if (n.adjacent && !this.openDeck) {
-      this.app.ui.hit(`node-${n.id}`, r, () => {
+    this.app.ui.hit(`node-${n.id}`, r, () => {
+      if (n.adjacent && !this.openDeck) {
         audio.sfx('click')
         this.app.send({ type: 'run.enterNode', node: n.id })
-      }, 3)
-    }
-    void ui
+      }
+    }, n.adjacent && !this.openDeck ? 3 : 2)
   }
 
-  onCancel(): void {
-    if (this.openDeck) this.openDeck = false
+  onCancel(): boolean {
+    if (this.openDeck) {
+      this.openDeck = false
+      return true
+    }
+    return false
   }
 }

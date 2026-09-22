@@ -192,7 +192,7 @@ export class BattleAggregate {
       if (must && !card.isAvatar) continue
       const def = cardDef(card.defId)
       if (s.occupy < def.cost) continue
-      if (def.effects.some((e) => e.spendRes && s.resA < e.spendRes)) continue
+      if (def.effects.some((e) => e.timing === 'play' && e.spendRes && s.resA < e.spendRes)) continue
       if (isBodyKind(card.kind)) {
         const cells = CELLS.filter((cell) => this.canOccupy(card, cell))
         if (cells.length) out.push({ card: id, cells, targets: [] })
@@ -209,7 +209,7 @@ export class BattleAggregate {
           continue
         }
         if (def.effects.some((e) => e.ops.some((op) => op.op === 'moveChosenAdjacent'))) {
-          const movers = boardCards(s)
+          const movers = boardCards(s).filter((c) => c.cell && !markedMoveBlocked(s, c))
           const cells = CELLS.filter((cell) => movers.some((m) => m.cell && ADJACENT[m.cell].includes(cell) && !cardAt(s, cell)))
           if (movers.length && cells.length) out.push({ card: id, cells, targets: movers.map((c) => c.id) })
           continue
@@ -315,6 +315,17 @@ export class BattleAggregate {
           if (legal.cells.length === 1) dest = legal.cells[0]
           else throw new Error('必须指定格子')
         }
+        if (!legal.cells.includes(dest)) throw new Error('不能打到这个格子')
+        if (def.effects.some((e) => e.ops.some((op) => op.op === 'moveChosenAdjacent'))) {
+          const mover = s.cards[tid]
+          if (!mover?.cell || !ADJACENT[mover.cell].includes(dest) || cardAt(s, dest)) {
+            throw new Error('不能移动到这个格子')
+          }
+        }
+      }
+      if (def.effects.some((e) => e.ops.some((op) => op.op === 'swapChosen'))) {
+        if (!target2) throw new Error('必须指定两张卡')
+        if (!legal.targets.includes(target2) || target2 === tid) throw new Error('非法目标')
       }
     }
 
@@ -386,16 +397,12 @@ export class BattleAggregate {
   private runTurnStart(events: BattleEvent[], opening: boolean): void {
     const s = this.state
     this.unsealAll(events)
-    if (!opening) {
-      this.tickTimers(events)
-      if (s.result) return
-    }
+    this.tickTimers(events)
+    if (s.result) return
     this.runCampTiming('turnStart', 'player', events)
     if (s.result) return
-    if (!opening) {
-      this.runCampTiming('turnStart', 'enemy', events)
-      if (s.result) return
-    }
+    this.runCampTiming('turnStart', 'enemy', events)
+    if (s.result) return
 
     const leading = isLeading(s)
     const won = !opening && leading
@@ -446,7 +453,7 @@ export class BattleAggregate {
     if (here.owner === card.owner) {
       return !!cardDef(card.defId).overlayAlly && !here.isAvatar
     }
-    return currentPoints(this.state, card) >= currentPoints(this.state, here)
+    return currentPoints(this.state, card) > currentPoints(this.state, here)
   }
 
   private spellNeedsTarget(card: CardInst): boolean {
@@ -505,7 +512,6 @@ export class BattleAggregate {
       })
       s.hand = s.hand.filter((id) => id !== card.id)
       this.removeCard(victim, 'discard', 'tie', events)
-      if (s.result) return
       this.removeCard(card, 'discard', 'tie', events)
       return
     }
@@ -561,7 +567,7 @@ export class BattleAggregate {
     if (card.owner === 'player' && card.isAvatar) this.adjustOccupy(1, 1, events)
     this.runEffects(card, 'enter', events)
     this.runEffects(card, 'play', events)
-    if (cardDef(card.defId).burn) this.burn(card)
+    if (cardDef(card.defId).burn) this.markBurned(card)
   }
 
   private runEffects(source: CardInst, timing: Timing, events: BattleEvent[], extra: Partial<FxCtx> = {}): void {
@@ -570,6 +576,10 @@ export class BattleAggregate {
     if (!list.length) return
     for (const fx of list) {
       const ctx: FxCtx = { source, sacrificed: [], spent: 0, ...extra }
+      if (fx.ops.some((op) => op.op === 'spawnCopyAtMirror')) {
+        const m = source.cell ? MIRROR[source.cell] : undefined
+        if (!m || cardAt(this.state, m)) continue
+      }
       if (fx.sacrifice) {
         if (this.state.deck.length < fx.sacrifice) continue
         ctx.sacrificed = this.sacrifice(fx.sacrifice, events)
@@ -580,7 +590,8 @@ export class BattleAggregate {
         ctx.spent = fx.spendRes
       }
       if (fx.spendResUpTo) {
-        const n = Math.min(this.state.resA, fx.spendResUpTo)
+        const others = boardCards(this.state).filter((c) => c.owner === source.owner && c.id !== source.id).length
+        const n = Math.min(this.state.resA, fx.spendResUpTo, others)
         if (n) this.addRes(-n, events)
         ctx.spent = n
       }
@@ -978,7 +989,7 @@ export class BattleAggregate {
       return
     }
     if (rebirth) {
-      if (s.hand.length >= ANCHORS.handCap) {
+      if (card.owner !== 'player' || s.hand.length >= ANCHORS.handCap) {
         card.zone = 'discard'
         if (card.owner === 'player') s.discard.push(card.id)
         else s.enemyDiscard.push(card.id)
@@ -1015,13 +1026,17 @@ export class BattleAggregate {
     else s.enemyDiscard.push(card.id)
   }
 
+  private markBurned(card: CardInst): void {
+    if (card.boxUid && !this.state.burnedUids.includes(card.boxUid)) this.state.burnedUids.push(card.boxUid)
+  }
+
   private burn(card: CardInst): void {
     const s = this.state
+    this.markBurned(card)
     s.hand = s.hand.filter((id) => id !== card.id)
     if (card.cell && s.board[card.cell] === card.id) s.board[card.cell] = null
     card.zone = 'gone'
     card.cell = undefined
-    if (card.boxUid) s.burnedUids.push(card.boxUid)
   }
 
   private draw(events: BattleEvent[]): void {
@@ -1158,12 +1173,13 @@ export class BattleAggregate {
     })
     const from = card.cell
     if (from && s.board[from] === card.id) s.board[from] = null
-    this.removeCard(here, 'discard', ap === vp ? 'tie' : 'cover', events)
-    if (s.result) return true
     if (ap === vp) {
+      this.removeCard(here, 'discard', 'tie', events)
       this.removeCard(card, 'discard', 'tie', events)
       return true
     }
+    this.removeCard(here, 'discard', 'cover', events)
+    if (s.result) return true
     card.permanent -= vp
     card.cell = dest
     s.board[dest] = card.id

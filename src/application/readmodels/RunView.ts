@@ -1,7 +1,8 @@
-import { eventDef } from '../../content/events'
+import { eventDef, eventOptionEnabled } from '../../content/events'
 import { cardDef, isNegative } from '../../content/cards'
+import { ANCHORS } from '../../content/anchors'
 import type { RunState } from '../../domain/run/RunAggregate'
-import type { Coord, DeckId, NodeType, RunResult, Screen } from '../../domain/types'
+import type { Coord, DeckId, NodeType, Rarity, RunResult, SchoolId, Screen } from '../../domain/types'
 import { NODE_TYPE_LABEL } from '../../domain/types'
 import { adjacentNodes } from '../../domain/run/mapgen'
 
@@ -32,6 +33,8 @@ export interface BoxCardView {
   defId: string
   baseBonus: number
   negative: boolean
+  rarity: Rarity
+  school: SchoolId
 }
 
 export interface ShopView {
@@ -83,6 +86,7 @@ export function toRunView(state: RunState, availableNodes: string[]): RunView {
   })
   const ev = state.eventId ? eventDef(state.eventId) : undefined
   const shopNode = state.pendingNode ? state.nodes.find((n) => n.id === state.pendingNode) : undefined
+  const disc = (price: number) => Math.max(1, Math.round(price * (1 - state.shopDiscount)))
   return {
     hp: state.hp,
     hpMax: state.hpMax,
@@ -93,6 +97,8 @@ export function toRunView(state: RunState, availableNodes: string[]): RunView {
       defId: c.defId,
       baseBonus: c.baseBonus,
       negative: isNegative(c.defId),
+      rarity: cardDef(c.defId).rarity,
+      school: cardDef(c.defId).school,
     })),
     deck: [...state.deck],
     relics: [...state.relics],
@@ -110,7 +116,7 @@ export function toRunView(state: RunState, availableNodes: string[]): RunView {
           name: ev.name,
           options: ev.options.map((o) => ({
             ...o,
-            enabled: optionOn(state, ev.id, o.index),
+            enabled: eventOptionEnabled(ev, o.index, state),
           })),
           chosen: state.eventChosen,
         }
@@ -120,29 +126,13 @@ export function toRunView(state: RunState, availableNodes: string[]): RunView {
       : undefined,
     shop: shopNode?.shop
       ? {
-          offers: shopNode.shop.offers.map((o) => ({ ...o })),
+          offers: shopNode.shop.offers.map((o) => ({ defId: o.defId, price: disc(o.price) })),
           relicId: shopNode.shop.relicSold ? undefined : shopNode.shop.relicId,
-          relicPrice: shopNode.shop.relicSold ? undefined : shopNode.shop.relicPrice,
-          copyPrice: 45 + state.copyBuys * 15,
+          relicPrice: shopNode.shop.relicSold ? undefined : shopNode.shop.relicPrice === undefined ? undefined : disc(shopNode.shop.relicPrice),
+          copyPrice: disc(ANCHORS.shopCopyFirst + state.copyBuys * ANCHORS.shopCopyStep),
         }
       : undefined,
     ended: state.ended,
     nodes,
   }
-}
-
-function optionOn(state: RunState, eventId: string, index: number): boolean {
-  if (eventId === 'EV.06' && index === 1) return state.gold >= 40
-  if (eventId === 'EV.07' && index === 1) return state.box.some((c) => cardDef(c.defId).rarity === 'blue')
-  if (eventId === 'EV.07' && index === 2) return state.box.some((c) => cardDef(c.defId).rarity === 'gold')
-  if (eventId === 'EV.10' && index === 1) {
-    const n = state.box.filter((c) => isNegative(c.defId)).length
-    return state.gold >= n * 25
-  }
-  if (eventId === 'EV.11' && index === 0) return state.gold >= 30
-  if (eventId === 'EV.17' && index === 0) return state.box.some((c) => ['blue', 'gold'].includes(cardDef(c.defId).rarity))
-  if (eventId === 'EV.17' && index === 1) {
-    return state.box.filter((c) => cardDef(c.defId).rarity === 'white' && !isNegative(c.defId)).length >= 2
-  }
-  return true
 }

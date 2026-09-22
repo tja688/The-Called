@@ -69,6 +69,7 @@ export interface ButtonStyle {
   small?: boolean
   danger?: boolean
   color?: string
+  z?: number
 }
 
 /** 键帽按钮（只画像素部分）；返回文字应放的中心 */
@@ -159,7 +160,7 @@ export class UiKit {
     const { cx, cy } = keycap(this.g, r.x, r.y, r.w, r.h, { ...st, hover, pressed })
     const size = textOpt.size ?? (st.small ? 11 : 13)
     this.text.draw(label, cx, cy, { size, align: 'center', baseline: 'middle', color: st.disabled ? PAL.gray3 : st.primary ? PAL.ink : PAL.paper, bold: true, maxWidth: r.w - 8, ...textOpt })
-    if (!st.disabled) this.input.region({ id, rect: r, onClick, z: 10 })
+    if (!st.disabled) this.input.region({ id, rect: r, onClick, z: st.z ?? 10 })
   }
 
   /** 只注册命中区（自绘的可点元素） */

@@ -30,3 +30,8 @@ export const MAP = {
 export const PANEL = {
   x: 40, y: 36, w: 560, h: 288,
 }
+
+/** 战斗左侧卡牌检视，避开九宫格与手牌。 */
+export const INSPECT = {
+  x: 8, y: 54, w: 200, h: 208,
+}

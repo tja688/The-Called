@@ -19,9 +19,22 @@ export function rollRarity(rng: RngState): DrawRarity {
   return 'gold'
 }
 
-export function rewardableIds(school: SchoolId, rarity?: Rarity): string[] {
+export interface DrawOpts {
+  /** 只抽该体系，不含中立（「本体系蓝/金」）。 */
+  schoolOnly?: boolean
+  /** 只抽中立。 */
+  neutralsOnly?: boolean
+}
+
+export function rewardableIds(school: SchoolId, rarity?: Rarity, opts?: DrawOpts): string[] {
   return Object.values(CARDS)
-    .filter((c) => isRewardable(c.id) && (c.school === school || c.school === 'neutral') && (!rarity || c.rarity === rarity))
+    .filter((c) => {
+      if (!isRewardable(c.id)) return false
+      if (rarity && c.rarity !== rarity) return false
+      if (opts?.schoolOnly) return c.school === school
+      if (opts?.neutralsOnly) return c.school === 'neutral'
+      return c.school === school || c.school === 'neutral'
+    })
     .map((c) => c.id)
 }
 
@@ -48,24 +61,31 @@ export function drawPlayerCards(
   return out
 }
 
-export function drawOne(rng: RngState, school: SchoolId, taken: Set<string>): string | undefined {
+export function drawOne(rng: RngState, school: SchoolId, taken: Set<string>, opts?: DrawOpts): string | undefined {
   let rarity: DrawRarity | null = rollRarity(rng)
   while (rarity) {
-    const pool = rewardableIds(school, rarity).filter((id) => !taken.has(id))
+    const pool = rewardableIds(school, rarity, opts).filter((id) => !taken.has(id))
     if (pool.length) return pick(rng, pool)
     rarity = DOWN[rarity]
   }
   return undefined
 }
 
-export function drawOfRarity(rng: RngState, school: SchoolId, rarity: DrawRarity, taken: Set<string> = new Set()): string | undefined {
+/** 商店/战斗奖励：先掷稀有度，该档抽空则金→蓝→白。 */
+export function drawOfRarity(rng: RngState, school: SchoolId, rarity: DrawRarity, taken: Set<string> = new Set(), opts?: DrawOpts): string | undefined {
   let r: DrawRarity | null = rarity
   while (r) {
-    const pool = rewardableIds(school, r).filter((id) => !taken.has(id))
+    const pool = rewardableIds(school, r, opts).filter((id) => !taken.has(id))
     if (pool.length) return pick(rng, shuffle(rng, [...pool]))
     r = DOWN[r]
   }
   return undefined
+}
+
+/** 事件「本体系蓝/金」：不降档、不掺中立。 */
+export function drawExact(rng: RngState, school: SchoolId, rarity: DrawRarity, taken: Set<string> = new Set(), opts?: DrawOpts): string | undefined {
+  const pool = rewardableIds(school, rarity, opts).filter((id) => !taken.has(id))
+  return pool.length ? pick(rng, pool) : undefined
 }
 
 export function shopPrice(rng: RngState, rarity: DrawRarity): number {

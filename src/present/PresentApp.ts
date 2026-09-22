@@ -28,6 +28,7 @@ import { ShopScene } from './scenes/ShopScene'
 import { RestScene } from './scenes/RestScene'
 import { ForgeScene } from './scenes/ForgeScene'
 import { ChestScene } from './scenes/ChestScene'
+import { Shell } from './overlays/Shell'
 
 interface Toast { text: string; t: number; y: number }
 interface Banner { text: string; sub?: string; t: number; hold: number; color: string }
@@ -37,6 +38,7 @@ export class PresentApp implements Renderable {
   readonly input: Input
   readonly ui: UiKit
   scene: Scene | null = null
+  readonly shell = new Shell()
   private queue: DomainEvent[] = []
   private pumping = false
   fade = 0
@@ -74,7 +76,7 @@ export class PresentApp implements Renderable {
   update(dt: number): void {
     this.time += dt
     tw.update(dt)
-    this.input.locked = this.busy
+    this.input.locked = (this.busy && !this.shell.open)
     this.scene?.update(dt)
     for (const t of this.toasts) t.t += dt
     this.toasts = this.toasts.filter((t) => t.t < 2.2)
@@ -98,7 +100,8 @@ export class PresentApp implements Renderable {
     if (this.flashA > 0) flash(ui, this.flashA)
     this.renderBanner(ui, text)
     this.renderToasts(ui, text)
-    this.renderMute(ui, text)
+    this.shell.render(this, ui, text)
+    this.renderChrome(ui, text)
     if (this.fade > 0) {
       ui.setTransform(1, 0, 0, 1, 0, 0)
       ui.fillStyle = rgba('#0a0810', this.fade)
@@ -140,10 +143,14 @@ export class PresentApp implements Renderable {
     })
   }
 
-  private renderMute(_g: CanvasRenderingContext2D, text: TextLayer): void {
-    const label = audio.muted ? '音效关' : '音效开'
-    this.ui.button('mute', { x: 576, y: 4, w: 56, h: 18 }, label, () => audio.toggle(), { small: true }, { size: 9 })
-    text.draw('M', 606, 22, { size: 8, color: PAL.gray2, align: 'center' })
+  private renderChrome(ui: CanvasRenderingContext2D, text: TextLayer): void {
+    const z = this.shell.open ? 120 : 20
+    this.ui.button('menu', { x: 576, y: 4, w: 56, h: 18 }, '菜单', () => {
+      audio.sfx('click')
+      if (this.shell.open) this.shell.close()
+      else this.shell.openMenu()
+    }, { small: true, z })
+    text.draw('Esc', 604, 22, { size: 8, color: PAL.gray2, align: 'center' })
   }
 
   toast(text: string, y = 60): void {
@@ -220,15 +227,27 @@ export class PresentApp implements Renderable {
   }
 
   private onKey(k: string, e: KeyboardEvent): void {
-    if (k === ' ') {
+    if (k === ' ' && !this.shell.open) {
       tw.speed = 4
       e.preventDefault()
       window.addEventListener('keyup', () => { tw.speed = 1 }, { once: true })
       return
     }
     if (k === 'm' || k === 'M') audio.toggle()
-    if (k === 'Escape') this.scene?.onCancel()
+    if (k === 'F1' || k === '?' || k === 'h' || k === 'H') {
+      e.preventDefault()
+      this.shell.toggleHelp()
+      return
+    }
+    if (k === 'Escape') {
+      if (this.shell.esc()) return
+      if (this.scene?.onCancel()) return
+      this.shell.openMenu()
+      return
+    }
+    if (this.shell.open) return
     if (k === 'Enter') this.scene?.onConfirm()
+    this.scene?.onKey(k)
     if (k === 'F3') {
       this.debug = !this.debug
       if (this.debug) this.attachDebug()

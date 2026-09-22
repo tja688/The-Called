@@ -5,7 +5,7 @@ import { Scenery, GROUND_Y } from '../../pixel/scenery'
 import { ASSETS } from '../../pixel/assets'
 import { drawSprite } from '../../pixel/dsl'
 import { audio } from '../../audio/audio'
-import { fictionName, avatarSpriteId } from '../fiction'
+import { fictionName, avatarSpriteId, DECK_BLURB } from '../fiction'
 import type { DeckId } from '../../domain/types'
 
 export class TitleScene extends Scene {
@@ -44,25 +44,38 @@ export class TitleScene extends Scene {
 
     this.scenery.drawFront(world, 180, this.t)
 
-    text.draw('锈门层', 320, 18, { size: 26, bold: true, align: 'center', color: PAL.lamp1, stroke: PAL.ink, strokeWidth: 4 })
-    text.draw('灰石堡地下。选一套行囊，清掉垂死巨人。', 320, 48, { size: 12, align: 'center', color: PAL.cream })
+    text.draw('锈门层', 320, 16, { size: 26, bold: true, align: 'center', color: PAL.lamp1, stroke: PAL.ink, strokeWidth: 4 })
+    text.draw('灰石堡地下。选一套行囊，清掉垂死巨人。', 320, 44, { size: 12, align: 'center', color: PAL.cream })
 
     decks.forEach((id, i) => {
-      this.app.ui.button(`dk-${id}`, { x: 118 + i * 150, y: 72, w: 120, h: 24 }, fictionName(id), () => { this.deckId = id }, { small: true, primary: this.deckId === id })
+      this.app.ui.button(`dk-${id}`, { x: 118 + i * 150, y: 68, w: 120, h: 24 }, `${i + 1} ${fictionName(id)}`, () => { this.deckId = id }, { small: true, primary: this.deckId === id })
     })
 
-    this.app.ui.button('seed-', { x: 236, y: 104, w: 28, h: 22 }, '−', () => { this.seed = Math.max(1, this.seed - 1) }, { small: true })
-    text.draw(`种子 ${this.seed}`, 320, 108, { size: 13, align: 'center', color: PAL.cream, bold: true })
-    this.app.ui.button('seed+', { x: 376, y: 104, w: 28, h: 22 }, '+', () => { this.seed += 1 }, { small: true })
-    this.app.ui.button('start', { x: 248, y: 132, w: 144, h: 28 }, `开一趟 · ${fictionName(this.deckId)}`, () => {
+    this.app.ui.button('seed-', { x: 236, y: 98, w: 28, h: 22 }, '−', () => { this.seed = Math.max(1, this.seed - 1) }, { small: true })
+    text.draw(`种子 ${this.seed}`, 320, 102, { size: 13, align: 'center', color: PAL.cream, bold: true })
+    this.app.ui.button('seed+', { x: 376, y: 98, w: 28, h: 22 }, '+', () => { this.seed += 1 }, { small: true })
+    this.app.ui.button('start', { x: 248, y: 126, w: 144, h: 28 }, `开一趟 · ${fictionName(this.deckId)}`, () => {
       audio.sfx('click')
       this.app.send({ type: 'run.start', seed: this.seed, deckId: this.deckId })
     }, { primary: true })
-    text.draw('空格快进  ·  ?present=dom 白模', 320, 336, { size: 10, align: 'center', color: PAL.gray3 })
+
+    text.paragraph(DECK_BLURB[this.deckId] ?? '', 320, 164, 420, { size: 12, color: PAL.cream, lineHeight: 16, align: 'center' })
+
+    this.app.ui.button('how', { x: 16, y: 318, w: 88, h: 24 }, '怎么玩', () => {
+      audio.sfx('click')
+      this.app.shell.openHelp()
+    }, { small: true })
+    text.draw('1 2 3 选行囊  ·  Enter 开局  ·  Esc 菜单  ·  空格快进', 320, 336, { size: 10, align: 'center', color: PAL.gray3 })
   }
 
   onConfirm(): void {
     audio.sfx('click')
     this.app.send({ type: 'run.start', seed: this.seed, deckId: this.deckId })
+  }
+
+  onKey(k: string): void {
+    if (k === '1') this.deckId = 'DK.A'
+    if (k === '2') this.deckId = 'DK.B'
+    if (k === '3') this.deckId = 'DK.C'
   }
 }

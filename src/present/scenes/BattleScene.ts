@@ -18,9 +18,10 @@ import { cardDef } from '../../content/cards'
 import { encounterDef } from '../../content/encounters'
 import { fictionName, avatarSpriteId } from '../fiction'
 import { audio } from '../../audio/audio'
-import { BATTLE, TOPBAR_H } from '../layout'
-import { drawHandCard, drawBoardToken, drawHpBar, drawWoundChip, drawTooltip } from '../widgets'
+import { BATTLE, TOPBAR_H, INSPECT } from '../layout'
+import { drawHandCard, drawBoardToken, drawHpBar, drawWoundChip, drawInspectPanel, drawStatuses, drawHint } from '../widgets'
 import type { LegalPlay } from '../../domain/battle/BattleAggregate'
+import { mapEffectDef } from '../../content/mapEffects'
 
 type BE<T extends BattleEvent['type']> = Extract<BattleEvent, { type: T }>
 type G = CanvasRenderingContext2D
@@ -84,7 +85,8 @@ export class BattleScene extends Scene {
   private result: BE<'battle.settled'> | null = null
   private lastType = ''
   private zc = 0
-  private peek: string | null = null
+  private pickedTarget: string | null = null
+  private activateAim = false
   private lockLines: { x1: number; y1: number; x2: number; y2: number; t: number }[] = []
 
   enter(): void {
@@ -345,8 +347,10 @@ export class BattleScene extends Scene {
     this.drawFx(world, text)
     this.drawHud(ui, text)
     this.drawHand(ui, text)
+    this.drawDiscardPick(ui, text)
+    this.drawInspect(ui, text)
+    this.drawAimHint(ui, text)
     this.drawResult(ui, text)
-    this.drawHoverTip(ui, text)
   }
 
   private drawTable(g: G): void {
@@ -403,9 +407,7 @@ export class BattleScene extends Scene {
         const canTarget = !!(inst && play.targets.includes(inst.id))
         if (legalCell || canTarget) {
           this.app.ui.hit(`cell-${cell}`, { x: p.x, y: p.y, w: BATTLE.cell, h: BATTLE.cell }, () => {
-            if (legalCell) this.app.send({ type: 'battle.play', card: this.selected!, cell: cell as Cell })
-            else if (canTarget && inst) this.app.send({ type: 'battle.play', card: this.selected!, target: inst.id })
-            this.selected = null
+            this.onCell(cell as Cell)
           }, 6)
         }
       }
@@ -416,8 +418,14 @@ export class BattleScene extends Scene {
 
   private drawActors(g: G, ui: G, text: TextLayer): void {
     const list = [...this.actors.values()].filter((a) => a.zone !== 'gone' && a.zone !== 'hand').sort((a, b) => a.z - b.z)
+    const play = this.selectedPlay()
+    const view = this.app.ask({ type: 'battle.view' })
+    const acts = this.activateAim ? this.app.ask({ type: 'battle.legalActivates' })[0] : undefined
     for (const a of list) {
       const x = a.x, y = a.y + a.lift
+      const inst = view?.cards[a.id]
+      const statuses = inst?.statuses ?? (a.sealed ? ['sealed'] : [])
+      const aimed = !!(play?.targets.includes(a.id) || acts?.targets.includes(a.id) || this.pickedTarget === a.id)
       g.save()
       if (a.isAvatar) {
         const b = ASSETS.sprite(avatarSpriteId(a.defId))
@@ -434,7 +442,7 @@ export class BattleScene extends Scene {
           })
         }
         text.draw(String(a.points), x, y - 22, { size: 14, align: 'center', bold: true, color: PAL.lamp1, stroke: PAL.ink, strokeWidth: 3, alpha: a.alpha })
-        if (a.zone === 'board') drawWoundChip(ui, text, x - 36, BATTLE.gridY - 22, this.wound)
+        if (statuses.length) drawStatuses(g, statuses, x - 20, y - 40)
       } else if (a.owner === 'enemy') {
         const icon = ASSETS.npc(a.defId)
         g.save()
@@ -445,13 +453,22 @@ export class BattleScene extends Scene {
         g.restore()
         text.draw(fictionName(a.defId), x, y + 18, { size: 9, align: 'center', color: PAL.cream, alpha: a.alpha })
         text.draw(String(a.points), x, y - 16, { size: 13, align: 'center', bold: true, color: a.sealed ? PAL.gray2 : PAL.fruR, stroke: PAL.ink, strokeWidth: 3, alpha: a.alpha })
-        if (a.sealed) blit(g, ASSETS.icon('icon.seal', 16, 16), x + 10, y - 22)
+        if (statuses.length) drawStatuses(g, statuses, x + 10, y - 22)
       } else {
         const def = cardDef(a.defId)
-        drawBoardToken(ui, text, def, x - 24, y - 24, 48, { points: a.points, sealed: a.sealed, player: true })
+        drawBoardToken(ui, text, def, x - 24, y - 24, 48, {
+          points: a.points, sealed: a.sealed, player: true, selected: aimed, statuses,
+        })
+      }
+      if (aimed) {
+        pxFrame(g, Math.round(x - 28), Math.round(y - 28), 56, 56, this.pickedTarget === a.id ? PAL.lamp2 : PAL.lamp1, 2)
       }
       g.restore()
+      if (a.zone === 'board') {
+        this.app.ui.hit(`board-${a.id}`, { x: x - 26, y: y - 26, w: 52, h: 52 }, () => this.onBoard(a.id), 7)
+      }
     }
+    void ui
   }
 
   private drawFx(g: G, text: TextLayer): void {
@@ -474,6 +491,7 @@ export class BattleScene extends Scene {
     text.draw(`第${this.turn}回合 · ${this.phase === 'play' ? '出牌' : '结束'}`, 92, 7, { size: 11, color: PAL.cream })
     if (run) drawHpBar(ui, text, 250, 9, 90, run.hp, run.hpMax)
     drawWoundChip(ui, text, 430, 5, view?.avatar.avatarCost ?? this.wound)
+    if (run?.floorEffect) text.draw(fictionName(run.floorEffect), 512, 7, { size: 10, color: PAL.gray3 })
     const pf = view?.playerFinal ?? 0, ef = view?.enemyFinal ?? 0
     text.draw(`己${pf}`, 10, 32, { size: 13, bold: true, color: PAL.fruG })
     text.draw(`敌${ef}`, 70, 32, { size: 13, bold: true, color: PAL.fruR })
@@ -485,59 +503,62 @@ export class BattleScene extends Scene {
       blit(ui, icon, 150 + i * 14, 30)
       ui.restore()
     }
-    if (view?.mustPlaceAvatar) text.draw('先落下化身', 320, 48, { size: 12, align: 'center', color: PAL.lamp1, bold: true })
+    const oil = view?.resA ?? 0
+    if (oil > 0 || (run?.deckId === 'DK.C')) {
+      blit(ui, ASSETS.icon('icon.oil', 16, 16), 150 + Math.max(this.manaCap, 1) * 14 + 8, 30)
+      text.draw(`${oil}`, 150 + Math.max(this.manaCap, 1) * 14 + 26, 32, { size: 11, color: PAL.gold, bold: true })
+    }
+    text.draw(`牌${view?.deckLeft ?? 0} 弃${view?.discardCount ?? 0} 敌弃${view?.enemyDiscardCount ?? 0}`, 400, 32, {
+      size: 10, color: PAL.gray3,
+    })
+    if (view?.mustPlaceAvatar) text.draw('先落下化身', 320, 52, { size: 12, align: 'center', color: PAL.lamp1, bold: true })
     this.app.ui.button('end-turn', { x: 552, y: 248, w: 76, h: 26 }, '结束回合', () => {
       audio.sfx('click')
       this.app.send({ type: 'battle.endTurn' })
     }, { small: true, disabled: this.app.busy || !view?.canEndTurn })
     this.app.ui.button('activate', { x: 552, y: 218, w: 76, h: 26 }, '主动', () => {
-      const acts = this.app.ask({ type: 'battle.legalActivates' })
-      const a = acts[0]
-      if (!a) return
-      audio.sfx('click')
-      if (a.targets.length === 1) this.app.send({ type: 'battle.activate', card: a.card, target: a.targets[0] })
-      else if (!a.targets.length) this.app.send({ type: 'battle.activate', card: a.card })
-      else this.app.send({ type: 'battle.activate', card: a.card, target: a.targets[0] })
+      this.onActivate()
     }, { small: true, disabled: this.app.busy || !view?.canActivate })
   }
 
   private drawHand(ui: G, text: TextLayer): void {
     const plays = this.legal()
-    this.peek = null
-    this.hand.forEach((id, i) => {
+    const hover = this.app.input.hover
+    const order = [...this.hand]
+    const top = hover?.startsWith('hand-') ? hover.slice(5) : this.selected
+    if (top && order.includes(top)) {
+      order.splice(order.indexOf(top), 1)
+      order.push(top)
+    }
+    for (const id of order) {
       const a = this.actors.get(id)
-      if (!a) return
+      if (!a) continue
+      const i = this.hand.indexOf(id)
       const p = this.handSlot(i, this.hand.length)
       a.x = p.x; a.y = p.y
       const def = cardDef(a.defId)
       const playable = plays.some((x) => x.card === id)
-      const hover = this.app.input.isHover(`hand-${id}`)
-      if (hover) this.peek = id
-      drawHandCard(ui, text, def, a.x, a.y - (this.selected === id || hover ? 8 : 0), BATTLE.cardW, BATTLE.cardH, {
+      const over = hover === `hand-${id}`
+      const lift = this.selected === id || over ? 10 : 0
+      drawHandCard(ui, text, def, a.x, a.y - lift, BATTLE.cardW, BATTLE.cardH, {
         selected: this.selected === id,
         dim: !playable,
         points: a.points,
       })
-      if (!this.app.busy && playable) {
-        this.app.ui.hit(`hand-${id}`, { x: a.x, y: a.y - 8, w: BATTLE.cardW, h: BATTLE.cardH }, () => {
-          const p2 = plays.find((x) => x.card === id)!
-          if (p2.cells.length === 0 && p2.targets.length === 0) {
-            this.app.send({ type: 'battle.play', card: id })
-            this.selected = null
-            return
-          }
-          audio.sfx('click')
-          this.selected = this.selected === id ? null : id
+      if (!this.app.busy) {
+        this.app.ui.hit(`hand-${id}`, { x: a.x, y: a.y - 10, w: BATTLE.cardW, h: BATTLE.cardH + 10 }, () => {
+          this.onHand(id)
         }, 8)
       }
-    })
+    }
     if (this.selected && this.selectedPlay()) {
       const p = this.selectedPlay()!
       const preview = this.app.ask({
         type: 'battle.previewPlay',
         card: this.selected,
         cell: p.cells[0],
-        target: p.targets[0],
+        target: this.pickedTarget ?? p.targets[0],
+        target2: this.pickedTarget ? p.targets.find((t) => t !== this.pickedTarget) : undefined,
       })
       if (preview) {
         text.draw(`预览 己${preview.player} 敌${preview.enemy} 化身${preview.avatar} 费${preview.occupy}/${preview.occupyCap}`, 320, 268, {
@@ -549,6 +570,7 @@ export class BattleScene extends Scene {
 
   private drawResult(ui: G, text: TextLayer): void {
     if (!this.result) return
+    text.occlude(0, 140, 640, 90)
     bannerBg(ui, 140, 70, 0.78)
     text.draw(this.result.outcome === 'win' ? '胜利' : '失败', 320, 150, { size: 20, align: 'center', bold: true, color: this.result.outcome === 'win' ? PAL.lamp1 : PAL.fruR })
     text.draw(`化身代价 ${this.result.avatarCost} · ${this.result.reason === 'lead' ? '总点检查' : this.result.reason === 'clear' ? '清场' : this.result.reason === 'avatarGone' ? '化身离场' : '无牌可出'}`, 320, 176, { size: 12, align: 'center', color: PAL.cream })
@@ -558,14 +580,201 @@ export class BattleScene extends Scene {
     }, { primary: true, small: true, disabled: this.app.busy })
   }
 
-  private drawHoverTip(ui: G, text: TextLayer): void {
-    if (!this.peek) return
-    const a = this.actors.get(this.peek)
-    if (!a) return
-    drawTooltip(ui, text, cardDef(a.defId), a.x + 52, a.y - 10)
+  private drawInspect(ui: G, text: TextLayer): void {
+    const id = this.peekFromHover() ?? this.selected
+    if (id) {
+      const a = this.actors.get(id)
+      const view = this.app.ask({ type: 'battle.view' })
+      const inst = view?.cards[id]
+      const defId = a?.defId ?? inst?.defId
+      if (!defId) return
+      const def = cardDef(defId)
+      drawInspectPanel(ui, text, {
+        def,
+        currentPoints: inst?.currentPoints ?? a?.points,
+        statuses: inst?.statuses,
+        owner: inst?.owner ?? a?.owner,
+      }, INSPECT.x, INSPECT.y, INSPECT.w)
+      return
+    }
+    const run = this.app.view()
+    if (!run?.floorEffect) return
+    const me = mapEffectDef(run.floorEffect)
+    drawHint(ui, text, fictionName(run.floorEffect), `${me.text}\n指向卡牌查看说明。Esc 菜单。`, INSPECT.x, INSPECT.y, INSPECT.w)
   }
 
-  onCancel(): void { this.selected = null }
+  private drawDiscardPick(ui: G, text: TextLayer): void {
+    const play = this.selectedPlay()
+    if (!this.isDiscardAim(play) || !play) return
+    const view = this.app.ask({ type: 'battle.view' })
+    text.draw('从弃牌堆选一张', INSPECT.x + 8, 268, { size: 10, color: PAL.lamp1, bold: true })
+    play.targets.forEach((id, i) => {
+      const inst = view?.cards[id]
+      if (!inst) return
+      const def = cardDef(inst.defId)
+      const x = 8 + (i % 4) * 50
+      const y = 282 + Math.floor(i / 4) * 20
+      this.app.ui.button(`disc-${id}`, { x, y, w: 46, h: 18 }, fictionName(def.id), () => {
+        this.commit(play.card, { target: id })
+      }, { small: true }, { size: 8 })
+    })
+  }
+
+  private drawAimHint(ui: G, text: TextLayer): void {
+    const msg = this.aimMessage()
+    if (!msg) return
+    text.draw(msg, 320, 64, { size: 11, align: 'center', color: PAL.lamp1, bold: true })
+    void ui
+  }
+
+  private peekFromHover(): string | null {
+    const h = this.app.input.hover
+    if (!h) return null
+    if (h.startsWith('hand-')) return h.slice(5)
+    if (h.startsWith('board-')) return h.slice(6)
+    if (h.startsWith('disc-')) return h.slice(5)
+    return null
+  }
+
+  private isDiscardAim(play: LegalPlay | undefined): boolean {
+    if (!play?.targets.length) return false
+    const view = this.app.ask({ type: 'battle.view' })
+    return view?.cards[play.targets[0]]?.zone === 'discard'
+  }
+
+  private isSwap(play: LegalPlay | undefined): boolean {
+    if (!play) return false
+    return this.actors.get(play.card)?.defId === 'PC.N09'
+  }
+
+  private needsCellAndTarget(play: LegalPlay | undefined): boolean {
+    return !!play && play.cells.length > 0 && play.targets.length > 0
+  }
+
+  private commit(card: string, opts: { cell?: Cell; target?: string; target2?: string } = {}): void {
+    this.app.send({ type: 'battle.play', card, cell: opts.cell, target: opts.target, target2: opts.target2 })
+    this.selected = null
+    this.pickedTarget = null
+    this.activateAim = false
+  }
+
+  private onHand(id: string): void {
+    if (this.app.busy) return
+    const p2 = this.legal().find((x) => x.card === id)
+    if (!p2) return
+    if (!p2.cells.length && !p2.targets.length) {
+      this.commit(id)
+      return
+    }
+    audio.sfx('click')
+    this.selected = this.selected === id ? null : id
+    this.pickedTarget = null
+    this.activateAim = false
+  }
+
+  private onCell(cell: Cell): void {
+    if (this.app.busy || this.activateAim) return
+    const play = this.selectedPlay()
+    if (!play || !this.selected) return
+    const view = this.app.ask({ type: 'battle.view' })
+    const info = view?.cells[cell - 1]
+    const inst = info?.card
+    const legalCell = play.cells.includes(cell)
+    const canTarget = !!(inst && play.targets.includes(inst))
+    if (this.needsCellAndTarget(play)) {
+      if (canTarget && inst) {
+        this.pickedTarget = inst
+        audio.sfx('click')
+        return
+      }
+      if (legalCell && this.pickedTarget) {
+        this.commit(this.selected, { cell, target: this.pickedTarget })
+        return
+      }
+      if (legalCell) this.app.toast('先点要指定的那张卡', 48)
+      return
+    }
+    if (legalCell) {
+      this.commit(this.selected, { cell })
+      return
+    }
+    if (canTarget && inst) this.commit(this.selected, { target: inst })
+  }
+
+  private onBoard(id: string): void {
+    if (this.app.busy) return
+    if (this.activateAim) {
+      const acts = this.app.ask({ type: 'battle.legalActivates' })[0]
+      if (acts?.targets.includes(id)) {
+        audio.sfx('click')
+        this.app.send({ type: 'battle.activate', card: acts.card, target: id })
+        this.activateAim = false
+      }
+      return
+    }
+    const play = this.selectedPlay()
+    if (!play || !this.selected) return
+    const a = this.actors.get(id)
+    if (this.isSwap(play) && play.targets.includes(id)) {
+      if (!this.pickedTarget) {
+        this.pickedTarget = id
+        audio.sfx('click')
+        return
+      }
+      if (this.pickedTarget === id) return
+      this.commit(this.selected, { target: this.pickedTarget, target2: id })
+      return
+    }
+    if (this.needsCellAndTarget(play) && play.targets.includes(id)) {
+      this.pickedTarget = id
+      audio.sfx('click')
+      return
+    }
+    if (play.targets.includes(id)) {
+      this.commit(this.selected, { target: id, cell: a?.cell })
+      return
+    }
+    if (a?.cell && play.cells.includes(a.cell)) this.commit(this.selected, { cell: a.cell })
+  }
+
+  private onActivate(): void {
+    const a = this.app.ask({ type: 'battle.legalActivates' })[0]
+    if (!a) return
+    audio.sfx('click')
+    if (!a.targets.length) {
+      this.app.send({ type: 'battle.activate', card: a.card })
+      return
+    }
+    if (a.targets.length === 1) {
+      this.app.send({ type: 'battle.activate', card: a.card, target: a.targets[0] })
+      return
+    }
+    this.activateAim = true
+    this.selected = null
+    this.pickedTarget = null
+  }
+
+  private aimMessage(): string | null {
+    if (this.activateAim) return '选择带猎印的敌人'
+    const play = this.selectedPlay()
+    if (!play || !this.selected) return null
+    if (this.isDiscardAim(play)) return '从弃牌堆选一张'
+    if (this.isSwap(play)) return this.pickedTarget ? '再选一张交换位置' : '选择第一张要换位的卡'
+    if (this.needsCellAndTarget(play)) return this.pickedTarget ? '选择相邻空格' : '先选择要指定的卡'
+    if (play.cells.length && !play.targets.length) return '选择格子落下'
+    if (play.targets.length) return '选择目标'
+    return null
+  }
+
+  onCancel(): boolean {
+    if (this.selected || this.activateAim || this.pickedTarget) {
+      this.selected = null
+      this.pickedTarget = null
+      this.activateAim = false
+      return true
+    }
+    return false
+  }
 }
 
 function lerp(a: number, b: number, t: number): number { return a + (b - a) * t }

@@ -1,10 +1,10 @@
 import { PAL, rgba, SCHOOL_COLOR } from '../pixel/palette'
 import { ASSETS } from '../pixel/assets'
 import { blit } from '../pixel/dsl'
-import { cardFrame, pxRoundRect } from '../pixel/ui'
+import { cardFrame, pxRoundRect, panel } from '../pixel/ui'
 import type { TextLayer } from '../pixel/text'
 import type { CardDef } from '../content/cards'
-import { fictionName } from './fiction'
+import { fictionName, fictionText, KIND_NAME, RARITY_NAME, STATUS_NAME } from './fiction'
 
 type G = CanvasRenderingContext2D
 
@@ -32,6 +32,22 @@ export function drawHandCard(
   text.draw(`${sub} · ${def.cost}费`, x + w / 2, y + h - 16, { size: 9, align: 'center', color: PAL.wood1, maxWidth: w - 6 })
 }
 
+const STATUS_ICON: Record<string, string> = {
+  sealed: 'icon.seal',
+  marked: 'icon.marked',
+  vulnerable: 'icon.vulnerable',
+  protected: 'icon.protected',
+  rebirth: 'icon.rebirth',
+}
+
+export function drawStatuses(g: G, statuses: string[], x: number, y: number): void {
+  statuses.forEach((st, i) => {
+    const id = STATUS_ICON[st]
+    if (!id) return
+    blit(g, ASSETS.icon(id, 16, 16), x + i * 14, y)
+  })
+}
+
 export function drawBoardToken(
   g: G,
   text: TextLayer,
@@ -39,7 +55,7 @@ export function drawBoardToken(
   x: number,
   y: number,
   size: number,
-  opt: { points: number; sealed?: boolean; player?: boolean; selected?: boolean },
+  opt: { points: number; sealed?: boolean; player?: boolean; selected?: boolean; statuses?: string[] },
 ): void {
   const edge = opt.player ? PAL.fruG : PAL.fruR
   cardFrame(g, x, y, size, size, edge, PAL.paper, { selected: opt.selected, dim: opt.sealed })
@@ -48,10 +64,8 @@ export function drawBoardToken(
   text.draw(String(opt.points), x + size / 2, y + size - 14, {
     size: 14, align: 'center', bold: true, color: opt.player ? PAL.fruG : PAL.fruR, stroke: PAL.ink, strokeWidth: 3,
   })
-  if (opt.sealed) {
-    const seal = ASSETS.icon('icon.seal', 16, 16)
-    blit(g, seal, x + size - 18, y + 2)
-  }
+  const sts = opt.statuses ?? (opt.sealed ? ['sealed'] : [])
+  if (sts.length) drawStatuses(g, sts, x + 2, y + 2)
 }
 
 /** 缠布血条：红从左渗到右，不要爱心。 */
@@ -83,13 +97,77 @@ export function drawWoundChip(g: G, text: TextLayer, x: number, y: number, wound
   text.draw(`代价预估 ${wound}`, x + 36, y + 8, { size: 10, align: 'center', baseline: 'middle', color: PAL.cream, bold: true })
 }
 
-export function drawTooltip(g: G, text: TextLayer, def: CardDef, x: number, y: number): void {
-  const w = 200, h = 72
+export interface InspectBits {
+  def: CardDef
+  currentPoints?: number
+  statuses?: string[]
+  owner?: string
+}
+
+function inspectBody(bits: InspectBits): string {
+  return fictionText(bits.def.text)
+}
+
+export function inspectHeight(text: TextLayer, bits: InspectBits, w: number): number {
+  const lines = text.wrap(inspectBody(bits), w - 16, 10)
+  return 50 + lines.length * 14 + (bits.statuses?.length ? 18 : 0)
+}
+
+/** 固定位置的卡牌说明。先 occlude 再画，避免邻卡文字穿帮。 */
+export function drawInspectPanel(
+  g: G,
+  text: TextLayer,
+  bits: InspectBits,
+  x: number,
+  y: number,
+  w: number,
+  h?: number,
+): { w: number; h: number } {
+  const body = inspectBody(bits)
+  const hh = h ?? inspectHeight(text, bits, w)
+  text.occlude(x, y, w, hh)
+  panel(g, x, y, w, hh, 'paper')
+  text.draw(fictionName(bits.def.id), x + 8, y + 6, { size: 12, bold: true, color: PAL.ink, maxWidth: w - 16 })
+  const pts = bits.currentPoints ?? bits.def.basePoints
+  const kind = KIND_NAME[bits.def.kind] ?? bits.def.kind
+  const rare = RARITY_NAME[bits.def.rarity] ?? ''
+  const ptsLine = bits.def.kind === 'spell' ? `${kind} · ${bits.def.cost}费 · ${rare}` : `${kind} · ${pts}点 · ${bits.def.cost}费 · ${rare}`
+  text.draw(ptsLine, x + 8, y + 22, { size: 10, color: PAL.wood1, maxWidth: w - 16 })
+  let ty = y + 38
+  if (bits.statuses?.length) {
+    drawStatuses(g, bits.statuses, x + 8, ty)
+    text.draw(bits.statuses.map((s) => STATUS_NAME[s] ?? s).join(' · '), x + 8 + bits.statuses.length * 14 + 4, ty + 1, {
+      size: 10, color: PAL.ink2,
+    })
+    ty += 18
+  }
+  text.paragraph(body, x + 8, ty, w - 16, { size: 10, color: PAL.ink2, lineHeight: 14 })
+  return { w, h: hh }
+}
+
+/** 浮动说明：夹在屏幕内，并挡住被盖住的字。 */
+export function drawTooltip(g: G, text: TextLayer, def: CardDef, x: number, y: number, extra: Omit<InspectBits, 'def'> = {}): void {
+  const bits = { def, ...extra }
+  const w = 208
+  const h = inspectHeight(text, bits, w)
   let px = x, py = y
   if (px + w > 632) px = 632 - w
   if (py + h > 352) py = 352 - h
-  cardFrame(g, px, py, w, h, PAL.copperD, PAL.paper)
-  text.draw(fictionName(def.id), px + 8, py + 6, { size: 12, bold: true, color: PAL.ink })
-  text.draw(def.kind === 'spell' ? `法术 · ${def.cost}费` : `${def.basePoints}点 · ${def.cost}费`, px + 8, py + 22, { size: 10, color: PAL.wood1 })
-  text.paragraph(def.text, px + 8, py + 36, w - 16, { size: 10, color: PAL.ink2, lineHeight: 14 })
+  if (px < 8) px = 8
+  if (py < 8) py = 8
+  drawInspectPanel(g, text, bits, px, py, w, h)
+}
+
+export function drawHint(g: G, text: TextLayer, title: string, body: string, x: number, y: number, w = 200): void {
+  const lines = text.wrap(body, w - 16, 10)
+  const h = 28 + lines.length * 14
+  let px = x, py = y
+  if (px + w > 632) px = 632 - w
+  if (py + h > 352) py = 352 - h
+  if (px < 8) px = 8
+  if (py < 8) py = 8
+  text.occlude(px, py, w, h)
+  panel(g, px, py, w, h, 'paper')
+  text.draw(title, px + 8, py + 6, { size: 12, bold: true, color: PAL.ink })
+  text.paragraph(body, px + 8, py + 22, w - 16, { size: 10, color: PAL.ink2, lineHeight: 14 })
 }

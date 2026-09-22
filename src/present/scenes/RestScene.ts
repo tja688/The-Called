@@ -19,6 +19,7 @@ export class RestScene extends Scene {
     this.scenery.drawFront(world, 0, this.t)
     const { x, y, w, h } = PANEL
     panel(ui, x, y, w, h, 'stone')
+    text.occlude(x, y, w, h)
     text.draw('渗泉龛', x + 20, y + 16, { size: 18, bold: true, color: PAL.lamp1 })
     text.draw('青苔井栏。舀水，或在龛前把化身磨硬一点。', x + 20, y + 44, { size: 12, color: PAL.cream })
     this.app.ui.button('heal', { x: x + 20, y: y + 80, w: w - 40, h: 40 }, '舀水 · 回复血上限 30%', () => {

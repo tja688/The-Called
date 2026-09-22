@@ -1,12 +1,12 @@
 import { ANCHORS } from '../../content/anchors'
 import { cardDef, cardName, isNegative } from '../../content/cards'
 import { startingDeck } from '../../content/decks'
-import { eventDef, eventsForFloor, EVENT_WEIGHT, type EventDef } from '../../content/events'
+import { eventDef, eventsForFloor, EVENT_WEIGHT, eventOptionEnabled, eventCardEligible, type EventDef } from '../../content/events'
 import { mapEffectsFor } from '../../content/mapEffects'
 import { poolFor } from '../../content/encounters'
 import { relicDef, relicPool } from '../../content/relics'
-import { drawOfRarity, drawOne, drawPlayerCards, recastPool, shopPrice, type DrawRarity } from '../../content/rewards'
-import { hashString, nextFloat, nextInt, pick, seedRng, shuffle, type RngState } from '../../core/Rng'
+import { drawExact, drawOne, drawPlayerCards, recastPool, shopPrice, type DrawRarity } from '../../content/rewards'
+import { hashString, nextFloat, pick, seedRng, type RngState } from '../../core/Rng'
 import type { BattleResult } from '../battle/state'
 import type { Coord, DeckId, NodeType, RunResult, SchoolId, Screen } from '../types'
 import { manhattan } from '../types'
@@ -221,7 +221,16 @@ export class RunAggregate {
     const opt = ev.options[index]
     if (!opt) throw new Error('没有这个选项')
     if (!this.optionEnabled(ev, opt.index)) throw new Error('选项条件不满足')
-    if (opt.needsCard && !cardUid) throw new Error('必须指定卡盒里的卡')
+    if (opt.needsCard) {
+      if (!cardUid) throw new Error('必须指定卡盒里的卡')
+      const picked = s.box.find((c) => c.uid === cardUid)
+      if (!picked || !eventCardEligible(ev, index, picked.defId)) throw new Error('不能选这张卡')
+    }
+    if (opt.needsCard2) {
+      if (!cardUid2) throw new Error('必须指定第二张卡')
+      const picked2 = s.box.find((c) => c.uid === cardUid2)
+      if (!picked2 || picked2.uid === cardUid || !eventCardEligible(ev, index, picked2.defId)) throw new Error('不能选这张卡')
+    }
     s.eventChosen = index
     return this.applyEvent(ev, index, cardUid, cardUid2)
   }
@@ -307,6 +316,7 @@ export class RunAggregate {
     if (!card) throw new Error('卡盒里没有这张')
     if (s.flowChosen) throw new Error('已经选过了')
     const rarity = cardDef(card.defId).rarity
+    if (rarity === 'basic') throw new Error('基础卡不能重铸')
     const pool = recastPool(rarity, card.defId)
     if (!pool.length) throw new Error('没有可重铸的卡')
     const next = pick(s.rng, pool)
@@ -442,7 +452,11 @@ export class RunAggregate {
 
   private drawEvent(): EventDef {
     const s = this.state
-    const pool = eventsForFloor(1).filter((e) => !s.seenEvents.includes(e.id) && (!e.needNegative || s.box.some((c) => isNegative(c.defId))))
+    const pool = eventsForFloor(1).filter((e) =>
+      !s.seenEvents.includes(e.id)
+      && (!e.needNegative || s.box.some((c) => isNegative(c.defId)))
+      && e.options.some((o) => eventOptionEnabled(e, o.index, s)),
+    )
     if (!pool.length) return eventDef('EV.EMPTY')
     const weighted: EventDef[] = []
     for (const e of pool) {
@@ -452,21 +466,7 @@ export class RunAggregate {
   }
 
   optionEnabled(ev: EventDef, index: number): boolean {
-    const s = this.state
-    const opt = ev.options[index]
-    if (!opt) return false
-    if (ev.id === 'EV.06' && index === 1) return s.gold >= 40
-    if (ev.id === 'EV.07' && index === 1) return s.box.some((c) => cardDef(c.defId).rarity === 'blue')
-    if (ev.id === 'EV.07' && index === 2) return s.box.some((c) => cardDef(c.defId).rarity === 'gold')
-    if (ev.id === 'EV.10' && index === 1) {
-      const n = s.box.filter((c) => isNegative(c.defId)).length
-      return s.gold >= n * 25
-    }
-    if (ev.id === 'EV.11' && index === 0) return s.gold >= 30
-    if (ev.id === 'EV.17' && index === 0) return s.box.some((c) => ['blue', 'gold'].includes(cardDef(c.defId).rarity))
-    if (ev.id === 'EV.17' && index === 1) return s.box.filter((c) => cardDef(c.defId).rarity === 'white' && !isNegative(c.defId)).length >= 2
-    if (opt.needsCard && !s.box.length) return false
-    return true
+    return eventOptionEnabled(ev, index, this.state)
   }
 
   private applyEvent(ev: EventDef, index: number, uid?: string, uid2?: string): RunEvent[] {
@@ -496,11 +496,11 @@ export class RunAggregate {
       card.baseBonus += 1
       events.push(...this.addToBox(card.defId, card.baseBonus))
     } else if (ev.id === 'EV.05' && index === 0) {
-      const gold = drawOfRarity(s.rng, s.school, 'gold')
+      const gold = drawExact(s.rng, s.school, 'gold', new Set(), { schoolOnly: true })
       if (gold) events.push(...this.addToBox(gold))
       events.push(...this.addToBox('PC.X02'))
     } else if (ev.id === 'EV.05' && index === 1) {
-      const blue = drawOfRarity(s.rng, s.school, 'blue')
+      const blue = drawExact(s.rng, s.school, 'blue', new Set(), { schoolOnly: true })
       if (blue) events.push(...this.addToBox(blue))
     } else if (ev.id === 'EV.06' && index === 0 && card && !isNegative(card.defId)) {
       const r = cardDef(card.defId).rarity
@@ -511,7 +511,7 @@ export class RunAggregate {
       events.push(...this.payGold(40, 'event'))
       card.baseBonus += 3
     } else if (ev.id === 'EV.07' && card) {
-      if (index === 0 && cardDef(card.defId).rarity === 'white') {
+      if (index === 0 && cardDef(card.defId).rarity === 'white' && !isNegative(card.defId)) {
         events.push(...this.addToBox(card.defId, card.baseBonus))
         events.push(...this.addToBox(card.defId, card.baseBonus))
       } else if (index === 1 && cardDef(card.defId).rarity === 'blue') {
@@ -521,23 +521,40 @@ export class RunAggregate {
         events.push(...this.addToBox(card.defId, card.baseBonus))
       }
     } else if (ev.id === 'EV.09' && index === 0) {
-      const pool = drawPlayerCards(s.rng, s.school, 3).filter((id) => cardDef(id).rarity === 'blue' || cardDef(id).school === s.school)
-      const blues = []
       const taken = new Set<string>()
+      const blues: string[] = []
       for (let i = 0; i < 3; i++) {
-        const id = drawOfRarity(s.rng, s.school, 'blue', taken)
-        if (id) { blues.push(id); taken.add(id) }
+        const id = drawExact(s.rng, s.school, 'blue', taken, { schoolOnly: true })
+        if (!id) break
+        blues.push(id)
+        taken.add(id)
       }
-      s.pendingReward = blues.length ? blues : pool
+      if (!blues.length) return events
+      s.pendingReward = blues
       s.rewardPicked = undefined
+      s.rewardGold = 0
       s.screen = 'reward'
-      events.push({ type: 'run.rewardOffered', pool: [...(s.pendingReward ?? [])], gold: 0, text: '挑选一张蓝卡。' })
+      events.push({ type: 'run.rewardOffered', pool: [...blues], gold: 0, text: '挑选一张本体系蓝卡。' })
       events.push({ type: 'run.screen', screen: 'reward', text: '选择奖励。' })
       return events
     } else if (ev.id === 'EV.09' && index === 1) {
-      const id = drawOne(s.rng, 'neutral', new Set())
-      if (id) events.push(...this.addToBox(id))
       events.push(...this.payGold(-15, 'event'))
+      const taken = new Set<string>()
+      const pool: string[] = []
+      for (let i = 0; i < 3; i++) {
+        const id = drawOne(s.rng, s.school, taken, { neutralsOnly: true })
+        if (!id) break
+        pool.push(id)
+        taken.add(id)
+      }
+      if (!pool.length) return events
+      s.pendingReward = pool
+      s.rewardPicked = undefined
+      s.rewardGold = 15
+      s.screen = 'reward'
+      events.push({ type: 'run.rewardOffered', pool: [...pool], gold: 15, text: '挑选一张中立卡。' })
+      events.push({ type: 'run.screen', screen: 'reward', text: '选择奖励。' })
+      return events
     } else if (ev.id === 'EV.10') {
       const negs = s.box.filter((c) => isNegative(c.defId))
       if (index === 0) {
@@ -552,7 +569,7 @@ export class RunAggregate {
     } else if (ev.id === 'EV.11' && index === 0) {
       events.push(...this.payGold(30, 'event'))
       if (nextFloat(s.rng) < 0.5) {
-        const gold = drawOfRarity(s.rng, s.school, 'gold')
+        const gold = drawExact(s.rng, s.school, 'gold', new Set(), { schoolOnly: true })
         if (gold) events.push(...this.addToBox(gold))
       } else events.push(...this.addToBox('PC.X01'))
     } else if (ev.id === 'EV.14' && index === 0) events.push(...this.changeHp(8, 'event'))
@@ -568,15 +585,15 @@ export class RunAggregate {
     else if (ev.id === 'EV.15' && index === 2) s.shopDiscount = 0.3
     else if (ev.id === 'EV.17' && index === 0 && card && ['blue', 'gold'].includes(cardDef(card.defId).rarity)) {
       this.removeBoxUid(card.uid, events)
-      const a = drawOfRarity(s.rng, s.school, 'white')
-      const b = drawOfRarity(s.rng, s.school, 'white', a ? new Set([a]) : new Set())
+      const a = drawExact(s.rng, s.school, 'white')
+      const b = drawExact(s.rng, s.school, 'white', a ? new Set([a]) : new Set())
       if (a) events.push(...this.addToBox(a))
       if (b) events.push(...this.addToBox(b))
       events.push(...this.payGold(-20, 'event'))
     } else if (ev.id === 'EV.17' && index === 1 && card && card2) {
       this.removeBoxUid(card.uid, events)
       this.removeBoxUid(card2.uid, events)
-      const blue = drawOfRarity(s.rng, s.school, 'blue')
+      const blue = drawExact(s.rng, s.school, 'blue', new Set(), { schoolOnly: true })
       if (blue) events.push(...this.addToBox(blue))
     } else if (ev.id === 'EV.EMPTY') {
       events.push(...this.payGold(-ANCHORS.goldFallback, 'event'))

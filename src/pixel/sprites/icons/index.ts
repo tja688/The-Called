@@ -169,4 +169,28 @@ export const ICONS: Record<string, ShapeIcon> = {
       { c: 'px', pts: [[4, 12], [8, 13]], f: 'leaf' },
     ],
   },
+  vulnerable: {
+    id: 'icon.vulnerable',
+    size: [16, 16],
+    ops: [
+      { c: 'px', pts: [[4, 6], [8, 4], [11, 8], [6, 10], [12, 12], [8, 14]], f: 'gold' },
+      { c: 'line', x1: 5, y1: 5, x2: 12, y2: 13, f: 'redD', w: 1 },
+    ],
+  },
+  protected: {
+    id: 'icon.protected',
+    size: [16, 16],
+    ops: [
+      { c: 'ell', x: 8, y: 9, rx: 5, ry: 6, f: 'gold' },
+      { c: 'px', pts: [[8, 5], [6, 8]], f: 'goldL' },
+    ],
+  },
+  rebirth: {
+    id: 'icon.rebirth',
+    size: [16, 16],
+    ops: [
+      { c: 'px', pts: [[5, 12], [7, 9], [8, 6], [10, 9], [12, 12], [8, 4]], f: 'goldL' },
+      { c: 'px', pts: [[6, 13], [11, 13]], f: 'cream' },
+    ],
+  },
 }

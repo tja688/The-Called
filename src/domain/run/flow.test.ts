@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { RunAggregate } from './RunAggregate'
 import { startRun } from '../../test/helpers'
 import { isRewardable, playerCardIds } from '../../content/cards'
-import { eventsForFloor } from '../../content/events'
+import { eventsForFloor, eventDef, eventOptionEnabled } from '../../content/events'
 import { mapEffectsFor } from '../../content/mapEffects'
-import { rewardableIds } from '../../content/rewards'
+import { rewardableIds, drawExact } from '../../content/rewards'
+import { seedRng } from '../../core/Rng'
 import { toRunView } from '../../application/readmodels/RunView'
 import type { NodeType } from '../types'
 
@@ -76,6 +77,52 @@ describe('事件商店疗养锻造宝箱', () => {
     expect(r.state.gold).toBe(15)
   })
 
+  it('开局没有白卡时 EV.07.A 置灰；本体系蓝不掺中立', () => {
+    const { aggregate: r } = RunAggregate.start(4, 'DK.A')
+    expect(eventOptionEnabled(eventDef('EV.07'), 0, r.state)).toBe(false)
+    const rng = seedRng(1)
+    const id = drawExact(rng, 'SYS.A', 'blue', new Set(), { schoolOnly: true })
+    expect(id).toBeTruthy()
+    expect(id!.startsWith('PC.A')).toBe(true)
+    expect(rewardableIds('SYS.A', 'blue', { schoolOnly: true }).every((x) => x.startsWith('PC.A'))).toBe(true)
+  })
+
+  it('全选项置灰的事件不进抽取，改为空事件', () => {
+    const { aggregate: r } = RunAggregate.start(4, 'DK.A')
+    r.state.seenEvents = eventsForFloor(1).filter((e) => e.id !== 'EV.07').map((e) => e.id)
+    const node = approach(r, 'event')
+    r.enterNode(node.id)
+    expect(r.state.eventId).toBe('EV.EMPTY')
+  })
+
+  it('EV.04.C / EV.11.B 可空手离开；金币不够时 EV.11.A 置灰', () => {
+    const { aggregate: r } = RunAggregate.start(4, 'DK.A')
+    r.state.screen = 'event'
+    r.state.eventId = 'EV.04'
+    r.eventOption(2)
+    expect(r.state.eventChosen).toBe(2)
+
+    const { aggregate: r2 } = RunAggregate.start(4, 'DK.A')
+    r2.state.screen = 'event'
+    r2.state.eventId = 'EV.11'
+    r2.state.gold = 0
+    expect(eventOptionEnabled(eventDef('EV.11'), 0, r2.state)).toBe(false)
+    expect(eventOptionEnabled(eventDef('EV.11'), 1, r2.state)).toBe(true)
+    r2.eventOption(1)
+    expect(r2.state.gold).toBe(0)
+  })
+
+  it('EV.09.B 从三张中立里挑并给 15 金', () => {
+    const { aggregate: r } = RunAggregate.start(4, 'DK.A')
+    r.state.screen = 'event'
+    r.state.eventId = 'EV.09'
+    r.eventOption(1)
+    expect(r.state.gold).toBe(15)
+    expect(r.state.screen).toBe('reward')
+    expect(r.state.pendingReward).toHaveLength(3)
+    expect(r.state.pendingReward!.every((id) => id.startsWith('PC.N'))).toBe(true)
+  })
+
   it('商店陈列 5 张、可买可复制可空手离开再进', () => {
     const { aggregate: r } = RunAggregate.start(6, 'DK.A')
     r.state.gold = 400
@@ -92,6 +139,17 @@ describe('事件商店疗养锻造宝箱', () => {
     r.returnToMap()
     r.enterNode(node.id)
     expect(r.state.screen).toBe('shop')
+  })
+
+  it('商店读模型价格含 EV.15 折扣', () => {
+    const { aggregate: r } = RunAggregate.start(6, 'DK.A')
+    const node = approach(r, 'shop')
+    r.enterNode(node.id)
+    const full = node.shop!.offers[0].price
+    r.state.shopDiscount = 0.3
+    const view = toRunView(r.state, r.availableNodes())
+    expect(view.shop!.offers[0].price).toBe(Math.max(1, Math.round(full * 0.7)))
+    expect(view.shop!.copyPrice).toBe(Math.max(1, Math.round(45 * 0.7)))
   })
 
   it('宝箱已有遗物则 15 金；随机遗物不重复', () => {

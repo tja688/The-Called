@@ -20,7 +20,31 @@ export interface TextOpt {
 export const FONT_STACK = '"Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif'
 export const FONT_ROUND = '"Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif'
 
-interface Cmd { x: number; y: number; fn: (g: CanvasRenderingContext2D) => void }
+export interface TextBox { x: number; y: number; w: number; h: number }
+
+/** 按 align / baseline 把锚点换成左上角包围盒。 */
+export function textBox(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  align: CanvasTextAlign = 'left',
+  baseline: CanvasTextBaseline = 'top',
+): TextBox {
+  let bx = x
+  if (align === 'center') bx = x - w / 2
+  else if (align === 'right') bx = x - w
+  let by = y
+  if (baseline === 'middle') by = y - h / 2
+  else if (baseline === 'bottom' || baseline === 'alphabetic') by = y - h
+  return { x: bx, y: by, w, h }
+}
+
+export function rectsOverlap(a: TextBox, b: TextBox): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+}
+
+interface Cmd extends TextBox { fn: (g: CanvasRenderingContext2D) => void }
 
 export class TextLayer {
   private cmds: Cmd[] = []
@@ -83,17 +107,21 @@ export class TextLayer {
   draw(str: string, x: number, y: number, opt: TextOpt = {}): void {
     if (!str) return
     const s = this.scale
-    this.cmds.push({ x, y, fn: (g) => {
+    let size = opt.size ?? 12
+    let width = this.measure(str, size, opt.bold)
+    if (opt.maxWidth && width > opt.maxWidth) {
+      size = Math.max(7, size * (opt.maxWidth / width))
+      width = this.measure(str, size, opt.bold)
+    }
+    const pad = opt.stroke ? (opt.strokeWidth ?? 2) : 0
+    const box = textBox(x, y, width, size * 1.2, opt.align, opt.baseline)
+    box.x -= pad
+    box.y -= pad * 0.5
+    box.w += pad * 2
+    box.h += pad
+    this.cmds.push({ ...box, fn: (g) => {
       g.save()
-      let size = opt.size ?? 12
       g.font = this.font(size, opt.bold, opt.font)
-      if (opt.maxWidth) {
-        const w = g.measureText(str).width / s
-        if (w > opt.maxWidth) {
-          size = Math.max(7, size * (opt.maxWidth / w))
-          g.font = this.font(size, opt.bold, opt.font)
-        }
-      }
       g.textAlign = opt.align ?? 'left'
       g.textBaseline = opt.baseline ?? 'top'
       if (opt.alpha !== undefined) g.globalAlpha = opt.alpha
@@ -111,21 +139,21 @@ export class TextLayer {
       g.fillStyle = opt.color ?? '#f5e6c8'
       g.fillText(str, px, py)
       if (this.debug) {
-        const w = g.measureText(str).width
         g.strokeStyle = 'rgba(255,0,255,0.6)'
         g.lineWidth = 1
-        g.strokeRect(px - (opt.align === 'center' ? w / 2 : opt.align === 'right' ? w : 0), py, w, size * s)
+        g.strokeRect(Math.round(box.x * s), Math.round(box.y * s), Math.round(box.w * s), Math.round(box.h * s))
       }
       g.restore()
     } })
   }
 
   /**
-   * 遮挡：丢掉锚点落在矩形内的、已排队的文字命令。像素层的面板 / 对话框盖住下面元素时调用，
-   * 否则下层文字会透过面板显示（文字层永远在最上）。
+   * 遮挡：丢掉包围盒与矩形相交的已排队文字。像素层的面板 / 检视 / 对话框盖住下面元素时调用，
+   * 否则下层文字会透过面板显示（文字层永远在最上）。按字形盒而不是锚点判断，避免居中文字漏网。
    */
   occlude(x: number, y: number, w: number, h: number): void {
-    this.cmds = this.cmds.filter((c) => !(c.x >= x && c.x < x + w && c.y >= y && c.y < y + h))
+    const cover = { x, y, w, h }
+    this.cmds = this.cmds.filter((c) => !rectsOverlap(c, cover))
   }
   occludeAll(): void { this.cmds.length = 0 }
 

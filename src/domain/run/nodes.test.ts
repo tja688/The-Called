@@ -19,7 +19,7 @@ describe('节点与遗物', () => {
     expect(r2.state.hpMax).toBe(max + 2)
   })
 
-  it('锻造 +2 或重铸；化身不在卡盒', () => {
+  it('锻造 +2 或重铸；化身不在卡盒；基础卡不能重铸', () => {
     const { aggregate: r } = RunAggregate.start(1, 'DK.A')
     r.state.screen = 'forge'
     const uid = r.state.box[0].uid
@@ -28,6 +28,8 @@ describe('节点与遗物', () => {
     r.state.flowChosen = false
     r.forgeBuff(uid)
     expect(r.state.box[0].baseBonus).toBe(4)
+    r.state.flowChosen = false
+    expect(() => r.forgeRecast(uid)).toThrow(/基础卡/)
     r.state.box.push({ uid: 'bw', defId: 'PC.A04', baseBonus: 0 })
     r.state.flowChosen = false
     r.forgeRecast('bw')
