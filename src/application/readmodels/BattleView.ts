@@ -1,6 +1,6 @@
 import { cardDef } from '../../content/cards'
 import { isCorner, type Cell, CELLS } from '../../domain/geometry'
-import { currentPoints, finalPoints, avatarCostOf } from '../../domain/battle/points'
+import { currentPoints, finalPoints, avatarCostOf, isLeading } from '../../domain/battle/points'
 import { avatarOf, cardAt, type BattleState } from '../../domain/battle/state'
 import type { BattlePhase, CardKind, CardStatus, Side, Zone } from '../../domain/types'
 import type { BattleResult } from '../../domain/battle/state'
@@ -95,7 +95,7 @@ export function toBattleView(
     resA: state.resA,
     playerFinal: finalPoints(state, 'player'),
     enemyFinal: finalPoints(state, 'enemy'),
-    leading: finalPoints(state, 'player') > finalPoints(state, 'enemy'),
+    leading: isLeading(state),
     turn: state.turn,
     opening: state.opening,
     phase: state.phase,

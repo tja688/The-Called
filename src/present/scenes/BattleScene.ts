@@ -73,10 +73,6 @@ const DRAW_PACE = 1.2
 function pileCenter(r: { x: number; y: number; w: number; h: number }) {
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 }
 }
-function tableOf(id: string) {
-  return roomOfEncounter(id)
-}
-
 export class BattleScene extends Scene {
   readonly name = 'battle' as const
   private actors = new Map<string, Actor>()
@@ -114,7 +110,7 @@ export class BattleScene extends Scene {
     if (!v) return
     this.encounterId = v.encounterId
     this.scenery = new Scenery(roomOfEncounter(v.encounterId))
-    this.table = bakeTable(tableOf(v.encounterId))
+    this.table = bakeTable(roomOfEncounter(v.encounterId))
     this.wound = v.avatar.avatarCost
     this.mana = v.occupy
     this.manaCap = v.occupyCap
@@ -289,7 +285,7 @@ export class BattleScene extends Scene {
   private async onStart(ev: BE<'battle.started'>): Promise<void> {
     this.encounterId = ev.encounterId
     this.scenery = new Scenery(roomOfEncounter(ev.encounterId))
-    this.table = bakeTable(tableOf(ev.encounterId))
+    this.table = bakeTable(roomOfEncounter(ev.encounterId))
     this.pendingSetup = ev.setup.map((s) => ({ ...s }))
     this.usedActive = false
     this.beatLanded = false

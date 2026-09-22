@@ -5,12 +5,13 @@ import { eventDef, eventsForFloor, EVENT_WEIGHT, eventOptionEnabled, eventCardEl
 import { mapEffectsFor } from '../../content/mapEffects'
 import { poolFor } from '../../content/encounters'
 import { relicDef, relicPool } from '../../content/relics'
-import { drawExact, drawOne, drawPlayerCards, recastPool, shopPrice, type DrawRarity } from '../../content/rewards'
-import { hashString, nextFloat, pick, seedRng, type RngState } from '../../core/Rng'
+import { drawOne, drawPlayerCards, recastPool, shopPrice, type DrawRarity } from '../../content/rewards'
+import { hashString, pick, seedRng, type RngState } from '../../core/Rng'
 import type { BattleResult } from '../battle/state'
-import type { Coord, DeckId, NodeType, RunResult, SchoolId, Screen } from '../types'
+import type { Coord, DeckId, FloorId, NodeType, RunResult, SchoolId, Screen } from '../types'
 import { manhattan } from '../types'
 import type { RunEvent } from './events'
+import { runEventSteps } from './eventSteps'
 import { HUB_ID, adjacentNodes, generateFloor, nodeOpensContent, revealAround, type MapNode, type ShopStock } from './mapgen'
 
 export interface BoxCard {
@@ -35,7 +36,7 @@ export interface RunState {
   nextUid: number
   copyBuys: number
   shopDiscount: number
-  floor: 1
+  floor: FloorId
   floorEffect: string
   player: Coord
   nodes: MapNode[]
@@ -76,7 +77,8 @@ export class RunAggregate {
     const start = startingDeck(deckId)
     const rng = seedRng(seed)
     const { nodes, origin } = generateFloor(rng)
-    const fx = pick(rng, mapEffectsFor(1)).id
+    const floor: FloorId = 1
+    const fx = pick(rng, mapEffectsFor(floor)).id
     const box: BoxCard[] = start.cards.map((defId, i) => ({ uid: `b${i + 1}`, defId, baseBonus: 0 }))
     const state: RunState = {
       seed,
@@ -94,7 +96,7 @@ export class RunAggregate {
       nextUid: box.length + 1,
       copyBuys: 0,
       shopDiscount: 0,
-      floor: 1,
+      floor,
       floorEffect: fx,
       player: origin,
       nodes,
@@ -116,10 +118,6 @@ export class RunAggregate {
       { type: 'run.screen', screen: 'map', text: '回到地图。' },
     ]
     return { aggregate: new RunAggregate(state), events }
-  }
-
-  static fromState(state: RunState): RunAggregate {
-    return new RunAggregate(structuredClone(state))
   }
 
   availableNodes(): string[] {
@@ -229,7 +227,7 @@ export class RunAggregate {
     const ev = eventDef(s.eventId)
     const opt = ev.options[index]
     if (!opt) throw new Error('没有这个选项')
-    if (!this.optionEnabled(ev, opt.index)) throw new Error('选项条件不满足')
+    if (!eventOptionEnabled(ev, opt.index, s)) throw new Error('选项条件不满足')
     if (opt.needsCard) {
       if (!cardUid) throw new Error('必须指定卡盒里的卡')
       const picked = s.box.find((c) => c.uid === cardUid)
@@ -241,7 +239,39 @@ export class RunAggregate {
       if (!picked2 || picked2.uid === cardUid || !eventCardEligible(ev, index, picked2.defId)) throw new Error('不能选这张卡')
     }
     s.eventChosen = index
-    return this.applyEvent(ev, index, cardUid, cardUid2)
+    const card = cardUid ? s.box.find((c) => c.uid === cardUid) : undefined
+    const events: RunEvent[] = []
+    const halt = runEventSteps(opt.steps, {
+      rng: s.rng,
+      school: s.school,
+      box: s.box,
+      hpMax: s.hpMax,
+      payGold: (amount, reason) => this.payGold(amount, reason),
+      changeHp: (delta, reason) => this.changeHp(delta, reason),
+      addToBox: (defId, baseBonus) => this.addToBox(defId, baseBonus),
+      removeBoxUid: (uid, out) => this.removeBoxUid(uid, out),
+      grantRelicOrGold: () => this.grantRelicOrGold(),
+      grantRandomNegative: () => this.grantRandomNegative(),
+      beginEventBattle: () => this.beginEventBattle(),
+      offerReward: (pool, text) => {
+        s.pendingReward = pool
+        s.rewardPicked = undefined
+        s.rewardGold = 0
+        s.screen = 'reward'
+        return [
+          { type: 'run.rewardOffered', pool: [...pool], gold: 0, text },
+          { type: 'run.screen', screen: 'reward', text: '选择奖励。' },
+        ]
+      },
+      bumpNonNegative: (n) => {
+        for (const c of s.box) if (!isNegative(c.defId)) c.baseBonus += n
+      },
+      setShopDiscount: (rate) => { s.shopDiscount = rate },
+    }, card, events)
+    if (halt) return events
+    events.push({ type: 'run.eventOffered', eventId: ev.id, text: `选了「${ev.options[index].label}」。` })
+    if (s.hp <= 0) return events.concat(this.end('defeat', '血条归零'))
+    return events
   }
 
   rewardPick(cardId: string): RunEvent[] {
@@ -447,7 +477,7 @@ export class RunAggregate {
     const s = this.state
     const tier = node.type === 'boss' ? 'boss' : node.type === 'elite' ? 'elite' : 'normal'
     if (!node.monsterId || node.lost) {
-      const pool = poolFor(tier, 1)
+      const pool = poolFor(tier, s.floor)
       node.monsterId = pick(s.rng, pool).id
     }
     s.pendingEncounter = node.monsterId
@@ -476,7 +506,7 @@ export class RunAggregate {
 
   private drawEvent(): EventDef {
     const s = this.state
-    const pool = eventsForFloor(1).filter((e) =>
+    const pool = eventsForFloor(s.floor).filter((e) =>
       !s.seenEvents.includes(e.id)
       && (!e.needNegative || s.box.some((c) => isNegative(c.defId)))
       && e.options.some((o) => eventOptionEnabled(e, o.index, s)),
@@ -487,120 +517,6 @@ export class RunAggregate {
       for (let i = 0; i < EVENT_WEIGHT[e.weight]; i++) weighted.push(e)
     }
     return pick(s.rng, weighted)
-  }
-
-  optionEnabled(ev: EventDef, index: number): boolean {
-    return eventOptionEnabled(ev, index, this.state)
-  }
-
-  private applyEvent(ev: EventDef, index: number, uid?: string, _uid2?: string): RunEvent[] {
-    const s = this.state
-    const events: RunEvent[] = []
-    const card = uid ? s.box.find((c) => c.uid === uid) : undefined
-
-    if (ev.id === 'EV.01' && index === 0) events.push(...this.payGold(-30, 'event'))
-    else if (ev.id === 'EV.01' && index === 1) {
-      events.push(...this.grantRelicOrGold())
-      events.push(...this.changeHp(-5, 'event'))
-    } else if (ev.id === 'EV.02' && index === 0) {
-      events.push(...this.changeHp(Math.ceil(s.hpMax * 0.3), 'event'))
-    } else if (ev.id === 'EV.02' && index === 1) {
-      if (nextFloat(s.rng) < 0.5) events.push(...this.payGold(-80, 'event'))
-      else events.push(...this.changeHp(-6, 'event'))
-    } else if (ev.id === 'EV.03' && index === 0) {
-      events.push(...this.payGold(-25, 'event'))
-    } else if (ev.id === 'EV.03' && index === 1) {
-      const gold = drawExact(s.rng, s.school, 'gold')
-      if (gold) events.push(...this.addToBox(gold))
-      events.push(...this.grantRandomNegative())
-    } else if (ev.id === 'EV.04' && index === 0 && card && isNegative(card.defId)) {
-      this.removeBoxUid(card.uid, events)
-    } else if (ev.id === 'EV.04' && index === 1 && card) {
-      card.baseBonus += 1
-      events.push(...this.addToBox(card.defId, card.baseBonus))
-    } else if (ev.id === 'EV.05' && index === 0) {
-      const gold = drawExact(s.rng, s.school, 'gold')
-      if (gold) events.push(...this.addToBox(gold))
-    } else if (ev.id === 'EV.05' && index === 1) {
-      const blue = drawExact(s.rng, s.school, 'blue')
-      if (blue) events.push(...this.addToBox(blue))
-    } else if (ev.id === 'EV.06' && index === 0 && card && !isNegative(card.defId)) {
-      const r = cardDef(card.defId).rarity
-      const gold = r === 'gold' ? 45 : r === 'blue' ? 25 : 15
-      this.removeBoxUid(card.uid, events)
-      events.push(...this.payGold(-gold, 'event'))
-    } else if (ev.id === 'EV.06' && index === 1 && card) {
-      events.push(...this.payGold(40, 'event'))
-      card.baseBonus += 3
-    } else if (ev.id === 'EV.09' && index === 0) {
-      const taken = new Set<string>()
-      const blues: string[] = []
-      for (let i = 0; i < 3; i++) {
-        const id = drawExact(s.rng, s.school, 'blue', taken)
-        if (!id) break
-        blues.push(id)
-        taken.add(id)
-      }
-      if (!blues.length) return events
-      s.pendingReward = blues
-      s.rewardPicked = undefined
-      s.rewardGold = 0
-      s.screen = 'reward'
-      events.push({ type: 'run.rewardOffered', pool: [...blues], gold: 0, text: '挑选一张蓝卡。' })
-      events.push({ type: 'run.screen', screen: 'reward', text: '选择奖励。' })
-      return events
-    } else if (ev.id === 'EV.09' && index === 1) {
-      const taken = new Set<string>()
-      const pool: string[] = []
-      for (let i = 0; i < 3; i++) {
-        const id = drawOne(s.rng, s.school, taken, { neutralsOnly: true })
-        if (!id) break
-        pool.push(id)
-        taken.add(id)
-      }
-      if (!pool.length) return events
-      s.pendingReward = pool
-      s.rewardPicked = undefined
-      s.rewardGold = 0
-      s.screen = 'reward'
-      events.push({ type: 'run.rewardOffered', pool: [...pool], gold: 0, text: '挑选一张中立卡。' })
-      events.push({ type: 'run.screen', screen: 'reward', text: '选择奖励。' })
-      return events
-    } else if (ev.id === 'EV.10') {
-      const negs = s.box.filter((c) => isNegative(c.defId))
-      if (index === 0) {
-        events.push(...this.changeHp(-3 * negs.length, 'event'))
-        for (const c of negs) this.removeBoxUid(c.uid, events)
-      } else if (index === 1) {
-        events.push(...this.payGold(25 * negs.length, 'event'))
-        for (const c of negs) this.removeBoxUid(c.uid, events)
-      } else {
-        events.push(...this.grantRandomNegative())
-        events.push(...this.payGold(-20, 'event'))
-      }
-    } else if (ev.id === 'EV.11' && index === 0) {
-      events.push(...this.payGold(30, 'event'))
-      const rarity = nextFloat(s.rng) < 0.5 ? 'gold' : 'white'
-      const id = drawExact(s.rng, s.school, rarity)
-      if (id) events.push(...this.addToBox(id))
-    } else if (ev.id === 'EV.13' && index === 0 && s.box.length <= 12) {
-      for (const c of s.box) if (!isNegative(c.defId)) c.baseBonus += 1
-    } else if (ev.id === 'EV.13' && index === 1 && s.box.length >= 18) {
-      events.push(...this.grantRelicOrGold())
-      events.push(...this.payGold(-30, 'event'))
-    } else if (ev.id === 'EV.15' && index === 0) events.push(...this.payGold(-45, 'event'))
-    else if (ev.id === 'EV.15' && index === 1) {
-      events.push(...this.grantRelicOrGold())
-      events.push(...this.grantRandomNegative())
-    } else if (ev.id === 'EV.15' && index === 2) s.shopDiscount = 0.3
-    else if (ev.id === 'EV.16' && index === 0) return events.concat(this.beginEventBattle())
-    else if (ev.id === 'EV.EMPTY') {
-      events.push(...this.payGold(-ANCHORS.goldFallback, 'event'))
-    }
-
-    events.push({ type: 'run.eventOffered', eventId: ev.id, text: `选了「${ev.options[index].label}」。` })
-    if (s.hp <= 0) return events.concat(this.end('defeat', '血条归零'))
-    return events
   }
 
   private enterShop(node: MapNode): RunEvent[] {
@@ -707,7 +623,7 @@ export class RunAggregate {
 
   private beginEventBattle(): RunEvent[] {
     const s = this.state
-    const enc = pick(s.rng, poolFor('normal', 1))
+    const enc = pick(s.rng, poolFor('normal', s.floor))
     s.pendingEncounter = enc.id
     s.eventFight = true
     s.screen = 'battle'

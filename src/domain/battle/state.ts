@@ -91,7 +91,3 @@ export function cardAt(state: BattleState, cell: number): CardInst | undefined {
 export function isGone(card: CardInst): boolean {
   return card.zone === 'gone'
 }
-
-export function playerDiscard(state: BattleState): CardInst[] {
-  return state.discard.map((id) => state.cards[id])
-}

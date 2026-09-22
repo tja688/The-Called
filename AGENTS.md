@@ -37,6 +37,12 @@
 
 ## 代码规则
 
-规则只通过 `GameService` 的 `dispatch` / `ask` / `on`。`present` 和 `pixel` 只消费事件，不改判定。
+- 规则只通过 `GameService` 的 `dispatch` / `ask` / `on`。`present` 和 `pixel` 只消费事件，不改判定。
 
-改接缝先改 `src/application/commands.ts`、`queries.ts`、事件联合和 [`docs/6-开发交接/表现层接缝.md`](docs/6-开发交接/表现层接缝.md)，四处一起动。`npm run sim -- --compare` 必须和第 1 层新基线逐位一致。残响不进默认测试门。
+- 改接缝先改 `src/application/commands.ts`、`queries.ts`、事件联合和 [`docs/6-开发交接/表现层接缝.md`](docs/6-开发交接/表现层接缝.md)，四处一起动。`npm run sim -- --compare` 必须和第 1 层新基线逐位一致。残响不进默认测试门。
+
+- Tautological tests considered harmful.  
+
+- Change-detector tests considered harmful.  
+
+- Do not create regression tests for bug fixes without a genuine gap in behavior testing.

@@ -6,7 +6,7 @@ import { ASSETS } from '../assets'
 import { bake, bakeRows, drawSprite, type SpriteDef, type Rows } from '../dsl'
 import { PAL, MASTER } from '../palette'
 import { lintSprite } from '../lint'
-import { Scenery, SCENE_SETS, GROUND_Y } from '../scenery'
+import { Scenery, GROUND_Y } from '../scenery'
 import { bakeTable } from '../terrain'
 import { content } from '../../content'
 

@@ -10,18 +10,6 @@ type G = CanvasRenderingContext2D
 
 export type MenuIcon = 'start' | 'settings' | 'help' | 'quit'
 
-function fillDisc(g: G, cx: number, cy: number, r: number, color: string): void {
-  g.fillStyle = color
-  const R = Math.round(r)
-  const x0 = Math.round(cx)
-  const y0 = Math.round(cy)
-  for (let dy = -R; dy <= R; dy++) {
-    const span = Math.round(Math.sqrt(Math.max(0, R * R - dy * dy)))
-    if (span <= 0) continue
-    g.fillRect(x0 - span, y0 + dy, span * 2, 1)
-  }
-}
-
 /** 锈门门缝里漏下来的暖光。画在 world 上，暗角之前。 */
 export function paintGateShaft(g: G, t: number): void {
   g.save()
@@ -52,21 +40,6 @@ export function paintMenuLights(g: G, t: number, glowAt?: { x: number; y: number
   if (glowAt) glow(g, glowAt.x, glowAt.y, 28, PAL.lamp1, 0.45 + 0.15 * Math.sin(t * 3.4), false)
   steam(g, t, 230, 250, 170, 150, 12, PAL.lamp1, 4)
   steam(g, t * 0.8, 40, 150, 24, 80, 4, PAL.fog, 9)
-}
-
-/** 火漆印，压在标题旁边。 */
-export function paintWaxSeal(g: G, cx: number, cy: number, t: number): void {
-  const y = cy + Math.round(Math.sin(t * 1.6) * 1)
-  fillDisc(g, cx + 1, y + 2, 23, rgba(PAL.ink, 0.55))
-  fillDisc(g, cx, y, 22, PAL.redD)
-  fillDisc(g, cx, y - 1, 16, PAL.lamp3)
-  g.fillStyle = PAL.redD
-  g.fillRect(cx - 4, y + 16, 8, 5)
-  g.fillRect(cx - 2, y + 20, 5, 4)
-  g.fillStyle = rgba(PAL.goldL, 0.85)
-  g.fillRect(cx - 10, y - 8, 4, 1)
-  g.fillRect(cx + 6, y + 5, 5, 1)
-  g.fillRect(cx - 2, y - 12, 3, 1)
 }
 
 /** 当前项左侧的指示箭头，左右轻晃。 */

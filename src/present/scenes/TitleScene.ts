@@ -188,7 +188,6 @@ export class TitleScene extends Scene {
 
   update(dt: number): void {
     this.t += dt
-    this.scenery.update(dt)
     const hover = this.app.input.hover
     if (this.deckArm > 0) this.deckArm = Math.max(0, this.deckArm - dt)
     if (this.confirmArm > 0) this.confirmArm = Math.max(0, this.confirmArm - dt)

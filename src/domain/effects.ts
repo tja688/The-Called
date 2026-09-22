@@ -92,20 +92,3 @@ export type AuraKind =
   | { aura: 'perAdjacentOpponent'; n: number }
   | { aura: 'fence' }
   | { aura: 'blockMarkedMove' }
-
-export function needsChosen(effects: CardEffect[]): boolean {
-  return effects.some((e) =>
-    e.ops.some((op) => opNeedsChosen(op)),
-  )
-}
-
-function opNeedsChosen(op: Op): boolean {
-  if ('sel' in op && (op.sel === 'chosen' || op.sel === 'chosen2')) return true
-  if (op.op === 'discardToHand' || op.op === 'spawnHalfCopy' || op.op === 'swapChosen' || op.op === 'resetChosen' || op.op === 'moveChosenAdjacent' || op.op === 'transferMark' || op.op === 'markOrDraw') {
-    return true
-  }
-  if (op.op === 'ifResAtLeast' || op.op === 'ifDeckAtMost' || op.op === 'ifAdjacentMarked' || op.op === 'ifCorner') {
-    return [...('then' in op ? op.then : []), ...('else' in op ? op.else ?? [] : [])].some(opNeedsChosen)
-  }
-  return false
-}

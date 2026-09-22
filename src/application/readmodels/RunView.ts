@@ -118,7 +118,11 @@ export function toRunView(state: RunState, availableNodes: string[]): RunView {
           eventId: ev.id,
           name: ev.name,
           options: ev.options.map((o) => ({
-            ...o,
+            index: o.index,
+            label: o.label,
+            text: o.text,
+            needsCard: o.needsCard,
+            needsCard2: o.needsCard2,
             enabled: eventOptionEnabled(ev, o.index, state),
           })),
           chosen: state.eventChosen,

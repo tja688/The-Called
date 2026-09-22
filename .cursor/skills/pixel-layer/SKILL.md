@@ -37,7 +37,7 @@ description: >-
 | 调试 | `?scale=2` `?raf=timeout` `?debugText=1` |
 
 - 像素层：整数像素、有限色板、无抗锯齿、无抖动。
-- 光效（`light.ts` / `sky.ts`）允许渐变与半透明；角色精灵不允许。
+- 光效（`light.ts`）允许渐变与半透明。角色精灵不允许。
 - 新资产写 `src/pixel/sprites/`。角色 / 表情走 ASCII；图标 / 卡面 / 道具走 `ShapeIcon`。
 - 格式见 [dsl.md](dsl.md)。生成时色值必须 ∈ `MASTER`，不要换成 mulfok32。
 

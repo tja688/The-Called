@@ -1,6 +1,6 @@
 /**
- * 光效层：灯笼 glow / 点光 / 江面碎光 / 雾 / 萤火 / 暮色洗 / 暗角。
- * 规则：光效可以用渐变与半透明；角色层不可以。所有函数直接画到给定 ctx（一般是 world）。
+ * 光效层：灯笼 glow、暮色洗、暗角、热气、闪白。
+ * 光效可以用渐变与半透明。角色层不可以。函数直接画到给定 ctx。
  */
 import { PAL, rgba } from './palette'
 import { makeCanvas } from './dsl'
@@ -32,71 +32,6 @@ export function glow(g: G, x: number, y: number, r: number, hex: string = PAL.la
   g.drawImage(glowSprite(r, hex), Math.round(x - r), Math.round(y - r))
   g.restore()
   if (core) { g.fillStyle = PAL.lamp1; g.fillRect(Math.round(x), Math.round(y), 1, 1) }
-}
-
-/** 江面碎光：n 个 1×1 screen 点正弦漂移 */
-export function shimmer(g: G, t: number, x0: number, y0: number, w: number, h: number, n = 26, seed = 7, hex: string = PAL.river3): void {
-  let s = seed
-  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff }
-  g.save()
-  g.globalCompositeOperation = 'screen'
-  for (let i = 0; i < n; i++) {
-    const bx = rnd() * w, by = rnd() * h, ph = rnd() * 6.28, sp = 0.6 + rnd()
-    const x = x0 + ((bx + Math.sin(t * sp + ph) * 6 + t * 8) % w + w) % w
-    const y = y0 + by + Math.sin(t * 1.3 + ph) * 1
-    const a = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 2.2 + ph))
-    g.globalAlpha = a
-    g.fillStyle = hex
-    g.fillRect(Math.round(x), Math.round(y), 2, 1)
-  }
-  g.restore()
-}
-
-/** 萤火：3×3 暗核 + 1×1 亮点 */
-export function fireflies(g: G, t: number, x0: number, y0: number, w: number, h: number, n = 10, seed = 3): void {
-  let s = seed
-  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff }
-  for (let i = 0; i < n; i++) {
-    const bx = rnd() * w, by = rnd() * h, ph = rnd() * 6.28, sp = 0.3 + rnd() * 0.5
-    const x = x0 + bx + Math.sin(t * sp + ph) * 14
-    const y = y0 + by + Math.cos(t * sp * 0.7 + ph) * 8
-    const a = Math.max(0, Math.sin(t * 1.7 + ph * 3))
-    if (a < 0.05) continue
-    glow(g, x, y, 5, PAL.leafL, a * 0.8)
-  }
-}
-
-const fogCache = new Map<number, HTMLCanvasElement>()
-function fogBlob(w: number): HTMLCanvasElement {
-  let c = fogCache.get(w)
-  if (c) return c
-  const h = Math.round(w * 0.45)
-  const m = makeCanvas(w, h)
-  const grad = m.g.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, w / 2)
-  grad.addColorStop(0, rgba(PAL.fog, 0.55))
-  grad.addColorStop(1, rgba(PAL.fog, 0))
-  m.g.fillStyle = grad
-  m.g.save(); m.g.scale(1, h / w); m.g.fillRect(0, 0, w, w); m.g.restore()
-  c = m.c
-  fogCache.set(w, c)
-  return c
-}
-
-/** 雾：预烘焙椭圆 blob 横向滚动 */
-export function fog(g: G, t: number, y: number, density = 0.4, speed = 6, seed = 11, w = 640): void {
-  let s = seed
-  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff }
-  g.save()
-  g.globalAlpha = density
-  const n = 7
-  for (let i = 0; i < n; i++) {
-    const bw = 120 + Math.floor(rnd() * 140)
-    const blob = fogBlob(bw)
-    const bx = rnd() * (w + bw), by = y + (rnd() - 0.5) * 40, sp = speed * (0.5 + rnd())
-    const x = (((bx + t * sp) % (w + bw)) + (w + bw)) % (w + bw) - bw
-    g.drawImage(blob, Math.round(x), Math.round(by))
-  }
-  g.restore()
 }
 
 /** 全屏暮色洗 */
@@ -135,17 +70,6 @@ export function vignette(g: G, alpha = 0.35, w = 640, h = 360): void {
   g.save()
   g.globalAlpha = alpha
   g.drawImage(vignetteCache, 0, 0)
-  g.restore()
-}
-
-/** 简易 bloom：把一张源图半分辩率模糊后 lighter 回贴 */
-export function bloom(g: G, src: HTMLCanvasElement, alpha = 0.3): void {
-  g.save()
-  g.globalCompositeOperation = 'lighter'
-  g.globalAlpha = alpha
-  g.filter = 'blur(3px)'
-  g.drawImage(src, 0, 0)
-  g.filter = 'none'
   g.restore()
 }
 

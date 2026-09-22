@@ -1,9 +1,9 @@
 import { ANCHORS } from '../../content/anchors'
 import { cardDef, cardName } from '../../content/cards'
 import { encounterDef } from '../../content/encounters'
-import { seedRng, nextInt, shuffle, type RngState } from '../../core/Rng'
+import { seedRng, nextInt, shuffle } from '../../core/Rng'
 import type { CardEffect, Op, Sel, Amt, Timing } from '../effects'
-import { ADJACENT, CELLS, MIRROR, cellCol, cellRow, isCell, isCorner, type Cell } from '../geometry'
+import { ADJACENT, CELLS, MIRROR, cellCol, cellRow, isCorner, type Cell } from '../geometry'
 import { isBodyKind, type RemoveReason, type RemoveTo, type Side } from '../types'
 import type { BattleEvent, Cause, PointsSource } from './events'
 import { auraContributions, avatarCostOf, currentPoints, fenceBlocks, finalPoints, isLeading, mapShare, markedMoveBlocked } from './points'
@@ -183,10 +183,6 @@ export class BattleAggregate {
     const agg = new BattleAggregate(structuredClone(state))
     agg.rememberPoints()
     return agg
-  }
-
-  viewPoints(): { player: number; enemy: number } {
-    return { player: finalPoints(this.state, 'player'), enemy: finalPoints(this.state, 'enemy') }
   }
 
   mustPlaceAvatar(): boolean {
@@ -508,7 +504,7 @@ export class BattleAggregate {
       return boardCards(s).filter((c) => card.defId === 'PC.A02' || card.defId === 'PC.A14' ? c.owner === 'enemy' : true).map((c) => c.id)
     }
     if (card.defId === 'PC.B03') return boardCards(s).filter((c) => c.kind === 'occupy').map((c) => c.id)
-    if (card.defId === 'PC.C02' || card.defId === 'PC.N07') return boardCards(s).map((c) => c.id)
+    if (card.defId === 'PC.C02') return boardCards(s).map((c) => c.id)
     if (card.defId === 'PC.C05') return boardCards(s).filter((c) => c.owner === 'player').map((c) => c.id)
     if (card.defId === 'PC.C13') return boardCards(s).filter((c) => c.owner === 'player' && !c.isAvatar).map((c) => c.id)
     if (def.effects.some((e) => e.ops.some((op) => op.op === 'discardToHand'))) return [...s.discard]
@@ -1465,12 +1461,4 @@ export class BattleAggregate {
       this.lastCurrent.set(card.id, now)
     }
   }
-}
-
-export function cloneRng(r: RngState): RngState {
-  return { s: r.s }
-}
-
-export function isPlayCell(n: number): n is Cell {
-  return isCell(n)
 }

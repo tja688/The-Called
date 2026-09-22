@@ -12,34 +12,6 @@ export type RoomKey =
   | 'gate' | 'foyer' | 'corridor' | 'side' | 'nest' | 'slime' | 'boss'
   | 'shop' | 'well' | 'forge' | 'chest' | 'event'
 
-export const SCENE_SETS: Record<string, RoomKey> = {
-  title: 'gate',
-  gate: 'gate',
-  foyer: 'foyer',
-  corridor: 'corridor',
-  side: 'side',
-  nest: 'nest',
-  slime: 'slime',
-  boss: 'boss',
-  shop: 'shop',
-  well: 'well',
-  forge: 'forge',
-  chest: 'chest',
-  event: 'event',
-  l1_street: 'corridor',
-  l1_shop: 'shop',
-  l1_dock: 'gate',
-  l1_hotpot: 'foyer',
-  l2_steps: 'corridor',
-  l2_shop: 'shop',
-  l2_view: 'side',
-  l2_cable: 'corridor',
-  l3_top: 'boss',
-  l3_shop: 'shop',
-  l3_fog: 'nest',
-  l3_hall: 'boss',
-}
-
 interface Light { x: number; y: number; r: number; hex: string }
 
 interface BakedRoom {
@@ -451,7 +423,6 @@ const ROOM_KEYS = new Set<string>([
 ])
 
 function resolveRoom(setKey: string): RoomKey {
-  if (SCENE_SETS[setKey]) return SCENE_SETS[setKey]
   if (ROOM_KEYS.has(setKey)) return setKey as RoomKey
   return 'corridor'
 }
@@ -466,10 +437,6 @@ export class Scenery {
     if (!baked) { baked = bakeRoom(this.key); roomCache.set(this.key, baked) }
     this.baked = baked
   }
-
-  get night(): boolean { return true }
-
-  update(_dt: number): void {}
 
   drawBack(g: G, camX: number, _t: number): void {
     const ox = Math.round(Math.sin(camX * 0.01) * 2)

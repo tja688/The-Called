@@ -1,0 +1,13 @@
+ts	phase	decision	why	evidence	result
+2026-09-22T09:40:00Z	frame	行为钉是 npm test 80 项全过，加上 npm run sim:compare 与第 1 层基线逐字一致	重构不能改规则。现成命令就是对照	src/tools/sim.ts src/tools/baseline.json	tests green, sim 基线一致, events 1965
+2026-09-22T09:46:00Z	frame	不实现第 2、3 层游玩。下层节点仍以通关结束。只把楼层类型和查池入口收成以后能换的一处	用户要求不开发新东西。现在 nextFloor 直接胜利，做成进下层会改行为	src/domain/run/RunAggregate.ts:161 src/domain/run/RunAggregate.ts:38	open
+2026-09-22T09:46:00Z	frame	代码改动串行写同一工作区。只读勘察可以并行	仓库禁止建分支和工作区。两个写者会抢同一批文件	AGENTS.md	open
+2026-09-22T09:46:00Z	frame	先减死代码，再把事件 if-else 和效果 switch 收成表，最后放宽 floor 字面量 1	新机制现在要改 BattleAggregate 和 RunAggregate 两处长链。表能删掉分支。画面大文件先不动	src/domain/battle/BattleAggregate.ts:689 src/domain/run/RunAggregate.ts:496	open
+2026-09-22T09:45:00Z	subtract	删掉无人调用的天空、地图底图、火漆印、碎光萤火雾和 bloom，以及会画成同一间房的 l1/l2/l3 别名	表现层勘察点了这些名字。调用检索确认对局和编辑页都不走它们。别名不是第 2、3 层的真实房间	src/pixel/sky.ts src/pixel/light.ts src/pixel/terrain.ts src/pixel/scenery.ts	tests 80, lint, sim 基线一致 events 1965
+2026-09-22T09:49:00Z	subtract	删掉零调用的 viewPoints、cloneRng、isPlayCell、playerDiscard、needsChosen、RunAggregate.fromState、GameEvent、CommandBus.use，并去掉 spellTargets 里走不到的 PC.N07	领域勘察点了这些名字。检索后 BattleAggregate.fromState 仍被预览使用，所以留下。optionEnabled 有调用，改成直接调 eventOptionEnabled	src/domain/battle/BattleAggregate.ts src/core/CommandBus.ts	tests 80, lint, sim 基线一致 events 1965
+2026-09-22T09:49:00Z	frame	下层节点继续以通关结束，不把 floor 改成会进第 2 层	勘察建议第 3 层才胜利。那是新玩法。用户要求这次不开发新东西	src/domain/run/RunAggregate.ts	open
+2026-09-22T09:50:00Z	floor	RunState.floor 改成 FloorId，遭遇、事件、事件战查池都读 state.floor。开局仍写入 1	表已经按层过滤。写死的 1 让第 2 层数据接不上。现在层永远是 1，所以抽到的池不变	src/domain/run/RunAggregate.ts	tests 80, lint, sim 基线一致 events 1965
+2026-09-22T09:52:00Z	view	战斗读模型的 leading 改走 isLeading	视图自己又比较了一次总点数。口径留在 points.ts 一处	src/application/readmodels/BattleView.ts:98 src/domain/battle/points.ts:124	tests 80, lint, sim 基线一致 events 1965
+2026-09-22T09:52:00Z	architect	草图 B 落盘，先不按它改代码	事件表和效果表要两份草图对照后再定。A 还没写出文件	.audit/arena/candidate-b.md	superseded by synthesis
+2026-09-22T10:01:00Z	architect	事件结算采用草图 A。步骤写在选项上，不另建 id 到函数的表	两份草图都要删掉 ev.id 链。B 的平行表会和玩家看见的选项分家。A 把步骤放在 EventOptionDef 上	.audit/arena/candidate-a.md .audit/arena/candidate-b.md .audit/arena/synthesis.md	landed
+2026-09-22T10:01:00Z	events	applyEvent 的编号链删掉，eventOption 改跑 runEventSteps	新事件选项只改 events.ts 的 steps。奖励和事件战仍在「选了」之前停住	src/content/events.ts src/domain/run/eventSteps.ts src/domain/run/RunAggregate.ts	tests 80, lint, sim 基线一致 events 1965
