@@ -113,6 +113,12 @@ export const levels = [
   },
 ] as const satisfies readonly LevelConfig[]
 
+export function getNextLevelId(levelId: string | null): string | null {
+  const index = levels.findIndex((level) => level.id === levelId)
+  if (index < 0 || index >= levels.length - 1) return null
+  return levels[index + 1].id
+}
+
 export function getLevelConfig(levelId: string | null): LevelConfig | null {
   if (!levelId) return null
   return levels.find((level) => level.id === levelId) ?? null

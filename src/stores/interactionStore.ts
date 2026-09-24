@@ -8,6 +8,7 @@ type InteractionStore = {
   selectedCellId?: CellId
   placementNotice?: string
   setCameraMode: (mode: CameraMode) => void
+  resetBattleView: () => void
   beginCardPlacement: (cardInstanceId: string) => void
   finishCardPlacement: () => void
   setHoveredCell: (id?: CellId) => void
@@ -18,6 +19,7 @@ type InteractionStore = {
 export const useInteractionStore = create<InteractionStore>((set) => ({
   cameraMode: 'board',
   setCameraMode: (cameraMode) => set({ cameraMode }),
+  resetBattleView: () => set({ cameraMode: 'board', selectedCardInstanceId: undefined, selectedCellId: undefined, placementNotice: undefined }),
   beginCardPlacement: (selectedCardInstanceId) => set({ selectedCardInstanceId, cameraMode: 'overview', selectedCellId: undefined, placementNotice: undefined }),
   finishCardPlacement: () => set({ selectedCardInstanceId: undefined, selectedCellId: undefined, placementNotice: undefined }),
   setHoveredCell: (hoveredCellId) => set({ hoveredCellId }),

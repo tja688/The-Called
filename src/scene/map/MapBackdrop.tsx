@@ -9,8 +9,9 @@ export function MapBackdrop() {
         dpr={[1, 1.5]}
         gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
       >
-        <fog attach="fog" args={['#000000', 17, 39]} />
-        <NeonGridFloor />
+        <color attach="background" args={['#141311']} />
+        <fog attach="fog" args={['#141311', 17, 39]} />
+        <NeonGridFloor nearColor="#efeae0" farColor="#3a3834" speed={0.35} />
       </Canvas>
     </div>
   )

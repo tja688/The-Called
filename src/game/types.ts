@@ -58,6 +58,10 @@ export type MatchState = {
   turn: Side
   round: number
   status: MatchStatus
+  /** Nine cells are full. Victory is checked at the start of each turn. */
+  finalBattle: boolean
+  /** Final-battle turn start has not been resolved yet. Plays are refused. */
+  openingTurn: boolean
   board: BoardCell[]
   player: SideState
   monster: SideState
@@ -71,4 +75,22 @@ export type PlayCardAction = {
   cellId: CellId
 }
 
-export type PlayResult = { state: MatchState; error?: string }
+export type CoverBeat = {
+  cellId: CellId
+  cardInstanceId: string
+  fromPower: number
+  subtract: number
+  toPower: number
+}
+
+export type DepartingCard = {
+  cellId: CellId
+  card: CardInstance
+}
+
+export type PlayResolution = {
+  cover?: CoverBeat
+  removed: DepartingCard[]
+}
+
+export type PlayResult = { state: MatchState; error?: string; resolution?: PlayResolution }

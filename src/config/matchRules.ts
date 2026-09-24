@@ -6,7 +6,8 @@ export type MatchRules = {
   drawOnFirstTurn: boolean
   minimumPower: number
   equalPowerCanCover: boolean
-  fullBoardEndsMatch: boolean
+  /** Filling the last empty cell starts final battle instead of scoring immediately. */
+  fullBoardStartsFinalBattle: boolean
   fullHandDraw: 'skip' | 'discard'
   tieResult: 'draw' | 'player' | 'monster'
 }
@@ -20,7 +21,7 @@ export const beginnerMatchRules: MatchRules = {
   drawOnFirstTurn: false,
   minimumPower: 0,
   equalPowerCanCover: false,
-  fullBoardEndsMatch: true,
+  fullBoardStartsFinalBattle: true,
   fullHandDraw: 'skip',
   tieResult: 'draw',
 }

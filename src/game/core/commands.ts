@@ -1,1 +1,1 @@
-export { canPlaceCard, createMatch, getBoardPower, playCard } from './matchEngine'
+export { canPlaceCard, createMatch, getBoardPower, passTurn, playCard, resolveFinalBattleTurn } from './matchEngine'

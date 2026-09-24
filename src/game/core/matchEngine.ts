@@ -1,7 +1,7 @@
 import { getCardDefinition } from '../../config/cardCatalog'
 import type { DeckConfig } from '../../config/decks'
 import { beginnerMatchRules, type MatchRules } from '../../config/matchRules'
-import type { BoardCell, CardInstance, CellId, MatchResult, MatchState, PlayCardAction, PlayResult, Side } from '../types'
+import type { BoardCell, CardInstance, CellId, DepartingCard, MatchState, PlayCardAction, PlayResolution, PlayResult, Side } from '../types'
 import { createBoard, getOrthogonalNeighbors } from './spatial'
 
 const otherSide = (side: Side): Side => side === 'player' ? 'monster' : 'player'
@@ -44,10 +44,14 @@ export function createMatch(
     board: createBoard(),
     player: { ...playerCards, turnsTaken: 0 },
     monster: { ...monsterCards, turnsTaken: 0 },
+    finalBattle: false,
+    openingTurn: false,
     result: null,
     message: rules.playerStarts ? '你的回合：选择一张牌。' : '怪物正在思考。',
   }
 }
+
+export const finalBattleMessage = '终局之战。回合开始时，点数更高的一方获胜。'
 
 export function getBoardPower(state: MatchState, side: Side) {
   return state.board.reduce((total, cell) => total + (cell.card?.owner === side ? cell.card.currentPower : 0), 0)
@@ -89,13 +93,46 @@ function resolveEntryEffect(board: BoardCell[], cellId: CellId, coveredEnemy: bo
   if (conditionMet) placedCell.card.currentPower += effect.amount
 }
 
-function scoreMatch(state: MatchState, rules: MatchRules): MatchResult {
+function controlledCells(state: MatchState, side: Side) {
+  return state.board.reduce((total, cell) => total + (cell.card?.owner === side ? 1 : 0), 0)
+}
+
+function hasLegalMove(state: MatchState, side: Side, rules: MatchRules) {
+  return state[side].hand.some((card) => state.board.some((cell) => canPlaceCard(state, card, cell, rules)))
+}
+
+function finishMatch(state: MatchState, winner: Side) {
   const playerPower = getBoardPower(state, 'player')
   const monsterPower = getBoardPower(state, 'monster')
-  let winner: MatchResult['winner'] = playerPower === monsterPower ? rules.tieResult : playerPower > monsterPower ? 'player' : 'monster'
-  if (winner === 'player' || winner === 'monster' || winner === 'draw') return { winner, playerPower, monsterPower }
-  winner = 'draw'
-  return { winner, playerPower, monsterPower }
+  state.result = { winner, playerPower, monsterPower }
+  state.status = 'finished'
+  state.openingTurn = false
+  state.message = winner === 'player' ? '你赢了！' : '怪物获胜。'
+}
+
+function winnerByExhaustion(state: MatchState): Side {
+  const playerPower = getBoardPower(state, 'player')
+  const monsterPower = getBoardPower(state, 'monster')
+  if (playerPower !== monsterPower) return playerPower > monsterPower ? 'player' : 'monster'
+  return controlledCells(state, 'player') > controlledCells(state, 'monster') ? 'player' : 'monster'
+}
+
+function removeSpentCards(board: BoardCell[]): DepartingCard[] {
+  const removed: DepartingCard[] = []
+  for (const cell of board) {
+    if (!cell.card || cell.card.currentPower > 0) continue
+    removed.push({ cellId: cell.id, card: { ...cell.card } })
+    cell.card = null
+    cell.coveredCards = []
+  }
+  return removed
+}
+
+export function passTurn(state: MatchState, rules: MatchRules = beginnerMatchRules): MatchState {
+  if (state.status !== 'playing' || state.openingTurn) return state
+  const next = structuredClone(state)
+  advanceTurn(next, rules)
+  return next
 }
 
 function advanceTurn(state: MatchState, rules: MatchRules) {
@@ -111,11 +148,37 @@ function advanceTurn(state: MatchState, rules: MatchRules) {
   }
   state.turn = nextSide
   state.round += 1
+  if (state.finalBattle) {
+    state.openingTurn = true
+    state.message = finalBattleMessage
+    return
+  }
   state.message = nextSide === 'player' ? '你的回合：选择一张牌。' : '怪物正在思考。'
+}
+
+export function resolveFinalBattleTurn(state: MatchState, rules: MatchRules = beginnerMatchRules): MatchState {
+  if (state.status !== 'playing' || !state.finalBattle || !state.openingTurn) return state
+  const next = structuredClone(state)
+  const opponent = otherSide(next.turn)
+  if (getBoardPower(next, next.turn) > getBoardPower(next, opponent)) {
+    finishMatch(next, next.turn)
+    return next
+  }
+  if (hasLegalMove(next, next.turn, rules)) {
+    next.openingTurn = false
+    return next
+  }
+  if (hasLegalMove(next, opponent, rules)) {
+    advanceTurn(next, rules)
+    return next
+  }
+  finishMatch(next, winnerByExhaustion(next))
+  return next
 }
 
 export function playCard(state: MatchState, action: PlayCardAction, rules: MatchRules = beginnerMatchRules): PlayResult {
   if (state.status !== 'playing') return { state, error: 'MATCH_FINISHED' }
+  if (state.finalBattle && state.openingTurn) return { state, error: 'TURN_OPENING' }
   if (state.turn !== action.side) return { state, error: 'NOT_YOUR_TURN' }
   const sideState = state[action.side]
   const handIndex = sideState.hand.findIndex((card) => card.instanceId === action.cardInstanceId)
@@ -139,16 +202,28 @@ export function playCard(state: MatchState, action: PlayCardAction, rules: Match
   }
   nextCell.card = played
   resolveEntryEffect(next.board, action.cellId, coveredEnemy, rules)
-
-  if (rules.fullBoardEndsMatch && next.board.every((boardCell) => boardCell.card)) {
-    next.result = scoreMatch(next, rules)
-    next.status = 'finished'
-    // The engine owns the outcome, while the HUD owns the localized display
-    // name of the configured opponent.
-    next.message = next.result.winner === 'draw' ? '平局。' : next.result.winner === 'player' ? '你赢了！' : '怪物获胜。'
-    return { state: next }
+  let resolution: PlayResolution = { removed: [] }
+  if (coveredEnemy && nextCell.card) {
+    const covered = nextCell.coveredCards[nextCell.coveredCards.length - 1]
+    const fromPower = nextCell.card.currentPower
+    const subtract = covered.currentPower
+    const toPower = Math.max(rules.minimumPower, fromPower - subtract)
+    nextCell.card.currentPower = toPower
+    if (subtract > 0) {
+      resolution = {
+        cover: { cellId: action.cellId, cardInstanceId: nextCell.card.instanceId, fromPower, subtract, toPower },
+        removed: [],
+      }
+    }
   }
+  resolution = { ...resolution, removed: removeSpentCards(next.board) }
 
+  const enteringFinalBattle = rules.fullBoardStartsFinalBattle && !next.finalBattle && next.board.every((boardCell) => boardCell.card)
   advanceTurn(next, rules)
-  return { state: next }
+  if (enteringFinalBattle) {
+    next.finalBattle = true
+    next.openingTurn = true
+    next.message = finalBattleMessage
+  }
+  return { state: next, resolution }
 }

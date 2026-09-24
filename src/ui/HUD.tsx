@@ -1,24 +1,35 @@
 import { useEffect } from 'react'
 import { playCameraTransition } from '../audio/gameAudio'
 import { useInteractionStore } from '../stores/interactionStore'
+import { useNavigationStore } from '../stores/navigationStore'
 import { PlaybackControls } from './PlaybackControls'
-import { getBoardPower } from '../game/core/matchEngine'
+import { finalBattleMessage, getBoardPower } from '../game/core/matchEngine'
 import { useGameStore } from '../stores/gameStore'
-import { getMonsterConfig } from '../config/gameContent'
+import { getMonsterConfig, getNextLevelId } from '../config/gameContent'
 import type { MatchResult } from '../game/types'
 
 export function formatMatchResultMessage(winner: MatchResult['winner'], monsterName: string) {
   return winner === 'draw' ? '平局。' : winner === 'player' ? '你赢了！' : `${monsterName} 获胜。`
 }
 
+export function matchResultActions(winner: MatchResult['winner'], hasNextLevel: boolean) {
+  if (winner === 'player' && hasNextLevel) return ['next', 'retry', 'map'] as const
+  return ['retry', 'map'] as const
+}
+
 export function HUD() {
   const setCameraMode = useInteractionStore((state) => state.setCameraMode)
+  const resetBattleView = useInteractionStore((state) => state.resetBattleView)
   const match = useGameStore((state) => state.match)
   const initialize = useGameStore((state) => state.initialize)
+  const startLevel = useNavigationStore((state) => state.startLevel)
+  const exitToMap = useNavigationStore((state) => state.exitToMap)
   const placementNotice = useInteractionStore((state) => state.placementNotice)
   const showPlacementNotice = useInteractionStore((state) => state.showPlacementNotice)
   const monsterName = getMonsterConfig(match?.monsterId ?? null)?.name ?? 'UNKNOWN'
   const resultMessage = formatMatchResultMessage(match?.result?.winner ?? 'draw', monsterName)
+  const nextLevelId = getNextLevelId(match?.levelId ?? null)
+  const actions = matchResultActions(match?.result?.winner ?? 'draw', Boolean(nextLevelId))
 
   useEffect(() => {
     if (!placementNotice) return
@@ -47,30 +58,37 @@ export function HUD() {
       <PlaybackControls />
       {match && (
         <section className="battle-status" aria-live="polite">
-          <div className="battle-status__names">
-            <span>YOU</span>
-            <small>VS</small>
-            <span>{monsterName}</span>
-          </div>
           <div className="battle-status__score">
             <span>{getBoardPower(match, 'player')}</span>
             <span>—</span>
             <span>{getBoardPower(match, 'monster')}</span>
           </div>
           <div className="battle-status__meta">
-            <span>{match.status === 'finished' ? 'MATCH COMPLETE' : match.turn === 'player' ? 'YOUR TURN' : 'MONSTER TURN'}</span>
-            <span>DECK {match.player.deck.length}</span>
+            <span>{monsterName}</span>
+            <span>{match.status === 'finished' ? '结束' : match.turn === 'player' ? '你的回合' : '对方回合'}</span>
           </div>
         </section>
       )}
-      {placementNotice && <div className="placement-notice" role="status">{placementNotice}<small>只有点数更大的牌可以覆盖敌方卡牌</small></div>}
+      {placementNotice && <div className="placement-notice" role="status">{placementNotice}</div>}
+      {match?.finalBattle && match.status === 'playing' && !placementNotice && (
+        <div className="placement-notice" role="status">{finalBattleMessage}</div>
+      )}
       {match?.status === 'finished' && match.result && (
         <div className="match-result" role="dialog" aria-modal="true" aria-label="对局结果">
           <div className="match-result__panel">
-            <span className="match-result__eyebrow">MATCH COMPLETE</span>
             <strong>{resultMessage}</strong>
             <span>YOU {match.result.playerPower} — {match.result.monsterPower} {monsterName}</span>
-            <button type="button" onClick={() => initialize(match.levelId, match.monsterId)}>再来一局</button>
+            <div className="match-result__actions">
+              {actions.includes('next') && nextLevelId && (
+                <button type="button" onClick={() => { resetBattleView(); startLevel(nextLevelId) }}>下一关</button>
+              )}
+              {actions.includes('retry') && (
+                <button type="button" onClick={() => { resetBattleView(); initialize(match.levelId, match.monsterId) }}>再来</button>
+              )}
+              {actions.includes('map') && (
+                <button type="button" onClick={exitToMap}>回地图</button>
+              )}
+            </div>
           </div>
         </div>
       )}

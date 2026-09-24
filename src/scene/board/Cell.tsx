@@ -1,24 +1,29 @@
-import { RoundedBox } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Group, MathUtils } from 'three'
+import { DEPART_FADE_MS, POWER_COUNT_MS } from './resolutionBeat'
+import { usePresentationStore } from '../../stores/presentationStore'
+import { BoxGeometry, Group, MathUtils } from 'three'
 import { getCardDefinition } from '../../config/cardCatalog'
 import { canPlaceCard } from '../../game/core/matchEngine'
 import type { CardInstance, CellId } from '../../game/types'
 import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { CARD_ASPECT_RATIO, CARD_THICKNESS, Card3D } from '../cards/Card3D'
+import { BONE, CLAY } from '../presentation/palette'
 import { STAGE_INTRO } from '../environment/stageIntro'
 
 const CELL_WIDTH = 2.02
 const CELL_HEIGHT = CELL_WIDTH * CARD_ASPECT_RATIO
+const cellFrame = new BoxGeometry(CELL_WIDTH, 0.02, CELL_HEIGHT)
 
-function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, onSettled }: {
+function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, shownPower, opacity = 1, onSettled }: {
   card: CardInstance
   flipped: boolean
   cellPosition: readonly [number, number, number]
   stackDepth: number
   animate: boolean
+  shownPower: number
+  opacity?: number
   onSettled: () => void
 }) {
   const group = useRef<Group>(null)
@@ -29,10 +34,10 @@ function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, onSettle
   // Preserve spatial continuity between zones. Player cards take over at the
   // exact world position of SelectedCardPreview; monster cards enter from the
   // far/top edge of the tactical board. Only activePlacement may use this path.
-  const startX = isPlayer ? 4.35 - cellPosition[0] : 0
+  const startX = isPlayer ? 4.15 - cellPosition[0] : 0
   const startY = isPlayer ? 0.38 : 1.05
-  const startZ = isPlayer ? -cellPosition[2] : -6.35 - cellPosition[2]
-  const startScale = isPlayer ? 1.46 : 0.92
+  const startZ = isPlayer ? -0.65 - cellPosition[2] : -6.35 - cellPosition[2]
+  const startScale = isPlayer ? 1.2 : 0.92
   const duration = isPlayer ? 0.72 : 0.76
   const settledY = 0.14 + stackDepth * CARD_THICKNESS
 
@@ -68,7 +73,7 @@ function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, onSettle
     }
   })
 
-  return <group ref={group}><Card3D position={[0, 0, 0]} accent={card.owner === 'player' ? '#7b9ca8' : '#9b4d68'} face={card.owner === 'player' ? 'hero' : 'monster'} card={definition} currentPower={card.currentPower} flipped={flipped} flipLift={0.7} /></group>
+  return <group ref={group}><Card3D position={[0, 0, 0]} face={card.owner === 'player' ? 'hero' : 'monster'} card={definition} currentPower={shownPower} opacity={opacity} flipped={flipped} flipLift={0.7} silent /></group>
 }
 
 export function Cell({ id, position }: { id: CellId; position: readonly [number, number, number] }) {
@@ -78,24 +83,39 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
   const match = useGameStore((state) => state.match)
   const play = useGameStore((state) => state.play)
   const activePlacement = useGameStore((state) => state.activePlacement)
+  const telegraph = useGameStore((state) => state.telegraph)
+  const resolution = useGameStore((state) => state.resolution)
+  const placementSettled = useGameStore((state) => state.placementSettled)
   const settlePlacement = useGameStore((state) => state.settlePlacement)
+  const inputLocked = usePresentationStore((state) => state.inputLocked)
   const selectedInstanceId = useInteractionStore((state) => state.selectedCardInstanceId)
   const finishCardPlacement = useInteractionStore((state) => state.finishCardPlacement)
   const showPlacementNotice = useInteractionStore((state) => state.showPlacementNotice)
   const cameraMode = useInteractionStore((state) => state.cameraMode)
   const cell = match?.board.find((candidate) => candidate.id === id)
   const coveredCards = cell?.coveredCards ?? []
+  const removedHere = resolution?.removed.find((item) => item.cellId === id)
+  const coverHere = resolution?.cover?.cellId === id ? resolution.cover : undefined
+  const visualCard = cell?.card ?? removedHere?.card ?? null
+  const counting = Boolean(coverHere && visualCard && coverHere.cardInstanceId === visualCard.instanceId && coverHere.fromPower > coverHere.toPower)
+  const departing = Boolean(removedHere && visualCard && removedHere.card.instanceId === visualCard.instanceId)
+  const [shownPower, setShownPower] = useState(coverHere?.fromPower ?? visualCard?.currentPower ?? 0)
+  const [opacity, setOpacity] = useState(1)
   const shouldAnimateCard = Boolean(
-    cell?.card
-    && activePlacement?.cardInstanceId === cell.card.instanceId
+    visualCard
+    && activePlacement?.cardInstanceId === visualCard.instanceId
     && activePlacement.cellId === id,
   )
+  const displayedPower = counting && coverHere
+    ? (placementSettled ? shownPower : coverHere.fromPower)
+    : (visualCard?.currentPower ?? 0)
   const selectedCard = match?.player.hand.find((card) => card.instanceId === selectedInstanceId)
   const isEmptyCell = !cell?.card
-  const isPlacementTarget = Boolean(match && selectedCard && match.turn === 'player' && (isEmptyCell || canPlaceCard(match, selectedCard, cell!)))
-  const isBlockedEnemy = Boolean(selectedCard && cell?.card?.owner !== selectedCard.owner && !isPlacementTarget)
+  const isPlacementTarget = Boolean(!inputLocked && match && selectedCard && match.turn === 'player' && (isEmptyCell || canPlaceCard(match, selectedCard, cell!)))
+  const isBlockedEnemy = Boolean(!inputLocked && selectedCard && cell?.card?.owner !== selectedCard.owner && !isPlacementTarget)
   const canFlip = cameraMode === 'overview' && !selectedCard && Boolean(cell?.card)
   const isInteractive = isPlacementTarget || isBlockedEnemy || canFlip
+  const telegraphed = telegraph?.action.cellId === id
 
   useFrame((state) => {
     introReady.current = state.clock.elapsedTime >= STAGE_INTRO.complete
@@ -108,6 +128,46 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
   useEffect(() => {
     setFlipped(false)
   }, [cell?.card?.instanceId])
+
+  useLayoutEffect(() => {
+    if (counting && coverHere) setShownPower(coverHere.fromPower)
+  }, [counting, coverHere])
+
+  useEffect(() => {
+    if (!counting || !coverHere || !placementSettled) return
+    const steps = coverHere.fromPower - coverHere.toPower
+    const stepMs = POWER_COUNT_MS / steps
+    let done = 0
+    const timer = window.setInterval(() => {
+      done += 1
+      setShownPower(coverHere.fromPower - done)
+      if (done >= steps) window.clearInterval(timer)
+    }, stepMs)
+    return () => window.clearInterval(timer)
+  }, [counting, coverHere, placementSettled])
+
+  useEffect(() => {
+    if (!departing || !placementSettled) {
+      setOpacity(1)
+      return
+    }
+    const steps = counting && coverHere ? coverHere.fromPower - coverHere.toPower : 0
+    const delay = steps > 0 ? POWER_COUNT_MS : 0
+    let frame = 0
+    const start = window.setTimeout(() => {
+      const begun = performance.now()
+      const tick = () => {
+        const progress = Math.min(1, (performance.now() - begun) / DEPART_FADE_MS)
+        setOpacity(1 - progress)
+        if (progress < 1) frame = requestAnimationFrame(tick)
+      }
+      frame = requestAnimationFrame(tick)
+    }, delay)
+    return () => {
+      window.clearTimeout(start)
+      window.cancelAnimationFrame(frame)
+    }
+  }, [counting, coverHere, departing, placementSettled])
 
   return (
     <group
@@ -123,54 +183,54 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
       }}
       onClick={(event) => {
         event.stopPropagation()
-        if (!introReady.current) return
+        if (!introReady.current || inputLocked) return
         if (isPlacementTarget && match && selectedCard) {
           const error = play({ side: 'player', cardInstanceId: selectedCard.instanceId, cellId: id })
           if (!error) finishCardPlacement()
           return
         }
         if (isBlockedEnemy && selectedCard && cell?.card) {
-          showPlacementNotice(`点数不足：${selectedCard.currentPower} 点无法覆盖 ${cell.card.currentPower} 点的敌方卡牌`)
+          showPlacementNotice(`${selectedCard.currentPower} 无法覆盖 ${cell.card.currentPower}`)
           return
         }
         if (canFlip) setFlipped((current) => !current)
       }}
     >
-      <RoundedBox
-        args={[CELL_WIDTH, 0.055, CELL_HEIGHT]} radius={0.035} smoothness={3}
-      >
-        <meshStandardMaterial color="#d8d4db" roughness={0.74} metalness={0.05} />
-      </RoundedBox>
-      {/* The gray card is the permanent physical base of every cell, not an
-          empty-state placeholder. Keeping it mounted prevents the board from
-          visually dropping out before an incoming card reaches the cell. */}
-      <Card3D position={[0, 0.09, 0]} scale={1.54} face="hero" flipped backArt="/card/Hero-back-gray.png" flipLift={0.7} />
+      <mesh position={[0, 0.46, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[CELL_WIDTH, CELL_HEIGHT]} />
+        <meshBasicMaterial
+          color={isBlockedEnemy ? CLAY : BONE}
+          transparent
+          opacity={hovered ? 0.34 : telegraphed ? 0.2 : 0}
+          depthWrite={false}
+        />
+      </mesh>
+      <lineSegments position={[0, 0.05, 0]} raycast={() => null}>
+        <edgesGeometry args={[cellFrame, 1]} />
+        <lineBasicMaterial color={hovered ? (isBlockedEnemy ? CLAY : BONE) : BONE} transparent opacity={hovered || telegraphed ? 1 : isPlacementTarget ? 0.95 : 0.55} />
+      </lineSegments>
       {coveredCards.map((coveredCard, index) => (
         <Card3D
           key={coveredCard.instanceId}
           position={[0, 0.14 + index * CARD_THICKNESS, 0]}
           scale={1.54}
-          accent={coveredCard.owner === 'player' ? '#7b9ca8' : '#9b4d68'}
           face={coveredCard.owner === 'player' ? 'hero' : 'monster'}
+          silent
           card={getCardDefinition(coveredCard.cardId)}
           currentPower={coveredCard.currentPower}
           flipLift={0.7}
         />
       ))}
-      {((hovered && isInteractive) || isPlacementTarget) && (
-        <mesh position={[0, 0.19, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[CELL_WIDTH * 0.98, CELL_HEIGHT * 0.985]} />
-          <meshBasicMaterial color={isBlockedEnemy ? '#ff5478' : canFlip ? '#ffffff' : '#6ff5ff'} transparent opacity={isBlockedEnemy ? 0.12 : canFlip ? 0.1 : 0.18} depthWrite={false} />
-        </mesh>
-      )}
-      {cell?.card && <PlacedCard
-        key={cell.card.instanceId}
-        card={cell.card}
+      {visualCard && <PlacedCard
+        key={visualCard.instanceId}
+        card={visualCard}
         flipped={flipped}
         cellPosition={position}
         stackDepth={coveredCards.length}
         animate={shouldAnimateCard}
-        onSettled={() => settlePlacement(cell.card!.instanceId)}
+        shownPower={displayedPower}
+        opacity={opacity}
+        onSettled={() => settlePlacement(visualCard.instanceId)}
       />}
     </group>
   )

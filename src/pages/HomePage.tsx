@@ -1,16 +1,11 @@
 import { playGameStart } from '../audio/gameAudio'
 import { HomeCardScene } from '../scene/home/HomeCardScene'
 import { useNavigationStore } from '../stores/navigationStore'
-import { BattleFilters } from '../ui/BattleFilters'
-
 export function HomePage() {
   const openMap = useNavigationStore((state) => state.openMap)
 
   return (
     <main className="home-page">
-      <div className="home-page__brain-texture" aria-hidden="true">
-        <img src="/map/brain.png" alt="" />
-      </div>
       <HomeCardScene />
 
       <section className="home-page__content" aria-labelledby="home-title">
@@ -24,11 +19,8 @@ export function HomePage() {
         playGameStart()
         openMap()
       }}>
-        START
+        开始
       </button>
-
-      <div className="grain" aria-hidden="true" />
-      <BattleFilters fight fightBlue />
     </main>
   )
 }

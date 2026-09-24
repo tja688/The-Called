@@ -18,7 +18,6 @@ export function MapPage() {
       </button>
 
       <div className="map-brain-layer">
-        <img className="map-brain" src="/map/brain.png" alt="" />
         <LevelPath onStartLevel={(levelId) => {
           playBrainClick()
           startLevel(levelId)
