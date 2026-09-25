@@ -58,6 +58,7 @@ function publicAssetsPlugin(): Plugin {
 }
 
 export default defineConfig({
+  base: './',
   plugins: [react(), publicAssetsPlugin()],
   server: { port: 4174, strictPort: true },
 })
