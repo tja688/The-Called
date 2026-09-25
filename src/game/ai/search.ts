@@ -11,9 +11,36 @@ const NODE_LIMIT = 20_000
 const HARD_MS = 110
 const QUIET_PLIES = 1
 const INTENT_REPLIES = 8
+/** CPU time kept on one animation frame. The rest of the search continues next frame. */
+export const THINK_SLICE_MS = 6
 
-type Budget = { nodes: number; deadline: number }
+type Budget = { nodes: number; spent: number; mark: number; sliceEnd: number; sliceMs: number }
 type TableEntry = { depth: number; score: number; flag: 'exact' | 'lower' | 'upper' }
+
+function openBudget(sliceMs: number): Budget {
+  const now = performance.now()
+  return { nodes: 0, spent: 0, mark: now, sliceEnd: now + sliceMs, sliceMs }
+}
+
+/** True when the hard budget is spent. Yields once when this frame's slice is spent. */
+function* gate(budget: Budget): Generator<void, boolean> {
+  const now = performance.now()
+  budget.spent += now - budget.mark
+  budget.mark = now
+  if (budget.nodes >= NODE_LIMIT || budget.spent >= HARD_MS) return true
+  if (now < budget.sliceEnd) return false
+  yield
+  const resumed = performance.now()
+  budget.mark = resumed
+  budget.sliceEnd = resumed + budget.sliceMs
+  return false
+}
+
+export function collectSearch<T>(gen: Generator<void, T>): T {
+  let step = gen.next()
+  while (!step.done) step = gen.next()
+  return step.value
+}
 
 function settle(state: MatchState): MatchState {
   let current = state
@@ -223,7 +250,7 @@ function riskOf(profile: MonsterAiProfile): number {
   return profile.risk ?? 0.35
 }
 
-function minimax(
+function* minimax(
   state: MatchState,
   belief: OpponentBelief,
   depth: number,
@@ -232,12 +259,10 @@ function minimax(
   budget: Budget,
   table: Map<string, TableEntry>,
   lockedInstanceId?: string,
-): number {
+): Generator<void, number> {
   const settled = settle(state)
-  if (settled.status === 'finished' || budget.nodes >= NODE_LIMIT || performance.now() > budget.deadline) {
-    return evaluateForMonster(settled, belief)
-  }
-  if (depth <= 0) return quiesce(settled, belief, alpha, beta, QUIET_PLIES, budget, table)
+  if (settled.status === 'finished' || (yield* gate(budget))) return evaluateForMonster(settled, belief)
+  if (depth <= 0) return yield* quiesce(settled, belief, alpha, beta, QUIET_PLIES, budget, table)
 
   const key = `${stateKey(settled)}|${depth}|${lockedInstanceId ?? ''}`
   const cached = table.get(key)
@@ -251,14 +276,14 @@ function minimax(
   budget.nodes += 1
   const originalAlpha = alpha
   const moves = readyMoves(settled, settled.turn === 'monster' ? lockedInstanceId : undefined)
-  if (moves.length === 0) return passValue(settled, belief, depth, alpha, beta, budget, table, lockedInstanceId)
+  if (moves.length === 0) return yield* passValue(settled, belief, depth, alpha, beta, budget, table, lockedInstanceId)
 
   const maximizing = settled.turn === 'monster'
   let best = maximizing ? -Infinity : Infinity
   let flag: TableEntry['flag'] = 'exact'
   for (const move of moves) {
     const nextLock = settled.turn === 'monster' ? undefined : lockedInstanceId
-    const score = minimax(move.state, belief, depth - 1, alpha, beta, budget, table, nextLock)
+    const score = yield* minimax(move.state, belief, depth - 1, alpha, beta, budget, table, nextLock)
     if (maximizing) {
       best = Math.max(best, score)
       alpha = Math.max(alpha, best)
@@ -278,7 +303,7 @@ function minimax(
   return best
 }
 
-function passValue(
+function* passValue(
   state: MatchState,
   belief: OpponentBelief,
   depth: number,
@@ -287,13 +312,13 @@ function passValue(
   budget: Budget,
   table: Map<string, TableEntry>,
   lockedInstanceId?: string,
-): number {
+): Generator<void, number> {
   const passed = resolveIdleTurn(state)
   if (passed === state || passed.turn === state.turn) return evaluateForMonster(state, belief)
-  return minimax(passed, belief, depth - 1, alpha, beta, budget, table, lockedInstanceId)
+  return yield* minimax(passed, belief, depth - 1, alpha, beta, budget, table, lockedInstanceId)
 }
 
-function quiesce(
+function* quiesce(
   state: MatchState,
   belief: OpponentBelief,
   alpha: number,
@@ -301,18 +326,18 @@ function quiesce(
   quiet: number,
   budget: Budget,
   table: Map<string, TableEntry>,
-): number {
+): Generator<void, number> {
   const settled = settle(state)
   if (settled.status === 'finished') return evaluateForMonster(settled, belief)
   const stand = evaluateForMonster(settled, belief)
-  if (quiet <= 0 || budget.nodes >= NODE_LIMIT || performance.now() > budget.deadline) return stand
+  if (quiet <= 0 || (yield* gate(budget))) return stand
   budget.nodes += 1
   const moves = readyMoves(settled, undefined, 8).filter((move) => isTactical(settled, move.state))
   if (settled.turn === 'monster') {
     let best = stand
     alpha = Math.max(alpha, best)
     for (const move of moves) {
-      best = Math.max(best, quiesce(move.state, belief, alpha, beta, quiet - 1, budget, table))
+      best = Math.max(best, yield* quiesce(move.state, belief, alpha, beta, quiet - 1, budget, table))
       alpha = Math.max(alpha, best)
       if (alpha >= beta) break
     }
@@ -321,7 +346,7 @@ function quiesce(
   let best = stand
   beta = Math.min(beta, best)
   for (const move of moves) {
-    best = Math.min(best, quiesce(move.state, belief, alpha, beta, quiet - 1, budget, table))
+    best = Math.min(best, yield* quiesce(move.state, belief, alpha, beta, quiet - 1, budget, table))
     beta = Math.min(beta, best)
     if (alpha >= beta) break
   }
@@ -336,7 +361,7 @@ function tieBreak(cellId: CellId, card: CardInstance | null | undefined): number
   return body * 1_000_003 + (hash >>> 0)
 }
 
-function worldScore(
+function* worldScore(
   observation: MonsterObservation,
   world: BeliefWorld,
   belief: OpponentBelief,
@@ -344,18 +369,19 @@ function worldScore(
   depth: number,
   budget: Budget,
   table: Map<string, TableEntry>,
-): number | null {
+): Generator<void, number | null> {
   const hypo = hypotheticalState(observation, world)
   const result = playCard(hypo, move)
   if (result.error) return null
-  return minimax(result.state, belief, depth - 1, -Infinity, Infinity, budget, table)
+  return yield* minimax(result.state, belief, depth - 1, -Infinity, Infinity, budget, table)
 }
 
-export function selectMonsterAction(
+export function* searchMonsterAction(
   state: MatchState,
   profile: MonsterAiProfile,
-  lockedInstanceId?: string,
-): PlayCardAction | null {
+  lockedInstanceId: string | undefined,
+  sliceMs: number,
+): Generator<void, PlayCardAction | null> {
   if (state.status !== 'playing' || state.turn !== 'monster' || state.openingTurn) return null
   const observation = observeMonster(state)
   const legal = readyMoves(hypotheticalState(observation, { hand: [], deck: [], weight: 1 }), lockedInstanceId)
@@ -363,50 +389,68 @@ export function selectMonsterAction(
   if (legal.length === 1) return legal[0].action
 
   const belief = createOpponentBelief(state, profile.opponentDeck)
-  const deadline = performance.now() + HARD_MS
-  const budget: Budget = { nodes: 0, deadline }
+  const budget = openBudget(sliceMs)
   const table = new Map<string, TableEntry>()
   let best = legal[0].action
   let bestScore = -Infinity
-  let bestTie = -Infinity
   const maxDepth = depthFor(state)
 
   for (let depth = 1; depth <= maxDepth; depth += 1) {
-    if (performance.now() > deadline && depth > 1) break
+    if (depth > 1 && (yield* gate(budget))) break
     let depthBest = best
     let depthScore = -Infinity
+    let depthImmediate = -Infinity
     let depthTie = -Infinity
     let complete = true
     for (const move of legal) {
-      if (performance.now() > deadline && depth > 1) {
+      if (depth > 1 && (yield* gate(budget))) {
         complete = false
         break
       }
       const scores: number[] = []
       const weights: number[] = []
+      let worldsCut = false
       for (const world of belief.worlds) {
-        const score = worldScore(observation, world, belief, move.action, depth, budget, table)
+        if (yield* gate(budget)) {
+          worldsCut = true
+          break
+        }
+        const score = yield* worldScore(observation, world, belief, move.action, depth, budget, table)
         if (score === null) continue
         scores.push(score)
         weights.push(world.weight)
       }
+      if (worldsCut) {
+        complete = false
+        break
+      }
       if (scores.length === 0) continue
       const mixed = mixRisk(scores, weights, riskOf(profile))
+      const immediate = evaluateForMonster(move.state, belief)
       const placed = move.state.board.find((cell) => cell.id === move.action.cellId)?.card
       const tie = tieBreak(move.action.cellId, placed)
-      const better = mixed > depthScore || (mixed === depthScore && tie > depthTie)
+      const better = mixed > depthScore
+        || (mixed === depthScore && (immediate > depthImmediate || (immediate === depthImmediate && tie > depthTie)))
       if (better) {
         depthBest = move.action
         depthScore = mixed
+        depthImmediate = immediate
         depthTie = tie
       }
     }
     if (!complete) break
     best = depthBest
     bestScore = depthScore
-    bestTie = depthTie
   }
   return bestScore === -Infinity ? legal[0].action : best
+}
+
+export function selectMonsterAction(
+  state: MatchState,
+  profile: MonsterAiProfile,
+  lockedInstanceId?: string,
+): PlayCardAction | null {
+  return collectSearch(searchMonsterAction(state, profile, lockedInstanceId, Number.POSITIVE_INFINITY))
 }
 
 function placementValue(state: MatchState, belief: OpponentBelief, lockedInstanceId: string): number {
@@ -428,44 +472,62 @@ function placementValue(state: MatchState, belief: OpponentBelief, lockedInstanc
  * Value is the player's reply, then the best cell for that same card.
  * A card with no cell left is scored as a pass.
  */
-export function chooseMonsterIntent(state: MatchState, profile: MonsterAiProfile): CardInstance | null {
+export function* searchMonsterIntent(
+  state: MatchState,
+  profile: MonsterAiProfile,
+  sliceMs: number,
+): Generator<void, CardInstance | null> {
   if (state.status !== 'playing' || state.turn !== 'player' || state.openingTurn) return null
   const cards = state.monster.hand
   if (cards.length === 0) return null
   const belief = createOpponentBelief(state, profile.opponentDeck)
   const observation = observeMonster(state)
-  const deadline = performance.now() + HARD_MS
+  const budget = openBudget(sliceMs)
   let best = cards[0]
   let bestScore = -Infinity
   const seen = new Set<string>()
 
   for (const card of cards) {
-    if (performance.now() > deadline && bestScore > -Infinity) break
+    if (bestScore > -Infinity && (yield* gate(budget))) break
     const signature = `${card.cardId}:${card.currentPower}`
     if (seen.has(signature)) continue
     seen.add(signature)
     const scores: number[] = []
     const weights: number[] = []
+    let cut = false
     for (const world of belief.worlds) {
-      if (performance.now() > deadline) break
+      if (yield* gate(budget)) {
+        cut = true
+        break
+      }
       const hypo = hypotheticalState(observation, world)
       const replies = readyMoves(hypo, undefined, INTENT_REPLIES)
       const answered = replies.length > 0 ? replies : [{ state: resolveIdleTurn(hypo) }]
       let answer = Infinity
       for (const reply of answered) {
-        if (performance.now() > deadline) break
+        if (yield* gate(budget)) {
+          cut = true
+          break
+        }
         answer = Math.min(answer, placementValue(reply.state, belief, card.instanceId))
       }
+      if (cut) break
       if (answer === Infinity) continue
       scores.push(answer)
       weights.push(world.weight)
     }
-    if (scores.length === 0) continue
-    const mixed = mixRisk(scores, weights, riskOf(profile))
-    if (mixed > bestScore) {
-      best = card
-      bestScore = mixed
+    if (scores.length > 0) {
+      const mixed = mixRisk(scores, weights, riskOf(profile))
+      if (mixed > bestScore) {
+        best = card
+        bestScore = mixed
+      }
     }
+    if (cut) break
   }
   return best
+}
+
+export function chooseMonsterIntent(state: MatchState, profile: MonsterAiProfile): CardInstance | null {
+  return collectSearch(searchMonsterIntent(state, profile, Number.POSITIVE_INFINITY))
 }

@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { beginnerPlayerDeck, monsterDeckForLevel, type DeckConfig } from '../config/decks'
 import { chooseMonsterAction, chooseShownCard } from '../game/ai/monsterAI'
+import { THINK_SLICE_MS, searchMonsterAction, searchMonsterIntent } from '../game/ai/search'
+import { driveThink, thinkCanYield } from '../game/ai/thinkLane'
 import { createMatch, passTurn, playCard, resolveFinalBattleTurn as resolveFinalBattleTurnState, resolveIdleTurn } from '../game/core/matchEngine'
 import type { CardInstance, CellId, MatchState, PlayCardAction, PlayResolution } from '../game/types'
 import { getBattleDeck } from './deckStore'
@@ -17,12 +19,78 @@ function monsterProfile(deck: DeckConfig) {
   return { opponentDeck: deck }
 }
 
+function matchStamp(state: MatchState) {
+  const board = state.board.map((cell) => cell.card?.instanceId ?? '.').join(',')
+  const monster = state.monster.hand.map((card) => card.instanceId).join(',')
+  const player = state.player.hand.map((card) => card.instanceId).join(',')
+  return `${state.round}|${state.turn}|${state.status}|${state.openingTurn ? 1 : 0}|${board}|${monster}|${player}`
+}
+
+let cancelThink = () => {}
+let thinkToken = 0
+
+function beginThink() {
+  cancelThink()
+  thinkToken += 1
+  return thinkToken
+}
+
+function stopThink() {
+  beginThink()
+}
+
+function liveMatches(token: number, stamp: string) {
+  if (token !== thinkToken) return false
+  const live = useGameStore.getState().match
+  return Boolean(live && matchStamp(live) === stamp)
+}
+
+function queueShownCard(state: MatchState, deck: DeckConfig) {
+  const token = beginThink()
+  const stamp = matchStamp(state)
+  cancelThink = driveThink(searchMonsterIntent(state, monsterProfile(deck), THINK_SLICE_MS), (card) => {
+    if (!liveMatches(token, stamp)) return
+    useGameStore.setState({ telegraph: card ? { card: { ...card } } : undefined })
+  })
+}
+
+function queueMonsterAction(
+  state: MatchState,
+  deck: DeckConfig,
+  lockedInstanceId: string | undefined,
+  after: (action: PlayCardAction | null) => void,
+) {
+  const token = beginThink()
+  const stamp = matchStamp(state)
+  cancelThink = driveThink(
+    searchMonsterAction(state, monsterProfile(deck), lockedInstanceId, THINK_SLICE_MS),
+    (action) => {
+      if (!liveMatches(token, stamp)) return
+      after(action)
+    },
+  )
+}
+
 function commitMonsterIntent(state: MatchState, deck: DeckConfig): MonsterTelegraph | undefined {
   if (state.status !== 'playing' || state.openingTurn) return undefined
   const profile = monsterProfile(deck)
   if (state.turn === 'player') {
+    if (thinkCanYield()) {
+      queueShownCard(state, deck)
+      return undefined
+    }
     const card = chooseShownCard(state, profile)
     return card ? { card: { ...card } } : undefined
+  }
+  if (thinkCanYield()) {
+    queueMonsterAction(state, deck, undefined, (action) => {
+      const live = useGameStore.getState().match
+      const card = action && live ? live.monster.hand.find((candidate) => candidate.instanceId === action.cardInstanceId) : undefined
+      useGameStore.setState({
+        telegraph: card && action ? { card: { ...card }, cellId: action.cellId } : undefined,
+      })
+    })
+    return undefined
   }
   const action = chooseMonsterAction(state, profile)
   const card = action ? state.monster.hand.find((candidate) => candidate.instanceId === action.cardInstanceId) : undefined
@@ -121,6 +189,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   initialize: (levelId, monsterId) => {
     const playerDeck = getBattleDeck()
     if (!playerDeck) return
+    stopThink()
     releaseBattleView()
     const match = createMatch(levelId, monsterId, playerDeck, monsterDeckForLevel(levelId))
     set({
@@ -134,6 +203,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
   },
   abandon: () => {
+    stopThink()
     releaseBattleView()
     set({
       match: null,
@@ -163,6 +233,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const locked = get().telegraph?.card
     if (locked && get().telegraph?.cellId && match.monster.hand.some((card) => card.instanceId === locked.instanceId)) return true
     const profile = monsterProfile(get().opponentDeck)
+    if (thinkCanYield()) {
+      const deck = get().opponentDeck
+      queueMonsterAction(match, deck, locked?.instanceId, (action) => {
+        const live = useGameStore.getState().match
+        const card = action && live ? live.monster.hand.find((candidate) => candidate.instanceId === action.cardInstanceId) : undefined
+        if (!live || !action || !card) {
+          if (!live) return
+          const passed = concedeTurn(live)
+          set({
+            match: passed,
+            telegraph: passed.status === 'playing' ? commitMonsterIntent(passed, deck) : undefined,
+          })
+          scheduleOpening(passed)
+          return
+        }
+        set({ telegraph: { card: { ...card }, cellId: action.cellId } })
+      })
+      return true
+    }
     const action = locked
       ? chooseMonsterAction(match, profile, locked.instanceId)
       : chooseMonsterAction(match, profile)
@@ -197,6 +286,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const telegraph = get().telegraph
     if (!match || match.openingTurn || !telegraph) return
     const profile = monsterProfile(get().opponentDeck)
+    if (!telegraph.cellId && thinkCanYield()) {
+      const deck = get().opponentDeck
+      const shown = telegraph.card.instanceId
+      queueMonsterAction(match, deck, shown, (action) => {
+        const live = useGameStore.getState()
+        if (!live.match || live.telegraph?.card.instanceId !== shown) return
+        if (!action) {
+          const passed = concedeTurn(live.match)
+          set({
+            match: passed,
+            telegraph: passed.status === 'playing' ? commitMonsterIntent(passed, deck) : undefined,
+          })
+          scheduleOpening(passed)
+          return
+        }
+        useGameStore.setState({ telegraph: { card: live.telegraph.card, cellId: action.cellId } })
+        useGameStore.getState().playMonsterTurn()
+      })
+      return
+    }
     const action = telegraph.cellId
       ? { side: 'monster' as const, cardInstanceId: telegraph.card.instanceId, cellId: telegraph.cellId }
       : chooseMonsterAction(match, profile, telegraph.card.instanceId)
