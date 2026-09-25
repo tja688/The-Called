@@ -1482,5 +1482,71 @@ button.level-path-node:focus-visible::after {
 }
 .match-result__panel button { border-color: #efeae0; color: #efeae0; background: transparent; }
 .match-result__panel button:hover { color: #141311; background: #efeae0; }
+.card-reward {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(20, 19, 17, .72);
+}
+.card-reward__panel {
+  display: grid;
+  gap: 22px;
+  justify-items: center;
+  width: min(680px, calc(100vw - 40px));
+  padding: 32px;
+  border: 1px solid #efeae0;
+  color: #efeae0;
+  background: #141311;
+  text-align: center;
+}
+.card-reward__cards {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.card-reward__card {
+  width: 168px;
+  height: 236px;
+  pointer-events: none;
+}
+.card-reward__card .deck-card__name { top: 38%; }
+.card-reward__description {
+  position: absolute;
+  right: 12%;
+  bottom: 11%;
+  left: 12%;
+  color: #1c1b18;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  text-align: center;
+}
+.card-reward__hint {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: .06em;
+}
+.card-reward__panel button {
+  padding: 9px 28px;
+  border: 1px solid #efeae0;
+  color: #efeae0;
+  background: transparent;
+  letter-spacing: .16em;
+}
+.card-reward__panel button:hover,
+.card-reward__panel button:focus-visible {
+  color: #141311;
+  background: #efeae0;
+  outline: none;
+}
+@media (max-width: 640px) {
+  .card-reward__cards { gap: 8px; }
+  .card-reward__card { width: 108px; height: 168px; }
+  .card-reward__description { font-size: 9px; }
+}
 .playback-control { color: #efeae0; }
 .app-shell { background: #141311; }

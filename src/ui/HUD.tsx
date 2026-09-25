@@ -4,6 +4,7 @@ import { useCampaignStore } from '../stores/campaignStore'
 import { useInteractionStore } from '../stores/interactionStore'
 import { useNavigationStore } from '../stores/navigationStore'
 import { usePresentationStore } from '../stores/presentationStore'
+import { CardRewardDialog } from './CardRewardDialog'
 import { PlaybackControls } from './PlaybackControls'
 import { getCardDefinition } from '../config/cardCatalog'
 import { finalBattleMessage, getBoardPower } from '../game/core/matchEngine'
@@ -20,7 +21,7 @@ export function matchDeparture(winner: MatchResult['winner']) {
   return winner === 'player' ? 'map' : 'home'
 }
 
-let rewardNotice: { key: string; names: string[] } | null = null
+let rewardNotice: { key: string; cardIds: string[] } | null = null
 
 export function HUD() {
   const setCameraMode = useInteractionStore((state) => state.setCameraMode)
@@ -34,7 +35,8 @@ export function HUD() {
   const resultMessage = formatMatchResultMessage(match?.result?.winner ?? 'draw', monsterName)
   const finished = match?.status === 'finished'
   const winner = match?.result?.winner
-  const [rewardNames, setRewardNames] = useState<string[]>([])
+  const [rewardCards, setRewardCards] = useState<string[]>([])
+  const [rewardReady, setRewardReady] = useState(false)
 
   useEffect(() => {
     if (!placementNotice) return
@@ -44,34 +46,41 @@ export function HUD() {
 
   useEffect(() => {
     if (!finished || winner !== 'player' || !match) {
-      setRewardNames([])
+      setRewardCards([])
+      setRewardReady(false)
       return
     }
     const key = `${useGameStore.getState().battleKey}:${match.levelId}`
     if (rewardNotice?.key === key) {
-      setRewardNames(rewardNotice.names)
+      setRewardCards(rewardNotice.cardIds)
       return
     }
-    const names = useDeckStore.getState().claimLevelReward(match.levelId).map((cardId) => getCardDefinition(cardId).name)
-    rewardNotice = { key, names }
-    setRewardNames(names)
+    const cardIds = useDeckStore.getState().claimLevelReward(match.levelId)
+    rewardNotice = { key, cardIds }
+    setRewardCards(cardIds)
   }, [finished, match, winner])
+
+  const depart = (departWinner: NonNullable<typeof winner>, levelId: string) => {
+    resetBattleView()
+    if (matchDeparture(departWinner) === 'map') {
+      useCampaignStore.getState().complete(levelId)
+      useNavigationStore.getState().exitToMap()
+      return
+    }
+    useCampaignStore.getState().reset()
+    useNavigationStore.getState().exitToHome()
+  }
 
   useEffect(() => {
     if (!finished || !winner || !match) return
+    if (winner === 'player' && rewardCards.length > 0) {
+      const timer = window.setTimeout(() => setRewardReady(true), 1100)
+      return () => window.clearTimeout(timer)
+    }
     const levelId = match.levelId
-    const timer = window.setTimeout(() => {
-      resetBattleView()
-      if (matchDeparture(winner) === 'map') {
-        useCampaignStore.getState().complete(levelId)
-        useNavigationStore.getState().exitToMap()
-        return
-      }
-      useCampaignStore.getState().reset()
-      useNavigationStore.getState().exitToHome()
-    }, 1100)
+    const timer = window.setTimeout(() => depart(winner, levelId), 1100)
     return () => window.clearTimeout(timer)
-  }, [finished, match, resetBattleView, winner])
+  }, [finished, match, resetBattleView, rewardCards, winner])
 
   useEffect(() => {
     const onWheel = (event: WheelEvent) => {
@@ -143,15 +152,17 @@ export function HUD() {
       {match?.finalBattle && match.status === 'playing' && !placementNotice && (
         <div className="placement-notice" role="status">{finalBattleMessage}</div>
       )}
-      {match?.status === 'finished' && match.result && (
+      {match?.status === 'finished' && match.result && !rewardReady && (
         <div className="match-result" role="dialog" aria-modal="true" aria-label="对局结果">
           <div className="match-result__panel">
             <strong>{resultMessage}</strong>
             <span>YOU {match.result.playerPower} — {match.result.monsterPower} {monsterName}</span>
-            {rewardNames.length > 0 && <span>获得 {rewardNames.join('、')}</span>}
-            <span>{winner === 'player' ? '回到地图' : '回到主菜单'}</span>
+            {rewardCards.length === 0 && <span>{winner === 'player' ? '回到地图' : '回到主菜单'}</span>}
           </div>
         </div>
+      )}
+      {rewardReady && match && winner && (
+        <CardRewardDialog cardIds={rewardCards} onConfirm={() => depart(winner, match.levelId)} />
       )}
     </>
   )

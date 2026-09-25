@@ -434,25 +434,33 @@ export function chooseMonsterIntent(state: MatchState, profile: MonsterAiProfile
   if (cards.length === 0) return null
   const belief = createOpponentBelief(state, profile.opponentDeck)
   const observation = observeMonster(state)
+  const deadline = performance.now() + HARD_MS
   let best = cards[0]
   let bestScore = -Infinity
   const seen = new Set<string>()
 
   for (const card of cards) {
+    if (performance.now() > deadline && bestScore > -Infinity) break
     const signature = `${card.cardId}:${card.currentPower}`
     if (seen.has(signature)) continue
     seen.add(signature)
     const scores: number[] = []
     const weights: number[] = []
     for (const world of belief.worlds) {
+      if (performance.now() > deadline) break
       const hypo = hypotheticalState(observation, world)
       const replies = readyMoves(hypo, undefined, INTENT_REPLIES)
       const answered = replies.length > 0 ? replies : [{ state: resolveIdleTurn(hypo) }]
       let answer = Infinity
-      for (const reply of answered) answer = Math.min(answer, placementValue(reply.state, belief, card.instanceId))
+      for (const reply of answered) {
+        if (performance.now() > deadline) break
+        answer = Math.min(answer, placementValue(reply.state, belief, card.instanceId))
+      }
+      if (answer === Infinity) continue
       scores.push(answer)
       weights.push(world.weight)
     }
+    if (scores.length === 0) continue
     const mixed = mixRisk(scores, weights, riskOf(profile))
     if (mixed > bestScore) {
       best = card

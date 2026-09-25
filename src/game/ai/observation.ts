@@ -49,7 +49,7 @@ export function observeMonster(state: MatchState): MonsterObservation {
     board: state.board.map((cell) => ({
       ...cell,
       card: cell.card ? { ...cell.card } : null,
-      coveredCards: cell.coveredCards.map((card) => ({ ...card })),
+      coveredCards: (cell.coveredCards ?? []).map((card) => ({ ...card })),
     })),
     ownHand: state.monster.hand.map((card) => ({ ...card })),
     ownDeckCounts: countsOf(state.monster.deck),
@@ -97,7 +97,7 @@ export function hypotheticalState(observation: MonsterObservation, world: Belief
     board: observation.board.map((cell) => ({
       ...cell,
       card: cell.card ? { ...cell.card } : null,
-      coveredCards: cell.coveredCards.map((card) => ({ ...card })),
+      coveredCards: (cell.coveredCards ?? []).map((card) => ({ ...card })),
     })),
     player: {
       hand: pile(world.hand, 'player', 'belief-hand'),
@@ -124,7 +124,7 @@ export function hiddenCounts(observation: MonsterObservation, deck: DeckConfig):
   }
   for (const cell of observation.board) {
     spend(cell.card)
-    for (const covered of cell.coveredCards) spend(covered)
+    for (const covered of cell.coveredCards ?? []) spend(covered)
   }
   for (const card of observation.graveyard) spend(card)
   return remaining

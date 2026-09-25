@@ -2,8 +2,9 @@ import { useFrame } from '@react-three/fiber'
 import { useRef, useState } from 'react'
 import { Group, MathUtils, Vector3 } from 'three'
 import { getCardDefinition } from '../../config/cardCatalog'
-import { chooseMonsterAction } from '../../game/ai/monsterAI'
 import { cellWorldPosition, getCell } from '../../game/core/spatial'
+import { landingEase, landingHop } from '../board/landingEase'
+import { MONSTER_PENDING } from './tacticalCards'
 import type { CameraMode, CardInstance, CellId } from '../../game/types'
 import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
@@ -17,7 +18,7 @@ const SETTLED_SCALE = 1.54
 const POSE: Record<CameraMode, { position: [number, number, number]; tilt: number; scale: number }> = {
   board: { position: [5.35, 1.68, 0.15], tilt: 1.36, scale: 1.32 },
   hand: { position: [5.35, 1.68, 0.15], tilt: 1.36, scale: 1.32 },
-  overview: { position: [5.48, 0.22, -0.35], tilt: 0.02, scale: 1.02 },
+  overview: { position: [MONSTER_PENDING.x, MONSTER_PENDING.y, MONSTER_PENDING.z], tilt: 0.02, scale: MONSTER_PENDING.scale },
 }
 
 type Flight = {
@@ -75,10 +76,10 @@ export function MonsterTelegraphCard() {
 
     if (phase.current === 'flying' && flight.current) {
       const motion = flight.current
-      motion.t = Math.min(1, motion.t + delta / 0.96)
-      const eased = 1 - Math.pow(1 - motion.t, 2.55)
+      motion.t = Math.min(1, motion.t + delta / 0.62)
+      const eased = landingEase(motion.t)
       root.position.lerpVectors(motion.from, motion.to, eased)
-      root.position.y += Math.sin(eased * Math.PI) * 0.72
+      root.position.y += landingHop(motion.t, 0.2)
       root.rotation.x = MathUtils.lerp(motion.fromTilt, 0, eased)
       root.rotation.y = MathUtils.lerp(root.rotation.y, 0, eased)
       root.rotation.z = MathUtils.lerp(root.rotation.z, 0, eased)
@@ -108,22 +109,15 @@ export function MonsterTelegraphCard() {
       root.position.z = MathUtils.lerp(root.position.z, pose.position[2], damping)
       root.rotation.x = MathUtils.lerp(root.rotation.x, pose.tilt, damping)
       root.scale.setScalar(MathUtils.lerp(root.scale.x || pose.scale, pose.scale, damping))
-      if (hold.current < 0.38) return
-      const action = chooseMonsterAction(match!, { opponentDeck: useGameStore.getState().opponentDeck }, telegraph.card.instanceId)
+      if (hold.current < 0.38 || !telegraph.cellId) return
       launchedId.current = telegraph.card.instanceId
-      if (!action) {
-        useGameStore.getState().playMonsterTurn()
-        phase.current = 'concealed'
-        setConcealed(true)
-        return
-      }
       phase.current = 'flying'
       flight.current = {
         t: 0,
         from: root.position.clone(),
         fromTilt: root.rotation.x,
         fromScale: root.scale.x || pose.scale,
-        to: cellLanding(action.cellId, stackDepthBeforePlay(action.cellId)),
+        to: cellLanding(telegraph.cellId, stackDepthBeforePlay(telegraph.cellId)),
       }
       return
     }

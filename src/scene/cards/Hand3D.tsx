@@ -219,7 +219,8 @@ export function Hand3D() {
             setHoveredIndex((current) => (next === null && current !== index ? current : next))
           }}
           onSelect={(instanceId) => {
-            if (!canPlayMatch || !introReady.current || inputLocked) return
+            if (inputLocked && !useGameStore.getState().resolution) usePresentationStore.getState().setInputLocked(false)
+            if (!canPlayMatch || !introReady.current || usePresentationStore.getState().inputLocked) return
             playCardSelect()
             beginCardPlacement(instanceId)
             setHoveredIndex(null)

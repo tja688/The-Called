@@ -1,6 +1,8 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { landingEase, landingHop } from './landingEase'
 import { DEPART_FADE_MS, POWER_COUNT_MS } from './resolutionBeat'
+import { PLAYER_PENDING } from '../cards/tacticalCards'
 import { usePresentationStore } from '../../stores/presentationStore'
 import { BoxGeometry, Group, MathUtils } from 'three'
 import { getCardDefinition } from '../../config/cardCatalog'
@@ -36,11 +38,11 @@ function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, settleIm
   // Preserve spatial continuity between zones. Player cards take over at the
   // exact world position of SelectedCardPreview; monster cards enter from the
   // far/top edge of the tactical board. Only activePlacement may use this path.
-  const startX = isPlayer ? 4.15 - cellPosition[0] : 0
-  const startY = isPlayer ? 0.38 : 1.05
-  const startZ = isPlayer ? -0.65 - cellPosition[2] : -6.35 - cellPosition[2]
-  const startScale = isPlayer ? 1.2 : 0.92
-  const duration = isPlayer ? 0.72 : 0.76
+  const startX = isPlayer ? PLAYER_PENDING.x - cellPosition[0] : 0
+  const startY = isPlayer ? PLAYER_PENDING.y + 0.1 - cellPosition[1] : 1.05
+  const startZ = isPlayer ? PLAYER_PENDING.z - (-0.65) - cellPosition[2] : -6.35 - cellPosition[2]
+  const startScale = isPlayer ? PLAYER_PENDING.scale : 0.92
+  const duration = isPlayer ? 0.58 : 0.62
   const settledY = 0.14 + stackDepth * CARD_THICKNESS
 
   useLayoutEffect(() => {
@@ -64,11 +66,10 @@ function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, settleIm
     if (!group.current || settled.current) return
     elapsed.current = Math.min(1, elapsed.current + delta / duration)
     const progress = elapsed.current
-    // Leave the source zone immediately, then ease gently into the cell.
-    const eased = 1 - Math.pow(1 - progress, 2.35)
+    const eased = landingEase(progress)
     group.current.position.x = MathUtils.lerp(startX, 0, eased)
     group.current.position.z = MathUtils.lerp(startZ, 0, eased)
-    group.current.position.y = MathUtils.lerp(startY, settledY, eased) + Math.sin(progress * Math.PI) * (isPlayer ? 0.58 : 0.42)
+    group.current.position.y = MathUtils.lerp(startY, settledY, eased) + landingHop(progress, isPlayer ? 0.22 : 0.16)
     group.current.rotation.x = MathUtils.lerp(isPlayer ? 0 : 0.32, 0, eased)
     group.current.rotation.y = MathUtils.lerp(isPlayer ? 0 : 0.16, 0, eased)
     group.current.rotation.z = MathUtils.lerp(isPlayer ? 0 : -0.06, 0, eased)

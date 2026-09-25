@@ -5,6 +5,7 @@ import { getCardDefinition } from '../../config/cardCatalog'
 import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { Card3D } from './Card3D'
+import { PLAYER_PENDING } from './tacticalCards'
 
 export function SelectedCardPreview() {
   const selectedId = useInteractionStore((state) => state.selectedCardInstanceId)
@@ -12,17 +13,17 @@ export function SelectedCardPreview() {
   const group = useRef<Group>(null)
 
   useLayoutEffect(() => {
-    group.current?.position.set(4.7, 0.55, -0.65)
-    group.current?.scale.setScalar(1.18)
+    group.current?.position.set(PLAYER_PENDING.x, PLAYER_PENDING.y + 0.2, PLAYER_PENDING.z)
+    group.current?.scale.setScalar(PLAYER_PENDING.scale)
   }, [selectedId])
 
   useFrame((_, delta) => {
     if (!group.current) return
     const damping = 1 - Math.exp(-delta * 8)
-    group.current.position.x = MathUtils.lerp(group.current.position.x, 4.15, damping)
-    group.current.position.y = MathUtils.lerp(group.current.position.y, 0.28, damping)
-    group.current.position.z = MathUtils.lerp(group.current.position.z, -0.65, damping)
-    group.current.scale.setScalar(MathUtils.lerp(group.current.scale.x, 1.2, damping))
+    group.current.position.x = MathUtils.lerp(group.current.position.x, PLAYER_PENDING.x, damping)
+    group.current.position.y = MathUtils.lerp(group.current.position.y, PLAYER_PENDING.y, damping)
+    group.current.position.z = MathUtils.lerp(group.current.position.z, PLAYER_PENDING.z, damping)
+    group.current.scale.setScalar(MathUtils.lerp(group.current.scale.x, PLAYER_PENDING.scale, damping))
   })
 
   if (!card) return null

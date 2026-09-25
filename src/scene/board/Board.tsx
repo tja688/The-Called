@@ -34,6 +34,18 @@ function ResolutionClock() {
   const placementSettled = useGameStore((state) => state.placementSettled)
   const finishResolution = useGameStore((state) => state.finishResolution)
 
+  const settlePlacement = useGameStore((state) => state.settlePlacement)
+
+  useEffect(() => {
+    if (!resolution || placementSettled) return
+    const timer = window.setTimeout(() => {
+      const live = useGameStore.getState()
+      const instanceId = live.activePlacement?.cardInstanceId
+      if (live.resolution && !live.placementSettled && instanceId) live.settlePlacement(instanceId)
+    }, 900)
+    return () => window.clearTimeout(timer)
+  }, [placementSettled, resolution, settlePlacement])
+
   useEffect(() => {
     if (!resolution || !placementSettled) return
     const timer = window.setTimeout(finishResolution, resolutionBeatMs(resolution))

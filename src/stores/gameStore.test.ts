@@ -126,6 +126,59 @@ describe('monster telegraph and battle restart', () => {
     expect(useGameStore.getState().opponentDeck.id).toBe('player-loadout')
   })
 
+  it('settles a monster cover immediately so the input lock can end', () => {
+    const state = createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0.2)
+    state.turn = 'monster'
+    state.board[0].card = {
+      instanceId: 'covered',
+      cardId: 'player_observation_record',
+      owner: 'player',
+      currentPower: 1,
+    }
+    state.board[0].coveredCards = []
+    const cover = [...state.monster.hand, ...state.monster.deck].find((card) => card.currentPower > 1)
+    if (!cover) throw new Error('missing cover')
+    state.monster.hand = [cover, ...state.monster.hand.filter((card) => card.instanceId !== cover.instanceId)]
+    state.monster.deck = state.monster.deck.filter((card) => card.instanceId !== cover.instanceId)
+    useGameStore.setState({
+      match: state,
+      telegraph: { card: { ...cover }, cellId: 'cell-0-0' },
+      resolution: undefined,
+      placementSettled: false,
+    })
+    usePresentationStore.getState().setInputLocked(false)
+    useGameStore.getState().playMonsterTurn()
+    const after = useGameStore.getState()
+    expect(after.resolution?.cover).toBeTruthy()
+    expect(after.placementSettled).toBe(true)
+    expect(usePresentationStore.getState().inputLocked).toBe(true)
+  })
+
+  it('passes a prepared cell that the rules reject instead of leaving the monster turn open', () => {
+    const state = createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0.2)
+    state.turn = 'monster'
+    state.finalBattle = true
+    const card = state.monster.hand[0]
+    state.board.forEach((cell, index) => {
+      cell.card = {
+        instanceId: `filled-${index}`,
+        cardId: 'player_observation_record',
+        owner: 'player',
+        currentPower: 9,
+      }
+      cell.coveredCards = []
+    })
+    useGameStore.setState({
+      match: state,
+      telegraph: { card: { ...card }, cellId: 'cell-0-0' },
+      resolution: undefined,
+      placementSettled: false,
+    })
+    useGameStore.getState().playMonsterTurn()
+    expect(useGameStore.getState().match?.turn).toBe('player')
+    expect(useGameStore.getState().match?.openingTurn).toBe(true)
+  })
+
   it('returns the camera to the board when a battle view is reset', () => {
     useInteractionStore.getState().beginCardPlacement('card-1')
     expect(useInteractionStore.getState().cameraMode).toBe('overview')
