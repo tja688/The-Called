@@ -2,7 +2,8 @@ import { useFrame } from '@react-three/fiber'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { BufferGeometry, Group, Vector3 } from 'three'
 import { BONE } from '../presentation/palette'
-import { STAGE_INTRO, stageProgress } from './stageIntro'
+import { useGameStore } from '../../stores/gameStore'
+import { STAGE_INTRO, stageNow, stageProgress } from './stageIntro'
 
 function gridGeometry(extent: number, step: number) {
   const points: Vector3[] = []
@@ -14,6 +15,7 @@ function gridGeometry(extent: number, step: number) {
 }
 
 export function PerspectiveGrid({ position = [0, -0.2, -0.65] as [number, number, number] }) {
+  const battleKey = useGameStore((state) => state.battleKey)
   const group = useRef<Group>(null)
   const geometry = useMemo(() => gridGeometry(18, 4.2), [])
 
@@ -23,7 +25,7 @@ export function PerspectiveGrid({ position = [0, -0.2, -0.65] as [number, number
 
   useFrame((state) => {
     if (!group.current) return
-    const progress = stageProgress(state.clock.elapsedTime, STAGE_INTRO.floorStart, STAGE_INTRO.floorDuration)
+    const progress = stageProgress(stageNow(battleKey, state.clock.elapsedTime), STAGE_INTRO.floorStart, STAGE_INTRO.floorDuration)
     group.current.position.z = position[2] - (1 - progress) * 18
     group.current.position.y = position[1] - (1 - progress) * 0.45
   })

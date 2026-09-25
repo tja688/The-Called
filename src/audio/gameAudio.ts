@@ -21,6 +21,62 @@ const soundEffects: Partial<Record<SoundEffect, HTMLAudioElement>> = {}
 let bgmPausedForPauseScreen = false
 const pendingLoopPlayback = new WeakSet<HTMLAudioElement>()
 
+const AUDIO_LEVELS_KEY = 'the-called-audio-levels'
+const MUSIC_BASE = { bgm: 0.35, ambience: 0.32 }
+const EFFECT_BASE = 0.8
+
+export type AudioLevels = { music: number; effects: number }
+
+function clamp01(value: number) {
+  if (!Number.isFinite(value)) return 1
+  return Math.min(1, Math.max(0, value))
+}
+
+function readLevels(): AudioLevels {
+  try {
+    const raw = localStorage.getItem(AUDIO_LEVELS_KEY)
+    if (!raw) return { music: 1, effects: 1 }
+    const parsed = JSON.parse(raw) as Partial<AudioLevels>
+    return { music: clamp01(parsed.music ?? 1), effects: clamp01(parsed.effects ?? 1) }
+  } catch {
+    return { music: 1, effects: 1 }
+  }
+}
+
+let levels = readLevels()
+
+function applyLevels() {
+  if (bgm) bgm.volume = MUSIC_BASE.bgm * levels.music
+  if (ambience) ambience.volume = MUSIC_BASE.ambience * levels.music
+  for (const audio of Object.values(soundEffects)) {
+    if (audio) audio.volume = EFFECT_BASE * levels.effects
+  }
+}
+
+function persistLevels() {
+  try {
+    localStorage.setItem(AUDIO_LEVELS_KEY, JSON.stringify(levels))
+  } catch {
+    // Private mode and tests can refuse storage. Playback still follows the in-memory levels.
+  }
+}
+
+export function getAudioLevels(): AudioLevels {
+  return { ...levels }
+}
+
+export function setMusicLevel(music: number) {
+  levels = { ...levels, music: clamp01(music) }
+  applyLevels()
+  persistLevels()
+}
+
+export function setEffectsLevel(effects: number) {
+  levels = { ...levels, effects: clamp01(effects) }
+  applyLevels()
+  persistLevels()
+}
+
 function createAudio(path: string, volume: number, loop = false) {
   const audio = new Audio(path)
   audio.preload = 'auto'
@@ -30,17 +86,17 @@ function createAudio(path: string, volume: number, loop = false) {
 }
 
 function getBgm() {
-  bgm ??= createAudio(AUDIO_PATHS.bgm, 0.35, true)
+  bgm ??= createAudio(AUDIO_PATHS.bgm, MUSIC_BASE.bgm * levels.music, true)
   return bgm
 }
 
 function getAmbience() {
-  ambience ??= createAudio(AUDIO_PATHS.ambience, 0.32, true)
+  ambience ??= createAudio(AUDIO_PATHS.ambience, MUSIC_BASE.ambience * levels.music, true)
   return ambience
 }
 
 function getSoundEffect(sound: SoundEffect) {
-  soundEffects[sound] ??= createAudio(AUDIO_PATHS[sound], 0.8)
+  soundEffects[sound] ??= createAudio(AUDIO_PATHS[sound], EFFECT_BASE * levels.effects)
   return soundEffects[sound]
 }
 

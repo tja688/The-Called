@@ -8,12 +8,13 @@ import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { usePresentationStore } from '../../stores/presentationStore'
 import { CARD_HEIGHT, CARD_THICKNESS, CARD_WIDTH, Card3D } from './Card3D'
-import { STAGE_INTRO, stageProgress } from '../environment/stageIntro'
+import { PLAYER_DECK_PILE } from './PlayerDeckPile'
+import { STAGE_INTRO, stageNow, stageProgress } from '../environment/stageIntro'
 
 const HAND_PIVOT_Z = 4.45
-const HAND_FOREGROUND_OFFSET = 4.1
+const HAND_FOREGROUND_OFFSET = 3.35
 const HAND_POSTURES: Record<CameraMode, { tilt: number; lift: number; z: number }> = {
-  board: { tilt: 0, lift: 0.68, z: 0 }, hand: { tilt: 0.08, lift: 0.92, z: -0.08 }, overview: { tilt: 0, lift: 0, z: 0 },
+  board: { tilt: 0, lift: 0.64, z: 0 }, hand: { tilt: 0.08, lift: 0.74, z: -0.08 }, overview: { tilt: 0, lift: 0, z: 0 },
 }
 const CARD_TILTS: Record<CameraMode, number> = { board: 1.12, hand: 1.2, overview: 0 }
 const handHitGeometry = new BoxGeometry(CARD_WIDTH, CARD_THICKNESS, CARD_HEIGHT)
@@ -42,23 +43,30 @@ function HandCard({ card, index, count, hoveredIndex, cameraMode, flipped, drawn
   const hoverProgress = useRef(0)
   const spread = useRef(0)
   const drawProgress = useRef(drawn ? 0 : 1)
+  const launchY = useRef(PLAYER_DECK_PILE[1] - HAND_POSTURES.board.lift)
+  const battleKey = useGameStore((state) => state.battleKey)
   const introFinished = useRef(false)
   const pose = getPose(index, count)
   const definition = getCardDefinition(card.cardId)
   const restZ = pose.z + HAND_FOREGROUND_OFFSET - HAND_PIVOT_Z
 
   useLayoutEffect(() => {
-    root.current?.position.set(drawn ? -4.75 : pose.x, drawn ? -0.44 : pose.y, drawn ? 2.6 : restZ)
+    introFinished.current = false
+    if (drawn && drawProgress.current === 0) {
+      const remaining = useGameStore.getState().match?.player.deck.length ?? 0
+      launchY.current = PLAYER_DECK_PILE[1] + remaining * CARD_THICKNESS - HAND_POSTURES.board.lift
+    }
+    root.current?.position.set(drawn ? PLAYER_DECK_PILE[0] : pose.x, drawn ? launchY.current : pose.y, drawn ? PLAYER_DECK_PILE[2] - HAND_PIVOT_Z : restZ)
     root.current?.rotation.set(drawn ? 0 : CARD_TILTS.board, drawn ? 0.02 : pose.rotation, 0)
     root.current?.scale.setScalar(drawn ? 1 : 0.9)
     visual.current?.position.set(0, 0, 0)
     visual.current?.rotation.set(0, 0, 0)
     visual.current?.scale.setScalar(1)
-  }, [drawn, pose.x, pose.y, pose.rotation, restZ])
+  }, [battleKey, drawn, pose.x, pose.y, pose.rotation, restZ])
 
   useFrame((state, delta) => {
     if (!root.current || !visual.current) return
-    const intro = stageProgress(state.clock.elapsedTime, STAGE_INTRO.handStart + index * STAGE_INTRO.handStep, STAGE_INTRO.handCardDuration)
+    const intro = stageProgress(stageNow(battleKey, state.clock.elapsedTime), STAGE_INTRO.handStart + index * STAGE_INTRO.handStep, STAGE_INTRO.handCardDuration)
     if (!introFinished.current) {
       const wave = Math.sin(intro * Math.PI) * (0.55 + index * 0.025)
       root.current.position.x = MathUtils.lerp(-4.6, pose.x, intro)
@@ -86,9 +94,9 @@ function HandCard({ card, index, count, hoveredIndex, cameraMode, flipped, drawn
     // the card forward. Draw it up in world space, and stand it a little taller.
     const tilt = restTilt + 0.16 * lift
     const rise = 0.92 * lift
-    root.current.position.x = MathUtils.lerp(-4.75, pose.x, travel) + spread.current
-    root.current.position.y = MathUtils.lerp(-0.44, pose.y, travel) + (settled ? 0 : Math.sin(drawProgress.current * Math.PI) * 0.72)
-    root.current.position.z = MathUtils.lerp(2.6, restZ, travel)
+    root.current.position.x = MathUtils.lerp(PLAYER_DECK_PILE[0], pose.x, travel) + spread.current
+    root.current.position.y = MathUtils.lerp(launchY.current, pose.y, travel) + (settled ? 0 : Math.sin(drawProgress.current * Math.PI) * 0.72)
+    root.current.position.z = MathUtils.lerp(PLAYER_DECK_PILE[2] - HAND_PIVOT_Z, restZ, travel)
     root.current.rotation.x = MathUtils.lerp(0, restTilt, travel) + (settled ? 0.16 * lift : 0)
     root.current.rotation.y = MathUtils.lerp(0.02, pose.rotation, travel)
     root.current.scale.setScalar(MathUtils.lerp(1, 0.9, travel))
@@ -137,9 +145,16 @@ export function Hand3D() {
   const canPlayMatch = useGameStore((state) => state.match?.turn === 'player' && state.match.status === 'playing' && !state.match.openingTurn)
   const inputLocked = usePresentationStore((state) => state.inputLocked)
   const introReady = useRef(false)
+  const battleKey = useGameStore((state) => state.battleKey)
   const cameraMode = useInteractionStore((state) => state.cameraMode)
   const beginCardPlacement = useInteractionStore((state) => state.beginCardPlacement)
   const handRig = useRef<Group>(null)
+
+  useEffect(() => {
+    knownCards.current = new Set()
+    setDrawnCards(new Set())
+    setFlippedCards(new Set())
+  }, [battleKey])
 
   useEffect(() => {
     if (!cards.length) return
@@ -154,7 +169,7 @@ export function Hand3D() {
 
   useFrame((state, delta) => {
     if (!handRig.current) return
-    introReady.current = state.clock.elapsedTime >= STAGE_INTRO.complete
+    introReady.current = stageNow(battleKey, state.clock.elapsedTime) >= STAGE_INTRO.complete
     const posture = HAND_POSTURES[cameraMode]
     const damping = 1 - Math.exp(-delta * 5.2)
     handRig.current.rotation.x = MathUtils.lerp(handRig.current.rotation.x, posture.tilt, damping)

@@ -10,20 +10,22 @@ import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { CARD_ASPECT_RATIO, CARD_THICKNESS, Card3D } from '../cards/Card3D'
 import { BONE, CLAY } from '../presentation/palette'
-import { STAGE_INTRO } from '../environment/stageIntro'
+import { STAGE_INTRO, stageNow } from '../environment/stageIntro'
 
 const CELL_WIDTH = 2.02
 const CELL_HEIGHT = CELL_WIDTH * CARD_ASPECT_RATIO
 const cellFrame = new BoxGeometry(CELL_WIDTH, 0.02, CELL_HEIGHT)
 
-function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, shownPower, opacity = 1, onSettled }: {
+function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, settleImmediately = false, shownPower, opacity = 1, readout, onSettled }: {
   card: CardInstance
   flipped: boolean
   cellPosition: readonly [number, number, number]
   stackDepth: number
   animate: boolean
+  settleImmediately?: boolean
   shownPower: number
   opacity?: number
+  readout: 'full' | 'power'
   onSettled: () => void
 }) {
   const group = useRef<Group>(null)
@@ -40,6 +42,10 @@ function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, shownPow
   const startScale = isPlayer ? 1.2 : 0.92
   const duration = isPlayer ? 0.72 : 0.76
   const settledY = 0.14 + stackDepth * CARD_THICKNESS
+
+  useLayoutEffect(() => {
+    if (settleImmediately) onSettled()
+  }, [onSettled, settleImmediately])
 
   useLayoutEffect(() => {
     if (!group.current) return
@@ -73,10 +79,11 @@ function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, shownPow
     }
   })
 
-  return <group ref={group}><Card3D position={[0, 0, 0]} face={card.owner === 'player' ? 'hero' : 'monster'} card={definition} currentPower={shownPower} opacity={opacity} flipped={flipped} flipLift={0.7} silent /></group>
+  return <group ref={group}><Card3D position={[0, 0, 0]} face={card.owner === 'player' ? 'hero' : 'monster'} card={definition} currentPower={shownPower} opacity={opacity} readout={readout} flipped={flipped} flipLift={0.7} silent /></group>
 }
 
 export function Cell({ id, position }: { id: CellId; position: readonly [number, number, number] }) {
+  const battleKey = useGameStore((state) => state.battleKey)
   const introReady = useRef(false)
   const [hovered, setHovered] = useState(false)
   const [flipped, setFlipped] = useState(false)
@@ -100,11 +107,12 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
   const departing = Boolean(removedHere && visualCard && removedHere.card.instanceId === visualCard.instanceId)
   const [shownPower, setShownPower] = useState(coverHere?.fromPower ?? visualCard?.currentPower ?? 0)
   const [opacity, setOpacity] = useState(1)
-  const shouldAnimateCard = Boolean(
+  const isArrivingCard = Boolean(
     visualCard
     && activePlacement?.cardInstanceId === visualCard.instanceId
     && activePlacement.cellId === id,
   )
+  const shouldAnimateCard = isArrivingCard && visualCard?.owner === 'player'
   const displayedPower = counting && coverHere
     ? (placementSettled ? shownPower : coverHere.fromPower)
     : (visualCard?.currentPower ?? 0)
@@ -113,10 +121,11 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
   const isPlacementTarget = Boolean(!inputLocked && match && selectedCard && match.turn === 'player' && (isEmptyCell || canPlaceCard(match, selectedCard, cell!)))
   const isBlockedEnemy = Boolean(!inputLocked && selectedCard && cell?.card?.owner !== selectedCard.owner && !isPlacementTarget)
   const canFlip = cameraMode === 'overview' && !selectedCard && Boolean(cell?.card)
+  const readout = cameraMode === 'overview' ? 'full' : 'power'
   const isInteractive = isPlacementTarget || isBlockedEnemy || canFlip
 
   useFrame((state) => {
-    introReady.current = state.clock.elapsedTime >= STAGE_INTRO.complete
+    introReady.current = stageNow(battleKey, state.clock.elapsedTime) >= STAGE_INTRO.complete
   })
 
   useEffect(() => {
@@ -216,6 +225,7 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
           silent
           card={getCardDefinition(coveredCard.cardId)}
           currentPower={coveredCard.currentPower}
+          readout={readout}
           flipLift={0.7}
         />
       ))}
@@ -226,8 +236,10 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
         cellPosition={position}
         stackDepth={coveredCards.length}
         animate={shouldAnimateCard}
+        settleImmediately={isArrivingCard && !shouldAnimateCard}
         shownPower={displayedPower}
         opacity={opacity}
+        readout={readout}
         onSettled={() => settlePlacement(visualCard.instanceId)}
       />}
     </group>

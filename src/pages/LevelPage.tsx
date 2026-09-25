@@ -14,7 +14,6 @@ export function LevelPage() {
   const initialize = useGameStore((state) => state.initialize)
   const match = useGameStore((state) => state.match)
   const prepareMonsterTurn = useGameStore((state) => state.prepareMonsterTurn)
-  const playMonsterTurn = useGameStore((state) => state.playMonsterTurn)
   const resolveFinalBattleTurn = useGameStore((state) => state.resolveFinalBattleTurn)
   const resolution = useGameStore((state) => state.resolution)
   const setCameraMode = useInteractionStore((state) => state.setCameraMode)
@@ -32,15 +31,15 @@ export function LevelPage() {
   }, [match?.finalBattle, match?.openingTurn, match?.round, match?.status, match?.turn, resolveFinalBattleTurn])
 
   useEffect(() => {
-    if (match?.status !== 'playing' || match.turn !== 'monster' || match.openingTurn) return
+    const live = useGameStore.getState()
+    const active = live.match
+    if (!level || active?.levelId !== level.id || active.status !== 'playing' || active.turn !== 'monster' || active.openingTurn) return
     finishCardPlacement()
     setCameraMode('overview')
-    // The next card is already on the table. Wait out a cover or removal, then play it.
-    if (resolution) return
-    if (!prepareMonsterTurn()) return
-    const timer = window.setTimeout(playMonsterTurn, 950)
-    return () => window.clearTimeout(timer)
-  }, [finishCardPlacement, match?.openingTurn, match?.round, match?.status, match?.turn, playMonsterTurn, prepareMonsterTurn, resolution, setCameraMode])
+    // The telegraphed card flies itself onto the cell, then commits the play.
+    if (live.resolution) return
+    prepareMonsterTurn()
+  }, [finishCardPlacement, level, match?.openingTurn, match?.round, match?.status, match?.turn, prepareMonsterTurn, resolution, setCameraMode])
 
   useEffect(() => {
     const wasMonsterTurn = previousTurn.current === 'monster'

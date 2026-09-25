@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMatchResultMessage, matchResultActions } from './HUD'
+import { formatMatchResultMessage, matchDeparture } from './HUD'
 
 describe('formatMatchResultMessage', () => {
   it('uses the configured opponent name for a monster victory', () => {
@@ -12,9 +12,9 @@ describe('formatMatchResultMessage', () => {
     expect(formatMatchResultMessage('draw', 'Rahu & Ketu')).toBe('平局。')
   })
 
-  it('offers the next level only after a win that is not the last encounter', () => {
-    expect(matchResultActions('player', true)).toEqual(['next', 'retry', 'map'])
-    expect(matchResultActions('player', false)).toEqual(['retry', 'map'])
-    expect(matchResultActions('monster', true)).toEqual(['retry', 'map'])
+  it('sends a win back to the map and a loss or draw back to the menu', () => {
+    expect(matchDeparture('player')).toBe('map')
+    expect(matchDeparture('monster')).toBe('home')
+    expect(matchDeparture('draw')).toBe('home')
   })
 })

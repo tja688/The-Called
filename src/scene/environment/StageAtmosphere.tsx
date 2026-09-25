@@ -52,7 +52,79 @@ function HorizonTicks() {
   )
 }
 
-export function StageAtmosphere() {
+function SplitMarks() {
+  const bridge = useMemo(() => {
+    const points = [
+      new Vector3(-6.2, 4.2, 0), new Vector3(-4.4, 6.1, 0),
+      new Vector3(4.4, 3.4, 0), new Vector3(6.2, 5.3, 0),
+      new Vector3(-5.3, 5.15, 0), new Vector3(5.3, 4.35, 0),
+    ]
+    return new BufferGeometry().setFromPoints(points)
+  }, [])
+  return (
+    <group>
+      <lineSegments geometry={bridge} position={[0, 0, -9]} raycast={() => null}>
+        <lineBasicMaterial color={BONE} transparent opacity={0.4} />
+      </lineSegments>
+      <LineCircle radius={0.55} position={[-5.3, 5.15, -8.6]} opacity={0.55} />
+      <LineCircle radius={0.55} position={[5.3, 4.35, -8.6]} opacity={0.55} />
+      <LineCircle radius={1.35} position={[-5.3, 5.15, -9.1]} opacity={0.2} spin={0.07} />
+      <LineCircle radius={1.35} position={[5.3, 4.35, -9.1]} opacity={0.2} spin={-0.07} />
+    </group>
+  )
+}
+
+function CrescentMarks() {
+  const crescent = useMemo(() => circleGeometry(2.8, Math.PI * 0.28, Math.PI * 1.72, 56), [])
+  const orbit = useMemo(() => circleGeometry(4.6, 0, Math.PI * 2, 72), [])
+  return (
+    <group position={[5.4, 5.2, -8.8]}>
+      <line geometry={crescent} raycast={() => null}>
+        <lineBasicMaterial color={BONE} transparent opacity={0.62} />
+      </line>
+      <line geometry={orbit} raycast={() => null}>
+        <lineBasicMaterial color={BONE} transparent opacity={0.2} />
+      </line>
+      <mesh position={[1.15, 0.15, 0]} raycast={() => null}>
+        <circleGeometry args={[0.16, 20]} />
+        <meshBasicMaterial color={BONE} />
+      </mesh>
+    </group>
+  )
+}
+
+function FloorMotif({ motif }: { motif: 'eclipse' | 'split' | 'crescent' }) {
+  if (motif === 'split') {
+    return (
+      <group position={[0, -0.16, -1.2]}>
+        {[-7.1, 7.1].map((x) => (
+          <mesh key={x} position={[x, 0, 0]} rotation={[-Math.PI / 2, 0, 0.2 * Math.sign(x)]} raycast={() => null}>
+            <planeGeometry args={[0.045, 16]} />
+            <meshBasicMaterial color={BONE} transparent opacity={0.34} />
+          </mesh>
+        ))}
+      </group>
+    )
+  }
+  if (motif === 'crescent') {
+    return (
+      <group position={[0, -0.16, -1.8]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh raycast={() => null}>
+          <ringGeometry args={[8.4, 8.48, 90]} />
+          <meshBasicMaterial color={BONE} side={2} transparent opacity={0.32} />
+        </mesh>
+        <mesh raycast={() => null}>
+          <ringGeometry args={[5.1, 5.16, 70]} />
+          <meshBasicMaterial color={BONE} side={2} transparent opacity={0.18} />
+        </mesh>
+      </group>
+    )
+  }
+  return null
+}
+
+export function StageAtmosphere({ monsterId }: { monsterId: string }) {
+  const motif = monsterId === 'rahu-ketu' ? 'split' : monsterId === 'moon' ? 'crescent' : 'eclipse'
   const tactical = useInteractionStore((state) => state.cameraMode === 'overview')
   const sky = useRef<Group>(null)
   const stars = useMemo(() => {
@@ -74,16 +146,23 @@ export function StageAtmosphere() {
 
   return (
     <group raycast={() => null}>
+      <FloorMotif motif={motif} />
       <group ref={sky}>
-        <LineCircle radius={2.15} position={[-7.6, 5.35, -8.8]} opacity={0.28} spin={0.04} />
-        <LineCircle radius={1.15} position={[-6.7, 6.15, -9.4]} opacity={0.16} spin={-0.06} />
-        <LineCircle radius={1.7} position={[7.8, 4.7, -8.2]} opacity={0.24} spin={-0.05} />
-        <line geometry={horizon} position={[0, 0.02, -10.5]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
-          <lineBasicMaterial color={BONE} transparent opacity={0.16} />
-        </line>
-        <HorizonTicks />
+        {motif === 'eclipse' && (
+          <>
+            <LineCircle radius={2.15} position={[-7.6, 5.35, -8.8]} opacity={0.28} spin={0.04} />
+            <LineCircle radius={1.15} position={[-6.7, 6.15, -9.4]} opacity={0.16} spin={-0.06} />
+            <LineCircle radius={1.7} position={[7.8, 4.7, -8.2]} opacity={0.24} spin={-0.05} />
+            <line geometry={horizon} position={[0, 0.02, -10.5]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+              <lineBasicMaterial color={BONE} transparent opacity={0.16} />
+            </line>
+            <HorizonTicks />
+          </>
+        )}
+        {motif === 'split' && <SplitMarks />}
+        {motif === 'crescent' && <CrescentMarks />}
         <points geometry={stars} raycast={() => null}>
-          <pointsMaterial color={BONE} size={0.035} transparent opacity={0.4} sizeAttenuation />
+          <pointsMaterial color={BONE} size={0.035} transparent opacity={motif === 'eclipse' ? 0.4 : 0.22} sizeAttenuation />
         </points>
       </group>
     </group>

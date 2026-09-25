@@ -5,8 +5,8 @@ import { useInteractionStore } from '../../stores/interactionStore'
 import type { CameraMode } from '../../game/types'
 
 const POSES: Record<CameraMode, { position: [number, number, number]; target: [number, number, number]; fov: number }> = {
-  board: { position: [0, 3.75, 12.4], target: [0, 0.82, -5.8], fov: 63 },
-  hand: { position: [0, 3.5, 10.4], target: [0, 0.74, 3.7], fov: 50 },
+  board: { position: [0, 4.7, 12.9], target: [0, 0.02, -2.15], fov: 60 },
+  hand: { position: [0, 4.85, 9.7], target: [0, 0.28, 1.6], fov: 46 },
   overview: { position: [1.7, 17.2, 1.15], target: [1.7, 0, -0.35], fov: 34 },
 }
 

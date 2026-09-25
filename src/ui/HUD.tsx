@@ -1,21 +1,22 @@
 import { useEffect } from 'react'
 import { playCameraTransition } from '../audio/gameAudio'
+import { useCampaignStore } from '../stores/campaignStore'
 import { useInteractionStore } from '../stores/interactionStore'
 import { useNavigationStore } from '../stores/navigationStore'
+import { usePresentationStore } from '../stores/presentationStore'
 import { PlaybackControls } from './PlaybackControls'
 import { getCardDefinition } from '../config/cardCatalog'
 import { finalBattleMessage, getBoardPower } from '../game/core/matchEngine'
 import { useGameStore } from '../stores/gameStore'
-import { getMonsterConfig, getNextLevelId } from '../config/gameContent'
+import { getMonsterConfig } from '../config/gameContent'
 import type { MatchResult } from '../game/types'
 
 export function formatMatchResultMessage(winner: MatchResult['winner'], monsterName: string) {
   return winner === 'draw' ? '平局。' : winner === 'player' ? '你赢了！' : `${monsterName} 获胜。`
 }
 
-export function matchResultActions(winner: MatchResult['winner'], hasNextLevel: boolean) {
-  if (winner === 'player' && hasNextLevel) return ['next', 'retry', 'map'] as const
-  return ['retry', 'map'] as const
+export function matchDeparture(winner: MatchResult['winner']) {
+  return winner === 'player' ? 'map' : 'home'
 }
 
 export function HUD() {
@@ -24,21 +25,60 @@ export function HUD() {
   const match = useGameStore((state) => state.match)
   const telegraph = useGameStore((state) => state.telegraph)
   const nextCardName = telegraph && match?.status === 'playing' ? getCardDefinition(telegraph.card.cardId).name : undefined
-  const initialize = useGameStore((state) => state.initialize)
-  const startLevel = useNavigationStore((state) => state.startLevel)
-  const exitToMap = useNavigationStore((state) => state.exitToMap)
   const placementNotice = useInteractionStore((state) => state.placementNotice)
   const showPlacementNotice = useInteractionStore((state) => state.showPlacementNotice)
   const monsterName = getMonsterConfig(match?.monsterId ?? null)?.name ?? 'UNKNOWN'
   const resultMessage = formatMatchResultMessage(match?.result?.winner ?? 'draw', monsterName)
-  const nextLevelId = getNextLevelId(match?.levelId ?? null)
-  const actions = matchResultActions(match?.result?.winner ?? 'draw', Boolean(nextLevelId))
+  const finished = match?.status === 'finished'
+  const winner = match?.result?.winner
 
   useEffect(() => {
     if (!placementNotice) return
     const timer = window.setTimeout(() => showPlacementNotice(undefined), 2400)
     return () => window.clearTimeout(timer)
   }, [placementNotice, showPlacementNotice])
+
+  useEffect(() => {
+    if (!finished || !winner || !match) return
+    const levelId = match.levelId
+    const timer = window.setTimeout(() => {
+      resetBattleView()
+      if (matchDeparture(winner) === 'map') {
+        useCampaignStore.getState().complete(levelId)
+        useNavigationStore.getState().exitToMap()
+        return
+      }
+      useCampaignStore.getState().reset()
+      useNavigationStore.getState().exitToHome()
+    }, 1100)
+    return () => window.clearTimeout(timer)
+  }, [finished, match, resetBattleView, winner])
+
+  useEffect(() => {
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) < 8) return
+      const target = event.target
+      if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"]')) return
+      const match = useGameStore.getState().match
+      if (!match || match.status !== 'playing' || match.turn !== 'player' || match.openingTurn) return
+      if (usePresentationStore.getState().inputLocked) return
+      const interaction = useInteractionStore.getState()
+      const forward = event.deltaY < 0
+      if (forward && interaction.cameraMode !== 'overview') {
+        playCameraTransition('up')
+        interaction.setCameraMode('overview')
+        event.preventDefault()
+      }
+      if (!forward && interaction.cameraMode === 'overview') {
+        playCameraTransition('down')
+        interaction.finishCardPlacement()
+        interaction.setCameraMode('board')
+        event.preventDefault()
+      }
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => window.removeEventListener('wheel', onWheel)
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -59,6 +99,13 @@ export function HUD() {
   return (
     <>
       <PlaybackControls />
+      {match?.status === 'playing' && (
+        <aside className="view-hint">
+          <span className="view-hint__mark" aria-hidden="true" />
+          <span>滚轮向前 俯视</span>
+          <span>滚轮向后 手牌</span>
+        </aside>
+      )}
       {match && (
         <section className="battle-status" aria-live="polite">
           <div className="battle-status__score">
@@ -82,17 +129,7 @@ export function HUD() {
           <div className="match-result__panel">
             <strong>{resultMessage}</strong>
             <span>YOU {match.result.playerPower} — {match.result.monsterPower} {monsterName}</span>
-            <div className="match-result__actions">
-              {actions.includes('next') && nextLevelId && (
-                <button type="button" onClick={() => { resetBattleView(); startLevel(nextLevelId) }}>下一关</button>
-              )}
-              {actions.includes('retry') && (
-                <button type="button" onClick={() => { resetBattleView(); initialize(match.levelId, match.monsterId) }}>再来</button>
-              )}
-              {actions.includes('map') && (
-                <button type="button" onClick={exitToMap}>回地图</button>
-              )}
-            </div>
+            <span>{winner === 'player' ? '回到地图' : '回到主菜单'}</span>
           </div>
         </div>
       )}

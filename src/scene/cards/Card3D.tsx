@@ -11,6 +11,8 @@ export const CARD_THICKNESS = 0.028
 
 type FaceStyle = { fill: string; ink: string; line: string }
 
+export type CardReadout = 'full' | 'power'
+
 type Props = {
   position: [number, number, number]
   rotation?: [number, number, number]
@@ -23,6 +25,8 @@ type Props = {
   currentPower?: number
   opacity?: number
   backArt?: string
+  /** Full face in vertical view; power only when the board is seen at an angle. */
+  readout?: CardReadout
   /** Decorative copies should not steal pointer rays from the board. */
   silent?: boolean
 }
@@ -58,7 +62,7 @@ function effectCopy(description: string) {
   return description.replace(/[。．.]+$/u, '').replace(/^无额外效果$/u, '')
 }
 
-function paintCard(canvas: HTMLCanvasElement, style: FaceStyle, card?: CardDefinition, currentPower?: number, side: 'front' | 'back' = 'front') {
+function paintCard(canvas: HTMLCanvasElement, style: FaceStyle, card?: CardDefinition, currentPower?: number, side: 'front' | 'back' = 'front', readout: CardReadout = 'full') {
   const context = canvas.getContext('2d')
   if (!context) return
   const { width, height } = canvas
@@ -97,39 +101,51 @@ function paintCard(canvas: HTMLCanvasElement, style: FaceStyle, card?: CardDefin
   }
 
   const fontFamily = getComputedStyle(document.documentElement).fontFamily || 'sans-serif'
+  const powerText = String(currentPower ?? card.power)
   context.fillStyle = style.ink
-  context.textAlign = 'left'
   context.textBaseline = 'middle'
-  context.font = `700 150px ${fontFamily}`
-  context.fillText(String(currentPower ?? card.power), 72, 148)
+
+  if (readout === 'power') {
+    context.textAlign = 'center'
+    context.font = `700 360px ${fontFamily}`
+    context.fillText(powerText, width / 2, height * 0.52)
+    return
+  }
+
+  context.textAlign = 'left'
+  context.font = `700 118px ${fontFamily}`
+  context.fillText(powerText, 88, 162)
 
   context.beginPath()
-  context.moveTo(72, 220)
-  context.lineTo(width - 72, 220)
+  context.moveTo(88, 236)
+  context.lineTo(width - 88, 236)
   context.stroke()
 
   context.textAlign = 'center'
-  const nameSize = fitFontSize(context, card.name, width - 150, 64, 36, 700, fontFamily)
-  context.font = `700 ${nameSize}px ${fontFamily}`
-  context.fillText(card.name, width / 2, 300)
-
   const copy = effectCopy(card.description)
+  const nameSize = fitFontSize(context, card.name, width - 176, copy ? 64 : 78, 42, 700, fontFamily)
+  context.font = `700 ${nameSize}px ${fontFamily}`
+  context.fillText(card.name, width / 2, copy ? 318 : 520)
+
   if (!copy) return
-  const maxWidth = width - 140
-  let size = 34
+  const maxWidth = width - 176
+  let size = 62
   context.font = `500 ${size}px ${fontFamily}`
   let lines = wrapText(context, copy, maxWidth)
-  while (size > 26 && lines.length > 2) {
+  while (size > 44 && lines.length > 3) {
     size -= 2
     context.font = `500 ${size}px ${fontFamily}`
     lines = wrapText(context, copy, maxWidth)
   }
-  lines.slice(0, 2).forEach((line, index) => {
-    context.fillText(line, width / 2, 390 + index * (size + 12))
+  const shown = lines.slice(0, 3)
+  const lineHeight = Math.round(size * 1.38)
+  const startY = 468
+  shown.forEach((line, index) => {
+    context.fillText(line, width / 2, startY + index * lineHeight)
   })
 }
 
-function useFaceTexture(style: FaceStyle, card?: CardDefinition, currentPower?: number, side: 'front' | 'back' = 'front') {
+function useFaceTexture(style: FaceStyle, card?: CardDefinition, currentPower?: number, side: 'front' | 'back' = 'front', readout: CardReadout = 'full') {
   const texture = useMemo(() => {
     const canvas = document.createElement('canvas')
     canvas.width = 720
@@ -143,12 +159,12 @@ function useFaceTexture(style: FaceStyle, card?: CardDefinition, currentPower?: 
 
   useEffect(() => {
     const draw = () => {
-      paintCard(texture.image as HTMLCanvasElement, style, card, currentPower, side)
+      paintCard(texture.image as HTMLCanvasElement, style, card, currentPower, side, readout)
       texture.needsUpdate = true
     }
     draw()
     void document.fonts?.ready.then(draw)
-  }, [card, currentPower, side, style, texture])
+  }, [card, currentPower, readout, side, style, texture])
 
   useEffect(() => () => texture.dispose(), [texture])
   return texture
@@ -160,12 +176,12 @@ const edges = new EdgesGeometry(slab)
 const ignoreRaycast = () => null
 const receiveRaycast = Mesh.prototype.raycast
 
-export function Card3D({ position, rotation = [0, 0, 0], scale = 1, face = 'hero', flipped = false, flipLift = 0.14, card, currentPower, opacity = 1, silent = false }: Props) {
+export function Card3D({ position, rotation = [0, 0, 0], scale = 1, face = 'hero', flipped = false, flipLift = 0.14, card, currentPower, opacity = 1, readout = 'full', silent = false }: Props) {
   const cardGroup = useRef<Group>(null)
   const flipProgress = useRef(flipped ? 1 : 0)
   const style = !card ? PILE_FACE : face === 'hero' ? PLAYER_FACE : MONSTER_FACE
-  const front = useFaceTexture(style, card, currentPower, 'front')
-  const back = useFaceTexture(style, card, currentPower, 'back')
+  const front = useFaceTexture(style, card, currentPower, 'front', readout)
+  const back = useFaceTexture(style, card, currentPower, 'back', readout)
 
   useFrame((_, delta) => {
     if (!cardGroup.current) return

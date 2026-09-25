@@ -19,3 +19,15 @@ export function stageProgress(elapsed: number, start: number, duration: number) 
   const linear = Math.max(0, Math.min(1, (elapsed - start) / duration))
   return 1 - Math.pow(1 - linear, 3)
 }
+
+let activeBattleKey = Number.NaN
+let stageOrigin = 0
+
+/** Elapsed time since this battle's table was assembled, not since the canvas was created. */
+export function stageNow(battleKey: number, elapsedTime: number) {
+  if (activeBattleKey !== battleKey || elapsedTime < stageOrigin) {
+    activeBattleKey = battleKey
+    stageOrigin = elapsedTime
+  }
+  return Math.max(0, elapsedTime - stageOrigin)
+}

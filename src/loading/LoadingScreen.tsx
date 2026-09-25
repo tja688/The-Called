@@ -21,7 +21,6 @@ export function LoadingScreen({ progress }: LoadingScreenProps) {
         >
           <div className="loading-fill" style={{ width: `${percentage}%` }} />
         </div>
-        <p className="loading-status">我们称之为怪物</p>
       </div>
     </main>
   )

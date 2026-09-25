@@ -1,8 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { useCampaignStore } from './campaignStore'
+import { useDeckStore } from './deckStore'
+import { useGameStore } from './gameStore'
+import { useInteractionStore } from './interactionStore'
 import { useNavigationStore } from './navigationStore'
 
 describe('navigation state machine', () => {
   beforeEach(() => {
+    useCampaignStore.setState({ cleared: 0 })
+    useDeckStore.getState().reset()
     useNavigationStore.setState({
       screen: 'home',
       levelId: null,
@@ -56,5 +62,37 @@ describe('navigation state machine', () => {
       levelId: null,
       sessionStatus: 'idle',
     })
+  })
+
+  it('refuses to start a level while the battle deck is short', () => {
+    useDeckStore.getState().removeSlot(0)
+    useNavigationStore.getState().openMap()
+    useNavigationStore.getState().startLevel('level-01')
+    expect(useNavigationStore.getState()).toMatchObject({
+      screen: 'map',
+      levelId: null,
+      sessionStatus: 'idle',
+    })
+  })
+
+  it('only starts the encounter that is currently open', () => {
+    useNavigationStore.getState().startLevel('level-02')
+    expect(useNavigationStore.getState().screen).toBe('home')
+
+    useCampaignStore.getState().complete('level-01')
+    useNavigationStore.getState().startLevel('level-01')
+    expect(useNavigationStore.getState().screen).toBe('home')
+    useNavigationStore.getState().startLevel('level-02')
+    expect(useNavigationStore.getState()).toMatchObject({ screen: 'level', levelId: 'level-02' })
+  })
+
+  it('drops the previous battle when leaving', () => {
+    useGameStore.getState().initialize('level-01', 'svarbhanu')
+    useInteractionStore.getState().beginCardPlacement('stuck-card')
+    useNavigationStore.getState().startLevel('level-01')
+    useNavigationStore.getState().exitToHome()
+    expect(useGameStore.getState().match).toBeNull()
+    expect(useInteractionStore.getState().cameraMode).toBe('board')
+    expect(useInteractionStore.getState().selectedCardInstanceId).toBeUndefined()
   })
 })

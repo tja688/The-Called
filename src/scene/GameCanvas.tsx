@@ -6,7 +6,7 @@ import type { MonsterConfig, SceneConfig } from '../config/gameContent'
 export function GameCanvas({ monster, scene }: { monster: MonsterConfig; scene: SceneConfig }) {
   return (
     <Canvas
-      camera={{ position: [0, 3.75, 12.4], fov: 63, near: 0.1, far: 60 }}
+      camera={{ position: [0, 4.7, 12.9], fov: 60, near: 0.1, far: 60 }}
       dpr={[1, 1.75]}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
     >

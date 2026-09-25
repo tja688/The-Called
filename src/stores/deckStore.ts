@@ -1,0 +1,56 @@
+import { create } from 'zustand'
+import {
+  createDefaultLoadout,
+  filledSlotCount,
+  grantToLibrary,
+  isBattleDeckComplete,
+  placeFromLibrary,
+  removeFromDeck,
+  toBattleDeck,
+  type DeckLoadout,
+  type LoadoutResult,
+} from '../config/deckLoadout'
+import type { DeckConfig } from '../config/decks'
+
+type DeckStore = DeckLoadout & {
+  removeSlot: (slotIndex: number) => LoadoutResult
+  placeCard: (cardId: string, slotIndex?: number) => LoadoutResult
+  grant: (cardId: string, count?: number) => LoadoutResult
+  reset: () => void
+}
+
+function apply(result: LoadoutResult, set: (partial: Pick<DeckLoadout, 'slots' | 'library'>) => void) {
+  if (result.ok) set({ slots: result.loadout.slots, library: result.loadout.library })
+  return result
+}
+
+export const useDeckStore = create<DeckStore>((set, get) => ({
+  ...createDefaultLoadout(),
+  removeSlot: (slotIndex) => apply(removeFromDeck(get(), slotIndex), set),
+  placeCard: (cardId, slotIndex) => apply(placeFromLibrary(get(), cardId, slotIndex), set),
+  grant: (cardId, count) => apply(grantToLibrary(get(), cardId, count), set),
+  reset: () => set(createDefaultLoadout()),
+}))
+
+/** Cards granted here wait in the library until the player seats them. */
+export function grantLibraryCards(cardId: string, count = 1): LoadoutResult {
+  return useDeckStore.getState().grant(cardId, count)
+}
+
+export function getPlayerLoadout(): DeckLoadout {
+  const { slots, library } = useDeckStore.getState()
+  return { slots, library }
+}
+
+export function getBattleDeck(): DeckConfig | null {
+  return toBattleDeck(useDeckStore.getState())
+}
+
+export function canEnterBattle(): boolean {
+  return isBattleDeckComplete(useDeckStore.getState())
+}
+
+export function battleDeckFill(): { filled: number; limit: number } {
+  const loadout = useDeckStore.getState()
+  return { filled: filledSlotCount(loadout), limit: loadout.slots.length }
+}

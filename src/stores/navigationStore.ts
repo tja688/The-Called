@@ -1,4 +1,7 @@
 import { create } from 'zustand'
+import { currentLevelId } from './campaignStore'
+import { canEnterBattle } from './deckStore'
+import { useGameStore } from './gameStore'
 
 export type AppScreen = 'home' | 'map' | 'level' | 'pause'
 export type SessionStatus = 'idle' | 'playing' | 'suspended'
@@ -22,11 +25,14 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
 
   openMap: () => set({ screen: 'map' }),
 
-  startLevel: (levelId) => set({
-    screen: 'level',
-    levelId,
-    sessionStatus: 'playing',
-  }),
+  startLevel: (levelId) => {
+    if (currentLevelId() !== levelId || !canEnterBattle()) return
+    set({
+      screen: 'level',
+      levelId,
+      sessionStatus: 'playing',
+    })
+  },
 
   pauseLevel: () => {
     if (get().screen !== 'level') return
@@ -38,15 +44,21 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
     set({ screen: 'level', sessionStatus: 'playing' })
   },
 
-  exitToMap: () => set({
-    screen: 'map',
-    levelId: null,
-    sessionStatus: 'idle',
-  }),
+  exitToMap: () => {
+    useGameStore.getState().abandon()
+    set({
+      screen: 'map',
+      levelId: null,
+      sessionStatus: 'idle',
+    })
+  },
 
-  exitToHome: () => set({
-    screen: 'home',
-    levelId: null,
-    sessionStatus: 'idle',
-  }),
+  exitToHome: () => {
+    useGameStore.getState().abandon()
+    set({
+      screen: 'home',
+      levelId: null,
+      sessionStatus: 'idle',
+    })
+  },
 }))
