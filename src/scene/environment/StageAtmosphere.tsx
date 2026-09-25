@@ -1,6 +1,6 @@
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
-import { BufferGeometry, Group, MathUtils, Vector3 } from 'three'
+import { BufferGeometry, Group, Line, LineBasicMaterial, MathUtils, Vector3 } from 'three'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { BONE } from '../presentation/palette'
 
@@ -11,6 +11,21 @@ function circleGeometry(radius: number, from = 0, to = Math.PI * 2, segments = 8
     points.push(new Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0))
   }
   return new BufferGeometry().setFromPoints(points)
+}
+
+function Wire({ geometry, opacity, position, rotation }: {
+  geometry: BufferGeometry
+  opacity: number
+  position?: [number, number, number]
+  rotation?: [number, number, number]
+}) {
+  const object = useMemo(() => {
+    const material = new LineBasicMaterial({ color: BONE, transparent: true, opacity })
+    const line = new Line(geometry, material)
+    line.raycast = () => null
+    return line
+  }, [geometry, opacity])
+  return <primitive object={object} position={position} rotation={rotation} />
 }
 
 function LineCircle({ radius, position, opacity, spin = 0 }: {
@@ -27,9 +42,7 @@ function LineCircle({ radius, position, opacity, spin = 0 }: {
   })
   return (
     <group ref={group} position={position}>
-      <line geometry={geometry} raycast={() => null}>
-        <lineBasicMaterial color={BONE} transparent opacity={opacity} />
-      </line>
+      <Wire geometry={geometry} opacity={opacity} />
     </group>
   )
 }
@@ -79,12 +92,8 @@ function CrescentMarks() {
   const orbit = useMemo(() => circleGeometry(4.6, 0, Math.PI * 2, 72), [])
   return (
     <group position={[5.4, 5.2, -8.8]}>
-      <line geometry={crescent} raycast={() => null}>
-        <lineBasicMaterial color={BONE} transparent opacity={0.62} />
-      </line>
-      <line geometry={orbit} raycast={() => null}>
-        <lineBasicMaterial color={BONE} transparent opacity={0.2} />
-      </line>
+      <Wire geometry={crescent} opacity={0.62} />
+      <Wire geometry={orbit} opacity={0.2} />
       <mesh position={[1.15, 0.15, 0]} raycast={() => null}>
         <circleGeometry args={[0.16, 20]} />
         <meshBasicMaterial color={BONE} />
@@ -153,9 +162,7 @@ export function StageAtmosphere({ monsterId }: { monsterId: string }) {
             <LineCircle radius={2.15} position={[-7.6, 5.35, -8.8]} opacity={0.28} spin={0.04} />
             <LineCircle radius={1.15} position={[-6.7, 6.15, -9.4]} opacity={0.16} spin={-0.06} />
             <LineCircle radius={1.7} position={[7.8, 4.7, -8.2]} opacity={0.24} spin={-0.05} />
-            <line geometry={horizon} position={[0, 0.02, -10.5]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
-              <lineBasicMaterial color={BONE} transparent opacity={0.16} />
-            </line>
+            <Wire geometry={horizon} opacity={0.16} position={[0, 0.02, -10.5]} rotation={[-Math.PI / 2, 0, 0]} />
             <HorizonTicks />
           </>
         )}

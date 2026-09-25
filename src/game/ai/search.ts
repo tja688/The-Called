@@ -328,7 +328,7 @@ function quiesce(
   return best
 }
 
-function tieBreak(cellId: CellId, card: CardInstance | undefined): number {
+function tieBreak(cellId: CellId, card: CardInstance | null | undefined): number {
   const body = card?.owner === 'monster' ? card.currentPower : 0
   let hash = 2166136261
   const text = `${cellId}:${card?.instanceId ?? ''}`
@@ -385,7 +385,7 @@ export function selectMonsterAction(
       const scores: number[] = []
       const weights: number[] = []
       for (const world of belief.worlds) {
-        const score = worldScore(observation, world, belief, move, depth, budget, table)
+        const score = worldScore(observation, world, belief, move.action, depth, budget, table)
         if (score === null) continue
         scores.push(score)
         weights.push(world.weight)

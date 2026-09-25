@@ -57,6 +57,14 @@ export function HomeGlyph({ motif }: { motif: GlyphId }) {
       spokes: spokeRefs.current.filter((line): line is SVGLineElement => Boolean(line)),
     }
     if (!nodes.outer || !nodes.shell || !nodes.inner || !nodes.core || !nodes.ring || nodes.spokes.length < 12) return
+    const drawn = {
+      outer: nodes.outer,
+      shell: nodes.shell,
+      inner: nodes.inner,
+      core: nodes.core,
+      ring: nodes.ring,
+      spokes: nodes.spokes,
+    }
 
     let pose = poseAt(motifRef.current, 0)
     let frame = 0
@@ -68,11 +76,11 @@ export function HomeGlyph({ motif }: { motif: GlyphId }) {
       last = now
       const goal = poseAt(motifRef.current, reduced ? 0 : now / 1000)
       pose = reduced ? goal : approachPose(pose, goal, dt)
-      paint(pose, nodes)
+      paint(pose, drawn)
       if (!reduced) frame = window.requestAnimationFrame(tick)
     }
 
-    paint(pose, nodes)
+    paint(pose, drawn)
     frame = window.requestAnimationFrame(tick)
     return () => window.cancelAnimationFrame(frame)
   }, [])

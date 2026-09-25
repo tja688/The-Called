@@ -33,7 +33,7 @@ function uniqueInOrder(cardIds: readonly string[]): string[] {
 
 export function createDefaultLoadout(source: DeckConfig = beginnerPlayerDeck): DeckLoadout {
   const owned = expand(source)
-  const slots = owned.slice(0, BATTLE_DECK_LIMIT)
+  const slots: Array<string | null> = owned.slice(0, BATTLE_DECK_LIMIT)
   while (slots.length < BATTLE_DECK_LIMIT) slots.push(null)
   return {
     slots,

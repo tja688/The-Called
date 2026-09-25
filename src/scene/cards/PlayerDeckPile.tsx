@@ -82,7 +82,7 @@ function DeckCard({ card, index, count, open }: { card: CardInstance; index: num
 
   return (
     <group ref={group} position={[0, (count - 1 - index) * CARD_THICKNESS, 0]}>
-      <Card3D face="hero" card={definition} currentPower={card.currentPower} flipped={!open} silent />
+      <Card3D position={[0, 0, 0]} face="hero" card={definition} currentPower={card.currentPower} flipped={!open} silent />
     </group>
   )
 }

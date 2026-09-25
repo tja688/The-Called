@@ -1,7 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { getAudioLevels, playGameStart, setEffectsLevel, setMusicLevel } from '../audio/gameAudio'
 import { FallingCards } from '../scene/home/FallingCards'
-import { HomeGlyph } from '../scene/home/HomeGlyph.tsx'
+import { HomeGlyph } from '../scene/home/HomeGlyph'
 import type { GlyphId } from '../scene/home/glyphPose'
 import { useNavigationStore } from '../stores/navigationStore'
 import '../styles/home.css'
