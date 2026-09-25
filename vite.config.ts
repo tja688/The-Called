@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readdirSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import type { Plugin } from 'vite'
 
@@ -14,6 +14,7 @@ const PRELOADABLE_EXTENSIONS = new Set([
 ])
 
 function collectPublicAssets(publicDir: string, directory = publicDir): string[] {
+  if (!existsSync(directory)) return []
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     if (entry.name.startsWith('.')) return []
 
