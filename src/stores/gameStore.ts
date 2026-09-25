@@ -341,7 +341,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       && next.status === 'playing'
       && next.monster.hand.some((card) => card.instanceId === previous.card.instanceId),
     )
-    const telegraph = stillHeld ? (next.openingTurn ? { card: previous!.card } : previous) : undefined
+    const telegraph = stillHeld
+      ? (next.openingTurn ? { card: previous!.card } : previous)
+      : next.status === 'playing' && !next.openingTurn && next.turn === 'player'
+        ? commitMonsterIntent(next, get().opponentDeck)
+        : undefined
     set({ match: next, telegraph })
     scheduleOpening(next)
     if (next.status === 'playing' && next.turn === 'monster' && !next.openingTurn && !get().resolution) {

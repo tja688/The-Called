@@ -154,6 +154,41 @@ describe('monster telegraph and battle restart', () => {
     expect(usePresentationStore.getState().inputLocked).toBe(true)
   })
 
+  it('shows the monster’s next card once a final-battle opening becomes the player’s turn', () => {
+    const state = createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0.2)
+    state.finalBattle = true
+    state.openingTurn = true
+    state.turn = 'player'
+    state.board.forEach((cell, index) => {
+      cell.card = {
+        instanceId: `filled-${index}`,
+        cardId: 'sva_afterimage',
+        owner: 'monster',
+        currentPower: 2,
+      }
+      cell.coveredCards = []
+    })
+    const answer = state.player.hand.find((card) => card.currentPower > 2)
+    if (!answer) throw new Error('missing cover')
+    state.player.hand = [answer]
+    useGameStore.setState({
+      match: state,
+      opponentDeck: beginnerPlayerDeck,
+      telegraph: undefined,
+      resolution: undefined,
+      placementSettled: false,
+    })
+    useGameStore.getState().resolveFinalBattleTurn()
+    const after = useGameStore.getState()
+    expect(after.match?.status).toBe('playing')
+    expect(after.match?.turn).toBe('player')
+    expect(after.match?.openingTurn).toBe(false)
+    const shown = after.telegraph?.card.instanceId
+    expect(shown).toBeTruthy()
+    expect(after.match?.monster.hand.some((card) => card.instanceId === shown)).toBe(true)
+    expect(after.telegraph?.cellId).toBeUndefined()
+  })
+
   it('passes a prepared cell that the rules reject instead of leaving the monster turn open', () => {
     const state = createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0.2)
     state.turn = 'monster'
