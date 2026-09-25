@@ -3,6 +3,7 @@ import { playCameraTransition } from '../audio/gameAudio'
 import { useInteractionStore } from '../stores/interactionStore'
 import { useNavigationStore } from '../stores/navigationStore'
 import { PlaybackControls } from './PlaybackControls'
+import { getCardDefinition } from '../config/cardCatalog'
 import { finalBattleMessage, getBoardPower } from '../game/core/matchEngine'
 import { useGameStore } from '../stores/gameStore'
 import { getMonsterConfig, getNextLevelId } from '../config/gameContent'
@@ -21,6 +22,8 @@ export function HUD() {
   const setCameraMode = useInteractionStore((state) => state.setCameraMode)
   const resetBattleView = useInteractionStore((state) => state.resetBattleView)
   const match = useGameStore((state) => state.match)
+  const telegraph = useGameStore((state) => state.telegraph)
+  const nextCardName = telegraph && match?.status === 'playing' ? getCardDefinition(telegraph.card.cardId).name : undefined
   const initialize = useGameStore((state) => state.initialize)
   const startLevel = useNavigationStore((state) => state.startLevel)
   const exitToMap = useNavigationStore((state) => state.exitToMap)
@@ -66,6 +69,7 @@ export function HUD() {
           <div className="battle-status__meta">
             <span>{monsterName}</span>
             <span>{match.status === 'finished' ? '结束' : match.turn === 'player' ? '你的回合' : '对方回合'}</span>
+            {nextCardName && <span>下一张 {nextCardName}</span>}
           </div>
         </section>
       )}

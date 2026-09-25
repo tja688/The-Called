@@ -40,6 +40,7 @@ function HandCard({ card, index, count, hoveredIndex, cameraMode, flipped, drawn
   const root = useRef<Group>(null)
   const visual = useRef<Group>(null)
   const hoverProgress = useRef(0)
+  const spread = useRef(0)
   const drawProgress = useRef(drawn ? 0 : 1)
   const introFinished = useRef(false)
   const pose = getPose(index, count)
@@ -74,47 +75,53 @@ function HandCard({ card, index, count, hoveredIndex, cameraMode, flipped, drawn
     }
     const settled = drawProgress.current >= 1
     const isHovered = settled && hoveredIndex === index && cameraMode !== 'overview'
-    hoverProgress.current = MathUtils.lerp(hoverProgress.current, isHovered ? 1 : 0, 1 - Math.exp(-delta * 6))
-    const lift = MathUtils.smoothstep(hoverProgress.current, 0, 0.8)
-    const front = MathUtils.smoothstep(hoverProgress.current, 0.6, 1)
+    hoverProgress.current = MathUtils.lerp(hoverProgress.current, isHovered ? 1 : 0, 1 - Math.exp(-delta * 10))
+    const lift = MathUtils.smoothstep(hoverProgress.current, 0, 1)
     if (drawn && drawProgress.current < 1 && cameraMode !== 'overview') drawProgress.current = Math.min(1, drawProgress.current + delta / 0.78)
     const travel = 0.5 - Math.cos(drawProgress.current * Math.PI) / 2
-    root.current.position.x = MathUtils.lerp(-4.75, pose.x, travel)
+    const spreadTarget = hoveredIndex !== null && hoveredIndex !== index ? Math.sign(index - hoveredIndex) * 0.16 : 0
+    spread.current = MathUtils.lerp(spread.current, settled ? spreadTarget : 0, 1 - Math.exp(-delta * 8))
+    const restTilt = CARD_TILTS[cameraMode]
+    // The hand is pitched toward the camera. A local +Y nudge therefore lunges
+    // the card forward. Draw it up in world space, and stand it a little taller.
+    const tilt = restTilt + 0.16 * lift
+    const rise = 0.92 * lift
+    root.current.position.x = MathUtils.lerp(-4.75, pose.x, travel) + spread.current
     root.current.position.y = MathUtils.lerp(-0.44, pose.y, travel) + (settled ? 0 : Math.sin(drawProgress.current * Math.PI) * 0.72)
     root.current.position.z = MathUtils.lerp(2.6, restZ, travel)
-    root.current.rotation.x = MathUtils.lerp(0, CARD_TILTS[cameraMode], travel)
+    root.current.rotation.x = MathUtils.lerp(0, restTilt, travel) + (settled ? 0.16 * lift : 0)
     root.current.rotation.y = MathUtils.lerp(0.02, pose.rotation, travel)
     root.current.scale.setScalar(MathUtils.lerp(1, 0.9, travel))
-    visual.current.position.set(0, 1.35 * lift, (4.72 - pose.z) * front)
+    visual.current.position.set(0, rise * Math.cos(tilt), -rise * Math.sin(tilt))
     visual.current.rotation.set(0, pose.rotation * (MathUtils.lerp(1, 0.28, lift) - 1), 0)
-    visual.current.scale.setScalar(MathUtils.lerp(1, 1 / 0.9, lift))
+    visual.current.scale.setScalar(MathUtils.lerp(1, 1.06, lift))
   })
 
   const interactive = cameraMode !== 'overview'
   return (
     <group ref={root}>
-      <mesh
-        geometry={handHitGeometry}
-        raycast={interactive ? receiveRaycast : ignoreRaycast}
-        onPointerOver={(event) => {
-          if (!interactive) return
-          event.stopPropagation()
-          onHover(index)
-          document.body.style.cursor = 'var(--cursor-interactive)'
-        }}
-        onPointerOut={() => {
-          onHover(null)
-          document.body.style.removeProperty('cursor')
-        }}
-        onClick={(event) => {
-          event.stopPropagation()
-          if (!interactive) return
-          onSelect(card.instanceId)
-        }}
-      >
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-      </mesh>
       <group ref={visual}>
+        <mesh
+          geometry={handHitGeometry}
+          raycast={interactive ? receiveRaycast : ignoreRaycast}
+          onPointerOver={(event) => {
+            if (!interactive) return
+            event.stopPropagation()
+            onHover(index)
+            document.body.style.cursor = 'var(--cursor-interactive)'
+          }}
+          onPointerOut={() => {
+            onHover(null)
+            document.body.style.removeProperty('cursor')
+          }}
+          onClick={(event) => {
+            event.stopPropagation()
+            if (!interactive) return
+            onSelect(card.instanceId)
+          }}
+        >
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
         <Card3D position={[0, 0, 0]} face="hero" card={definition} currentPower={card.currentPower} flipped={flipped} silent />
       </group>
     </group>

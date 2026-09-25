@@ -1,33 +1,20 @@
-import { svarbhanuBeginnerStrategy, type StrategyWeights } from '../../config/monsterStrategies'
-import type { CellId, MatchState, PlayCardAction } from '../types'
-import { canPlaceCard, getBoardPower, playCard } from '../core/matchEngine'
+import { svarbhanuBeginnerStrategy, type MonsterAiProfile } from '../../config/monsterStrategies'
+import type { MatchState, PlayCardAction } from '../types'
+import { selectMonsterAction } from './search'
 
+/**
+ * Chooses the monster's card and cell.
+ *
+ * The search plays through the real rules engine. It may use the monster's own
+ * hand and deck, the public board, pile sizes, and the encounter's known deck
+ * list. It does not read which cards are in the player's hand or deck.
+ * A missing reply is treated as the strongest card that could still be there.
+ * Pass lockedInstanceId when the telegraphed card must be the one that is played.
+ */
 export function chooseMonsterAction(
   state: MatchState,
-  weights: StrategyWeights = svarbhanuBeginnerStrategy,
+  profile: MonsterAiProfile = svarbhanuBeginnerStrategy,
+  lockedInstanceId?: string,
 ): PlayCardAction | null {
-  if (state.status !== 'playing' || state.turn !== 'monster') return null
-  let best: { action: PlayCardAction; score: number } | null = null
-
-  for (const card of state.monster.hand) {
-    for (const cell of state.board) {
-      if (!canPlaceCard(state, card, cell)) continue
-      {
-        const action: PlayCardAction = { side: 'monster', cardInstanceId: card.instanceId, cellId: cell.id }
-        const simulation = playCard(state, action)
-        if (simulation.error) continue
-        const placed = simulation.state.board.find((candidate) => candidate.id === cell.id)?.card
-        if (!placed) continue
-        const before = getBoardPower(state, 'monster') - getBoardPower(state, 'player')
-        const after = getBoardPower(simulation.state, 'monster') - getBoardPower(simulation.state, 'player')
-        const weakenedPower = Math.max(0, getBoardPower(state, 'player') - getBoardPower(simulation.state, 'player'))
-        const isCenter = cell.id === ('cell-1-1' satisfies CellId)
-        const score = (after - before) * weights.powerSwing
-          + weakenedPower * weights.weakenTargetPower
-          + (isCenter ? weights.center : 0)
-        if (!best || score > best.score) best = { action, score }
-      }
-    }
-  }
-  return best?.action ?? null
+  return selectMonsterAction(state, profile, lockedInstanceId)
 }

@@ -68,6 +68,22 @@ function paintCard(canvas: HTMLCanvasElement, style: FaceStyle, card?: CardDefin
   context.strokeStyle = style.line
   context.lineWidth = 10
   context.strokeRect(36, 36, width - 72, height - 72)
+  context.lineWidth = 3
+  context.strokeRect(58, 58, width - 116, height - 116)
+  context.lineWidth = 8
+  const corners: Array<[number, number, number, number]> = [
+    [52, 52, 1, 1],
+    [width - 52, 52, -1, 1],
+    [52, height - 52, 1, -1],
+    [width - 52, height - 52, -1, -1],
+  ]
+  corners.forEach(([x, y, sx, sy]) => {
+    context.beginPath()
+    context.moveTo(x + sx * 46, y)
+    context.lineTo(x, y)
+    context.lineTo(x, y + sy * 46)
+    context.stroke()
+  })
 
   if (side === 'back' || !card) {
     context.beginPath()

@@ -35,7 +35,7 @@ export function LevelPage() {
     if (match?.status !== 'playing' || match.turn !== 'monster' || match.openingTurn) return
     finishCardPlacement()
     setCameraMode('overview')
-    // Let a cover or removal finish before the next card is chosen and played.
+    // The next card is already on the table. Wait out a cover or removal, then play it.
     if (resolution) return
     if (!prepareMonsterTurn()) return
     const timer = window.setTimeout(playMonsterTurn, 950)

@@ -32,7 +32,7 @@ export function PerspectiveGrid({ position = [0, -0.2, -0.65] as [number, number
     <group ref={group} position={position}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} raycast={() => null}>
         <planeGeometry args={[48, 48]} />
-        <meshBasicMaterial color="#141311" />
+        <meshBasicMaterial color="#1c1b18" />
       </mesh>
       <lineSegments geometry={geometry} raycast={() => null}>
         <lineBasicMaterial color={BONE} transparent opacity={0.22} />

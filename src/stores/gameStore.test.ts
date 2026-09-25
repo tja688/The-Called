@@ -10,8 +10,8 @@ describe('monster telegraph and battle restart', () => {
     ready.turn = 'monster'
     useGameStore.setState({ match: ready, telegraph: undefined, resolution: undefined, placementSettled: false })
     expect(useGameStore.getState().prepareMonsterTurn()).toBe(true)
-    expect(useGameStore.getState().telegraph?.action.side).toBe('monster')
-    expect(useGameStore.getState().telegraph?.card.instanceId).toBe(useGameStore.getState().telegraph?.action.cardInstanceId)
+    const shown = useGameStore.getState().telegraph?.card.instanceId
+    expect(ready.monster.hand.some((card) => card.instanceId === shown)).toBe(true)
 
     const stuck = createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0.42)
     stuck.turn = 'monster'
@@ -20,6 +20,24 @@ describe('monster telegraph and battle restart', () => {
     expect(useGameStore.getState().prepareMonsterTurn()).toBe(false)
     expect(useGameStore.getState().match?.turn).toBe('player')
     expect(useGameStore.getState().telegraph).toBeUndefined()
+  })
+
+  it('shows the monster’s next card through the player turn, then replaces it after that card is played', () => {
+    useGameStore.getState().initialize('level-01', 'svarbhanu')
+    const shown = useGameStore.getState().telegraph?.card.instanceId
+    const match = useGameStore.getState().match
+    expect(shown).toBeTruthy()
+    expect(match?.monster.hand.some((card) => card.instanceId === shown)).toBe(true)
+
+    const playerCard = match!.player.hand[0]
+    expect(useGameStore.getState().play({ side: 'player', cardInstanceId: playerCard.instanceId, cellId: 'cell-1-1' })).toBeUndefined()
+    expect(useGameStore.getState().telegraph?.card.instanceId).toBe(shown)
+
+    useGameStore.getState().playMonsterTurn()
+    const after = useGameStore.getState()
+    expect(after.match?.board.some((cell) => cell.card?.instanceId === shown)).toBe(true)
+    expect(after.telegraph?.card.instanceId).not.toBe(shown)
+    expect(after.match?.monster.hand.some((card) => card.instanceId === after.telegraph?.card.instanceId)).toBe(true)
   })
 
   it('returns the camera to the board when a battle view is reset', () => {

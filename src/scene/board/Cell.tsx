@@ -83,7 +83,6 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
   const match = useGameStore((state) => state.match)
   const play = useGameStore((state) => state.play)
   const activePlacement = useGameStore((state) => state.activePlacement)
-  const telegraph = useGameStore((state) => state.telegraph)
   const resolution = useGameStore((state) => state.resolution)
   const placementSettled = useGameStore((state) => state.placementSettled)
   const settlePlacement = useGameStore((state) => state.settlePlacement)
@@ -115,7 +114,6 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
   const isBlockedEnemy = Boolean(!inputLocked && selectedCard && cell?.card?.owner !== selectedCard.owner && !isPlacementTarget)
   const canFlip = cameraMode === 'overview' && !selectedCard && Boolean(cell?.card)
   const isInteractive = isPlacementTarget || isBlockedEnemy || canFlip
-  const telegraphed = telegraph?.action.cellId === id
 
   useFrame((state) => {
     introReady.current = state.clock.elapsedTime >= STAGE_INTRO.complete
@@ -201,13 +199,13 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
         <meshBasicMaterial
           color={isBlockedEnemy ? CLAY : BONE}
           transparent
-          opacity={hovered ? 0.34 : telegraphed ? 0.2 : 0}
+          opacity={hovered ? 0.34 : 0}
           depthWrite={false}
         />
       </mesh>
       <lineSegments position={[0, 0.05, 0]} raycast={() => null}>
         <edgesGeometry args={[cellFrame, 1]} />
-        <lineBasicMaterial color={hovered ? (isBlockedEnemy ? CLAY : BONE) : BONE} transparent opacity={hovered || telegraphed ? 1 : isPlacementTarget ? 0.95 : 0.55} />
+        <lineBasicMaterial color={hovered ? (isBlockedEnemy ? CLAY : BONE) : BONE} transparent opacity={hovered ? 1 : isPlacementTarget ? 0.95 : 0.55} />
       </lineSegments>
       {coveredCards.map((coveredCard, index) => (
         <Card3D

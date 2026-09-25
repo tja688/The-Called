@@ -8,6 +8,7 @@ import { type ReactNode, useLayoutEffect, useRef } from 'react'
 import { Group, MathUtils } from 'three'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { PerspectiveGrid } from './PerspectiveGrid'
+import { StageAtmosphere } from './StageAtmosphere'
 import type { MonsterConfig, SceneConfig } from '../../config/gameContent'
 import { useGameStore } from '../../stores/gameStore'
 import { BONE, VOID } from '../presentation/palette'
@@ -123,6 +124,7 @@ export function TableScene({ monster, scene }: { monster: MonsterConfig; scene: 
 
       <OpponentMark config={monster} tactical={tactical} />
       <MonsterTelegraphCard />
+      <StageAtmosphere />
       <PerspectiveGrid />
       <Board />
       <Hand3D />
