@@ -5,7 +5,8 @@ import { svarbhanuBeginnerStrategy } from '../../config/monsterStrategies'
 import { canPlaceCard, createMatch, getBoardPower, passTurn, playCard, resolveFinalBattleTurn } from '../core/matchEngine'
 import { getOrthogonalNeighbors } from '../core/spatial'
 import type { CardInstance, CellId, MatchState, PlayCardAction, Side } from '../types'
-import { chooseMonsterAction } from './monsterAI'
+import { chooseMonsterAction, chooseShownCard } from './monsterAI'
+import { observeMonster } from './observation'
 
 function fixture(): MatchState {
   const state = createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0)
@@ -244,6 +245,46 @@ describe('monster card AI', () => {
     expect(playCard(state, action!).error).toBeUndefined()
   })
 
+  it('plays the same cell when its own deck is reversed', () => {
+    const state = createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0.42)
+    state.turn = 'monster'
+    const reversed = structuredClone(state)
+    reversed.monster.deck.reverse()
+    reversed.player.hand.reverse()
+    expect(observeMonster(reversed).ownDeckCounts).toEqual(observeMonster(state).ownDeckCounts)
+    expect(chooseMonsterAction(reversed)).toEqual(chooseMonsterAction(state))
+  })
+
+  it('announces the card that survives the player’s answer, not the card that looks best immediately', () => {
+    const state = fixture()
+    state.turn = 'player'
+    const five = give(state, 'monster', 'sva_occluder')
+    const tide = give(state, 'monster', 'moon_tide')
+    place(state, 'cell-0-1', 'player', 'player_observation_record', 3)
+    place(state, 'cell-1-1', 'player', 'player_observation_record', 8)
+    place(state, 'cell-1-0', 'monster', 'sva_occluder', 2)
+    place(state, 'cell-1-2', 'monster', 'sva_occluder', 2)
+    place(state, 'cell-2-0', 'monster', 'sva_occluder', 2)
+    place(state, 'cell-2-1', 'monster', 'sva_occluder', 2)
+    place(state, 'cell-2-2', 'monster', 'sva_occluder', 2)
+    state.player.deck = []
+    state.graveyard = []
+    state.player.hand = [{
+      instanceId: 'known-five',
+      cardId: 'player_reference_point',
+      owner: 'player',
+      currentPower: 5,
+    }]
+    const known = {
+      opponentDeck: { id: 'known', name: 'known', cards: [{ cardId: 'player_reference_point' as const, count: 1 }] },
+      risk: 0,
+    }
+    expect(chooseShownCard(state, known)?.instanceId).toBe(tide.instanceId)
+    const myopic = structuredClone(state)
+    myopic.turn = 'monster'
+    expect(chooseMonsterAction(myopic, known)?.cardInstanceId).toBe(five.instanceId)
+  })
+
   it('places only the card that was already telegraphed', () => {
     const state = fixture()
     const locked = give(state, 'monster', 'sva_afterimage')
@@ -264,6 +305,23 @@ describe('monster card AI', () => {
     }
     expect(searchMargin).toBeGreaterThan(greedyMargin)
   }, 20_000)
+
+  it('plays the mirror cell, the shared row, and the center for the new effects', () => {
+    const mirror = fixture()
+    place(mirror, 'cell-0-0', 'player', 'player_observation_record', 4)
+    give(mirror, 'monster', 'rk_antipode')
+    expect(chooseMonsterAction(mirror)?.cellId).toBe('cell-2-2')
+
+    const row = fixture()
+    place(row, 'cell-0-0', 'player', 'player_calibration', 1)
+    place(row, 'cell-0-2', 'player', 'player_calibration', 1)
+    give(row, 'monster', 'rk_latitude')
+    expect(chooseMonsterAction(row)?.cellId).toBe('cell-0-1')
+
+    const center = fixture()
+    give(center, 'monster', 'rk_node')
+    expect(chooseMonsterAction(center)?.cellId).toBe('cell-1-1')
+  })
 })
 
 function dumpFirst(state: MatchState, side: Side): PlayCardAction | null {

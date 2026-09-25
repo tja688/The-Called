@@ -8,6 +8,7 @@ import type { CameraMode, CardInstance, CellId } from '../../game/types'
 import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { CARD_THICKNESS, Card3D } from './Card3D'
+import { shouldLaunchMonsterCard } from './monsterTelegraphPhase'
 
 const BOARD_ORIGIN: [number, number, number] = [0, -0.1, -0.65]
 const SETTLED_LIFT = 0.14
@@ -60,11 +61,17 @@ export function MonsterTelegraphCard() {
     const cameraMode = useInteractionStore.getState().cameraMode
     const pose = POSE[cameraMode]
     const live = Boolean(match?.status === 'playing' && telegraph)
-    const monsterReady = Boolean(
-      live && match?.turn === 'monster' && !match.openingTurn && !resolution && phase.current !== 'flying' && phase.current !== 'concealed',
-    )
+    const launch = shouldLaunchMonsterCard({
+      playing: live,
+      turn: match?.turn,
+      openingTurn: Boolean(match?.openingTurn),
+      resolving: Boolean(resolution),
+      phase: phase.current,
+      telegraphId: telegraph?.card.instanceId,
+      launchedId: launchedId.current,
+    })
 
-    if (!monsterReady) hold.current = 0
+    if (!launch) hold.current = 0
 
     if (phase.current === 'flying' && flight.current) {
       const motion = flight.current
@@ -86,7 +93,14 @@ export function MonsterTelegraphCard() {
       return
     }
 
-    if (monsterReady && telegraph && launchedId.current !== telegraph.card.instanceId) {
+    if (launch && telegraph) {
+      if (phase.current === 'concealed' || shownId.current !== telegraph.card.instanceId) {
+        phase.current = 'rest'
+        shownId.current = telegraph.card.instanceId
+        setVisual(telegraph.card)
+        setConcealed(false)
+        root.visible = true
+      }
       hold.current += delta
       const damping = 1 - Math.exp(-delta * 7)
       root.position.x = MathUtils.lerp(root.position.x, pose.position[0], damping)

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import { beginnerMonsterDeck, beginnerPlayerDeck, type DeckConfig } from '../config/decks'
-import { chooseMonsterAction } from '../game/ai/monsterAI'
-import { createMatch, passTurn, playCard, resolveFinalBattleTurn as resolveFinalBattleTurnState } from '../game/core/matchEngine'
+import { beginnerPlayerDeck, monsterDeckForLevel, type DeckConfig } from '../config/decks'
+import { chooseMonsterAction, chooseShownCard } from '../game/ai/monsterAI'
+import { createMatch, passTurn, playCard, resolveFinalBattleTurn as resolveFinalBattleTurnState, resolveIdleTurn } from '../game/core/matchEngine'
 import type { CardInstance, MatchState, PlayCardAction, PlayResolution } from '../game/types'
 import { getBattleDeck } from './deckStore'
 import { useInteractionStore } from './interactionStore'
@@ -16,11 +16,13 @@ function monsterProfile(deck: DeckConfig) {
 }
 
 function commitMonsterIntent(state: MatchState, deck: DeckConfig): MonsterTelegraph | undefined {
-  if (state.status !== 'playing') return undefined
-  const sandbox = structuredClone(state)
-  sandbox.turn = 'monster'
-  sandbox.openingTurn = false
-  const action = chooseMonsterAction(sandbox, monsterProfile(deck))
+  if (state.status !== 'playing' || state.openingTurn) return undefined
+  const profile = monsterProfile(deck)
+  if (state.turn === 'player') {
+    const card = chooseShownCard(state, profile)
+    return card ? { card: { ...card } } : undefined
+  }
+  const action = chooseMonsterAction(state, profile)
   const card = action ? state.monster.hand.find((candidate) => candidate.instanceId === action.cardInstanceId) : undefined
   return card ? { card: { ...card } } : undefined
 }
@@ -38,6 +40,7 @@ type GameStore = {
   abandon: () => void
   play: (action: PlayCardAction) => string | undefined
   prepareMonsterTurn: () => boolean
+  passIfNoMove: () => void
   playMonsterTurn: () => void
   resolveFinalBattleTurn: () => void
   settlePlacement: (cardInstanceId: string) => void
@@ -64,6 +67,12 @@ function applyPlay(
   }
 }
 
+function concedeTurn(match: MatchState) {
+  const passed = passTurn(match)
+  if (passed.status !== 'playing' || passed.openingTurn) return passed
+  return resolveIdleTurn(passed)
+}
+
 function releaseBattleView() {
   usePresentationStore.getState().setInputLocked(false)
   useInteractionStore.getState().resetBattleView()
@@ -78,9 +87,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const playerDeck = getBattleDeck()
     if (!playerDeck) return
     releaseBattleView()
-    const match = createMatch(levelId, monsterId, playerDeck, beginnerMonsterDeck)
+    const match = createMatch(levelId, monsterId, playerDeck, monsterDeckForLevel(levelId))
     set({
-      // All current encounters intentionally share one monster deck and ruleset.
       match,
       opponentDeck: playerDeck,
       battleKey: get().battleKey + 1,
@@ -115,26 +123,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!match || match.status !== 'playing' || match.turn !== 'monster' || match.openingTurn) return false
     const locked = get().telegraph?.card
     const profile = monsterProfile(get().opponentDeck)
-    const lockedPlay = locked ? chooseMonsterAction(match, profile, locked.instanceId) : null
-    const action = lockedPlay ?? chooseMonsterAction(match, profile)
+    const action = locked
+      ? chooseMonsterAction(match, profile, locked.instanceId)
+      : chooseMonsterAction(match, profile)
     const card = action ? match.monster.hand.find((candidate) => candidate.instanceId === action.cardInstanceId) : undefined
     if (!action || !card) {
-      const passed = passTurn(match)
-      set({ match: passed, telegraph: commitMonsterIntent(passed, get().opponentDeck) })
+      const passed = concedeTurn(match)
+      set({
+        match: passed,
+        telegraph: passed.status === 'playing' ? commitMonsterIntent(passed, get().opponentDeck) : undefined,
+      })
       return false
     }
     if (!locked || locked.instanceId !== card.instanceId) set({ telegraph: { card: { ...card } } })
     return true
+  },
+  passIfNoMove: () => {
+    const match = get().match
+    const telegraph = get().telegraph
+    if (!match || match.status !== 'playing' || match.turn !== 'player' || match.openingTurn) return
+    if (get().resolution) return
+    const passed = resolveIdleTurn(match)
+    if (passed === match) return
+    const kept = telegraph && passed.monster.hand.some((card) => card.instanceId === telegraph.card.instanceId)
+    set({
+      match: passed,
+      telegraph: passed.status !== 'playing' ? undefined : kept ? telegraph : commitMonsterIntent(passed, get().opponentDeck),
+    })
   },
   playMonsterTurn: () => {
     const match = get().match
     const telegraph = get().telegraph
     if (!match || match.openingTurn || !telegraph) return
     const profile = monsterProfile(get().opponentDeck)
-    const action = chooseMonsterAction(match, profile, telegraph.card.instanceId) ?? chooseMonsterAction(match, profile)
+    const action = chooseMonsterAction(match, profile, telegraph.card.instanceId)
     if (!action) {
-      const passed = passTurn(match)
-      set({ match: passed, telegraph: commitMonsterIntent(passed, get().opponentDeck) })
+      const passed = concedeTurn(match)
+      set({
+        match: passed,
+        telegraph: passed.status === 'playing' ? commitMonsterIntent(passed, get().opponentDeck) : undefined,
+      })
       return
     }
     const result = playCard(match, action)

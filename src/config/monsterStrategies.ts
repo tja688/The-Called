@@ -3,6 +3,11 @@ import { beginnerPlayerDeck, type DeckConfig } from './decks'
 /** What an encounter is allowed to know before the match starts. */
 export type MonsterAiProfile = {
   opponentDeck: DeckConfig
+  /**
+   * 0 plays the expected hand. 1 guards the worst plausible hand.
+   * Personalities change this. They do not skip a search or misplay on purpose.
+   */
+  risk?: number
 }
 
 /**

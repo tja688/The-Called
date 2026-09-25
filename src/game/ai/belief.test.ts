@@ -3,6 +3,7 @@ import { beginnerPlayerDeck, svarbhanuBeginnerDeck } from '../../config/decks'
 import { createMatch } from '../core/matchEngine'
 import type { CardInstance, MatchState } from '../types'
 import { createOpponentBelief } from './belief'
+import { observeMonster } from './observation'
 
 function fresh(): MatchState {
   return createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0)
@@ -35,6 +36,20 @@ describe('opponent belief', () => {
     expect(belief.survivors).toEqual([])
   })
 
+  it('weights possible hands and drops a card once the graveyard shows it', () => {
+    const state = fresh()
+    const buried = state.player.deck.find((card) => card.cardId === 'player_reference_point')
+    if (!buried) throw new Error('missing reference')
+    state.player.deck = state.player.deck.filter((card) => card.instanceId !== buried.instanceId)
+    state.graveyard = [buried]
+    const belief = createOpponentBelief(state, beginnerPlayerDeck)
+    expect(belief.survivors.filter((cardId) => cardId === 'player_reference_point')).toHaveLength(2)
+    const mass = belief.worlds.reduce((sum, world) => sum + world.weight, 0)
+    expect(mass).toBeGreaterThan(0.99)
+    expect(mass).toBeLessThan(1.01)
+    expect(belief.worlds.every((world) => world.hand.length === state.player.hand.length)).toBe(true)
+  })
+
   it('does not change when the hidden hand and deck trade cards', () => {
     const state = fresh()
     const swapped: MatchState = structuredClone(state)
@@ -42,6 +57,7 @@ describe('opponent belief', () => {
     swapped.player.hand = hidden.slice(0, state.player.hand.length)
     swapped.player.deck = hidden.slice(state.player.hand.length)
     expect(createOpponentBelief(swapped, beginnerPlayerDeck)).toEqual(createOpponentBelief(state, beginnerPlayerDeck))
+    expect(observeMonster(swapped).ownDeckCounts).toEqual(observeMonster(state).ownDeckCounts)
     expect(swapped.player.hand.map((card: CardInstance) => card.instanceId)).not.toEqual(state.player.hand.map((card) => card.instanceId))
   })
 })

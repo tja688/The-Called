@@ -10,11 +10,17 @@ export type CardArtConfig = {
   frameVariant?: string
 }
 
+export type PositionCondition = 'edge' | 'adjacent_friendly' | 'adjacent_enemy' | 'center' | 'corner' | 'isolated'
+
 export type CardEffect =
   | { type: 'none' }
-  | { type: 'self_power_if_position'; condition: 'edge' | 'adjacent_friendly' | 'adjacent_enemy'; amount: number }
+  | { type: 'self_power_if_position'; condition: PositionCondition; amount: number }
   | { type: 'adjacent_power_change'; target: 'friendly' | 'enemy'; amount: number }
   | { type: 'self_power_on_cover'; amount: number }
+  | { type: 'mirror'; affect: 'self' | 'enemy'; amount: number }
+  | { type: 'line'; axis: 'row' | 'col'; target: 'friendly' | 'enemy'; amount: number }
+  | { type: 'edge_tax'; amount: number }
+  | { type: 'self_power_if_count'; side: 'friendly' | 'enemy'; minimum: number; amount: number }
 
 export type CardDefinition = {
   id: string
@@ -67,6 +73,8 @@ export type MatchState = {
   monster: SideState
   result: MatchResult | null
   message: string
+  /** Cards both sides saw leave the board. Covered cards buried under them count too. */
+  graveyard: CardInstance[]
 }
 
 export type PlayCardAction = {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { playCameraTransition } from '../audio/gameAudio'
 import { useCampaignStore } from '../stores/campaignStore'
 import { useInteractionStore } from '../stores/interactionStore'
@@ -7,6 +7,7 @@ import { usePresentationStore } from '../stores/presentationStore'
 import { PlaybackControls } from './PlaybackControls'
 import { getCardDefinition } from '../config/cardCatalog'
 import { finalBattleMessage, getBoardPower } from '../game/core/matchEngine'
+import { useDeckStore } from '../stores/deckStore'
 import { useGameStore } from '../stores/gameStore'
 import { getMonsterConfig } from '../config/gameContent'
 import type { MatchResult } from '../game/types'
@@ -18,6 +19,8 @@ export function formatMatchResultMessage(winner: MatchResult['winner'], monsterN
 export function matchDeparture(winner: MatchResult['winner']) {
   return winner === 'player' ? 'map' : 'home'
 }
+
+let rewardNotice: { key: string; names: string[] } | null = null
 
 export function HUD() {
   const setCameraMode = useInteractionStore((state) => state.setCameraMode)
@@ -31,12 +34,28 @@ export function HUD() {
   const resultMessage = formatMatchResultMessage(match?.result?.winner ?? 'draw', monsterName)
   const finished = match?.status === 'finished'
   const winner = match?.result?.winner
+  const [rewardNames, setRewardNames] = useState<string[]>([])
 
   useEffect(() => {
     if (!placementNotice) return
     const timer = window.setTimeout(() => showPlacementNotice(undefined), 2400)
     return () => window.clearTimeout(timer)
   }, [placementNotice, showPlacementNotice])
+
+  useEffect(() => {
+    if (!finished || winner !== 'player' || !match) {
+      setRewardNames([])
+      return
+    }
+    const key = `${useGameStore.getState().battleKey}:${match.levelId}`
+    if (rewardNotice?.key === key) {
+      setRewardNames(rewardNotice.names)
+      return
+    }
+    const names = useDeckStore.getState().claimLevelReward(match.levelId).map((cardId) => getCardDefinition(cardId).name)
+    rewardNotice = { key, names }
+    setRewardNames(names)
+  }, [finished, match, winner])
 
   useEffect(() => {
     if (!finished || !winner || !match) return
@@ -129,6 +148,7 @@ export function HUD() {
           <div className="match-result__panel">
             <strong>{resultMessage}</strong>
             <span>YOU {match.result.playerPower} — {match.result.monsterPower} {monsterName}</span>
+            {rewardNames.length > 0 && <span>获得 {rewardNames.join('、')}</span>}
             <span>{winner === 'player' ? '回到地图' : '回到主菜单'}</span>
           </div>
         </div>

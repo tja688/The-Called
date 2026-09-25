@@ -2,7 +2,7 @@ import { getCardDefinition } from '../../config/cardCatalog'
 import type { DeckConfig } from '../../config/decks'
 import { beginnerMatchRules, type MatchRules } from '../../config/matchRules'
 import type { BoardCell, CardInstance, CellId, DepartingCard, MatchState, PlayCardAction, PlayResolution, PlayResult, Side } from '../types'
-import { createBoard, getOrthogonalNeighbors } from './spatial'
+import { createBoard, getMirrorCell, getOrthogonalNeighbors } from './spatial'
 
 const otherSide = (side: Side): Side => side === 'player' ? 'monster' : 'player'
 
@@ -48,6 +48,7 @@ export function createMatch(
     openingTurn: false,
     result: null,
     message: rules.playerStarts ? '你的回合：选择一张牌。' : '怪物正在思考。',
+    graveyard: [],
   }
 }
 
@@ -68,29 +69,72 @@ function adjacentCells(board: BoardCell[], cellId: CellId) {
   return board.filter((cell) => ids.has(cell.id))
 }
 
+function onOuterRing(index: number, boardSize: number) {
+  return index === 0 || index === boardSize - 1
+}
+
+function positionConditionMet(board: BoardCell[], placedCell: BoardCell, condition: string, rules: MatchRules) {
+  const owner = placedCell.card?.owner
+  const neighbors = adjacentCells(board, placedCell.id)
+  const center = (rules.boardSize - 1) / 2
+  if (condition === 'edge') return onOuterRing(placedCell.row, rules.boardSize) || onOuterRing(placedCell.col, rules.boardSize)
+  if (condition === 'corner') return onOuterRing(placedCell.row, rules.boardSize) && onOuterRing(placedCell.col, rules.boardSize)
+  if (condition === 'center') return placedCell.row === center && placedCell.col === center
+  if (condition === 'isolated') return neighbors.every((cell) => cell.card?.owner !== owner)
+  if (condition === 'adjacent_friendly') return neighbors.some((cell) => cell.card?.owner === owner)
+  return neighbors.some((cell) => cell.card && cell.card.owner !== owner)
+}
+
 function resolveEntryEffect(board: BoardCell[], cellId: CellId, coveredEnemy: boolean, rules: MatchRules) {
   const placedCell = board.find((cell) => cell.id === cellId)
   if (!placedCell?.card) return
   const definition = getCardDefinition(placedCell.card.cardId)
   const effect = definition.effect
+  const owner = placedCell.card.owner
+  const enemy = otherSide(owner)
   if (effect.type === 'self_power_on_cover' && coveredEnemy) placedCell.card.currentPower += effect.amount
   if (effect.type === 'adjacent_power_change') {
-    const targetOwner = effect.target === 'friendly' ? placedCell.card.owner : otherSide(placedCell.card.owner)
+    const targetOwner = effect.target === 'friendly' ? owner : enemy
     for (const cell of adjacentCells(board, cellId)) {
       if (cell.card?.owner === targetOwner) {
         cell.card.currentPower = Math.max(rules.minimumPower, cell.card.currentPower + effect.amount)
       }
     }
   }
-  if (effect.type !== 'self_power_if_position') return
-
-  const neighbors = adjacentCells(board, cellId)
-  const isEdge = placedCell.row === 0 || placedCell.col === 0
-    || placedCell.row === beginnerMatchRules.boardSize - 1 || placedCell.col === beginnerMatchRules.boardSize - 1
-  const conditionMet = effect.condition === 'edge' ? isEdge
-    : effect.condition === 'adjacent_friendly' ? neighbors.some((cell) => cell.card?.owner === placedCell.card?.owner)
-      : neighbors.some((cell) => cell.card && cell.card.owner !== placedCell.card?.owner)
-  if (conditionMet) placedCell.card.currentPower += effect.amount
+  if (effect.type === 'self_power_if_position' && positionConditionMet(board, placedCell, effect.condition, rules)) {
+    placedCell.card.currentPower += effect.amount
+  }
+  if (effect.type === 'mirror') {
+    const mirrorId = getMirrorCell(cellId)
+    if (mirrorId !== cellId) {
+      const mirror = board.find((cell) => cell.id === mirrorId)
+      if (effect.affect === 'self' && mirror?.card) placedCell.card.currentPower += effect.amount
+      if (effect.affect === 'enemy' && mirror?.card?.owner === enemy) {
+        mirror.card.currentPower = Math.max(rules.minimumPower, mirror.card.currentPower + effect.amount)
+      }
+    }
+  }
+  if (effect.type === 'line') {
+    const targetOwner = effect.target === 'friendly' ? owner : enemy
+    for (const cell of board) {
+      if (cell.id === cellId || cell.card?.owner !== targetOwner) continue
+      const aligned = effect.axis === 'row' ? cell.row === placedCell.row : cell.col === placedCell.col
+      if (!aligned) continue
+      cell.card.currentPower = Math.max(rules.minimumPower, cell.card.currentPower + effect.amount)
+    }
+  }
+  if (effect.type === 'edge_tax') {
+    for (const cell of board) {
+      if (cell.card?.owner !== enemy) continue
+      if (!onOuterRing(cell.row, rules.boardSize) && !onOuterRing(cell.col, rules.boardSize)) continue
+      cell.card.currentPower = Math.max(rules.minimumPower, cell.card.currentPower + effect.amount)
+    }
+  }
+  if (effect.type === 'self_power_if_count') {
+    const side = effect.side === 'friendly' ? owner : enemy
+    const count = board.reduce((total, cell) => total + (cell.card?.owner === side ? 1 : 0), 0)
+    if (count >= effect.minimum) placedCell.card.currentPower += effect.amount
+  }
 }
 
 function controlledCells(state: MatchState, side: Side) {
@@ -101,27 +145,33 @@ function hasLegalMove(state: MatchState, side: Side, rules: MatchRules) {
   return state[side].hand.some((card) => state.board.some((cell) => canPlaceCard(state, card, cell, rules)))
 }
 
-function finishMatch(state: MatchState, winner: Side) {
+function finishMatch(state: MatchState, winner: Side | 'draw') {
   const playerPower = getBoardPower(state, 'player')
   const monsterPower = getBoardPower(state, 'monster')
   state.result = { winner, playerPower, monsterPower }
   state.status = 'finished'
   state.openingTurn = false
-  state.message = winner === 'player' ? '你赢了！' : '怪物获胜。'
+  state.message = winner === 'player' ? '你赢了！' : winner === 'monster' ? '怪物获胜。' : '平局。'
 }
 
-function winnerByExhaustion(state: MatchState): Side {
+function winnerByExhaustion(state: MatchState, rules: MatchRules): Side | 'draw' {
   const playerPower = getBoardPower(state, 'player')
   const monsterPower = getBoardPower(state, 'monster')
   if (playerPower !== monsterPower) return playerPower > monsterPower ? 'player' : 'monster'
-  return controlledCells(state, 'player') > controlledCells(state, 'monster') ? 'player' : 'monster'
+  const playerCells = controlledCells(state, 'player')
+  const monsterCells = controlledCells(state, 'monster')
+  if (playerCells !== monsterCells) return playerCells > monsterCells ? 'player' : 'monster'
+  return rules.tieResult
 }
 
-function removeSpentCards(board: BoardCell[]): DepartingCard[] {
+function removeSpentCards(state: MatchState): DepartingCard[] {
   const removed: DepartingCard[] = []
-  for (const cell of board) {
+  state.graveyard ??= []
+  for (const cell of state.board) {
     if (!cell.card || cell.card.currentPower > 0) continue
+    const buried = cell.coveredCards ?? []
     removed.push({ cellId: cell.id, card: { ...cell.card } })
+    for (const card of [cell.card, ...buried]) state.graveyard.push({ ...card })
     cell.card = null
     cell.coveredCards = []
   }
@@ -133,6 +183,31 @@ export function passTurn(state: MatchState, rules: MatchRules = beginnerMatchRul
   const next = structuredClone(state)
   advanceTurn(next, rules)
   return next
+}
+
+function canDrawLater(state: MatchState, side: Side, rules: MatchRules) {
+  const pile = state[side]
+  return pile.deck.length > 0 && pile.hand.length < rules.handLimit && (rules.drawOnFirstTurn || pile.turnsTaken > 0)
+}
+
+/**
+ * A side with no legal cell passes. If the other side also cannot play, and
+ * neither side will draw another card, the match ends on Power, then cells,
+ * then the rules' tie result. A full board still goes through final battle.
+ */
+export function resolveIdleTurn(state: MatchState, rules: MatchRules = beginnerMatchRules): MatchState {
+  if (state.status !== 'playing' || state.openingTurn) return state
+  if (hasLegalMove(state, state.turn, rules)) return state
+  const passed = passTurn(state, rules)
+  if (passed.status !== 'playing' || (passed.finalBattle && passed.openingTurn)) return passed
+  const next = passed.turn
+  const previous = otherSide(next)
+  const nobodyPlays = !hasLegalMove(passed, next, rules) && !hasLegalMove(passed, previous, rules)
+  const nobodyDraws = !canDrawLater(passed, next, rules) && !canDrawLater(passed, previous, rules)
+  if (!nobodyPlays || !nobodyDraws) return passed
+  const finished = structuredClone(passed)
+  finishMatch(finished, winnerByExhaustion(finished, rules))
+  return finished
 }
 
 function advanceTurn(state: MatchState, rules: MatchRules) {
@@ -172,7 +247,7 @@ export function resolveFinalBattleTurn(state: MatchState, rules: MatchRules = be
     advanceTurn(next, rules)
     return next
   }
-  finishMatch(next, winnerByExhaustion(next))
+  finishMatch(next, winnerByExhaustion(next, rules))
   return next
 }
 
@@ -188,6 +263,7 @@ export function playCard(state: MatchState, action: PlayCardAction, rules: Match
   if (!cell || !canPlaceCard(state, card, cell, rules)) return { state, error: 'INVALID_PLACEMENT' }
 
   const next = structuredClone(state)
+  next.graveyard ??= []
   const nextSide = next[action.side]
   const played = nextSide.hand.splice(handIndex, 1)[0]
   const nextCell = next.board.find((candidate) => candidate.id === action.cellId)!
@@ -216,7 +292,7 @@ export function playCard(state: MatchState, action: PlayCardAction, rules: Match
       }
     }
   }
-  resolution = { ...resolution, removed: removeSpentCards(next.board) }
+  resolution = { ...resolution, removed: removeSpentCards(next) }
 
   const enteringFinalBattle = rules.fullBoardStartsFinalBattle && !next.finalBattle && next.board.every((boardCell) => boardCell.card)
   advanceTurn(next, rules)

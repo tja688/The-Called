@@ -13,13 +13,50 @@ export const beginnerPlayerDeck: DeckConfig = {
 }
 
 export const beginnerMonsterDeck: DeckConfig = {
-  id: 'monster-beginner', name: '怪物新手牌组',
+  id: 'monster-beginner', name: '遮光体牌组',
   cards: [
     { cardId: 'sva_occluder', count: 3 }, { cardId: 'sva_off_axis_projection', count: 2 },
     { cardId: 'sva_boundary_convergence', count: 2 }, { cardId: 'sva_unobservable_zone', count: 2 },
     { cardId: 'sva_distorted_reading', count: 1 }, { cardId: 'sva_black_box_model', count: 1 },
     { cardId: 'sva_afterimage', count: 1 },
   ],
+}
+
+export const rahuKetuDeck: DeckConfig = {
+  id: 'rahu-ketu', name: '罗睺与计都',
+  cards: [
+    { cardId: 'rk_vacant_pole', count: 2 }, { cardId: 'rk_dipole', count: 2 },
+    { cardId: 'rk_deep_eclipse', count: 1 }, { cardId: 'rk_latitude', count: 2 },
+    { cardId: 'rk_longitude', count: 2 }, { cardId: 'rk_antipode', count: 2 },
+    { cardId: 'rk_node', count: 1 },
+  ],
+}
+
+export const moonDeck: DeckConfig = {
+  id: 'moon', name: '月',
+  cards: [
+    { cardId: 'moon_horn', count: 3 }, { cardId: 'moon_waxing', count: 2 },
+    { cardId: 'moon_waning', count: 1 }, { cardId: 'moon_full', count: 1 },
+    { cardId: 'moon_occult', count: 1 }, { cardId: 'moon_tide', count: 2 },
+    { cardId: 'moon_facing', count: 2 },
+  ],
+}
+
+const monsterDecks: Record<string, DeckConfig> = {
+  'level-01': beginnerMonsterDeck,
+  'level-02': rahuKetuDeck,
+  'level-03': moonDeck,
+}
+
+export function monsterDeckForLevel(levelId: string): DeckConfig {
+  const deck = monsterDecks[levelId]
+  if (!deck) throw new Error(`Unknown level: ${levelId}`)
+  return deck
+}
+
+export const levelRewardCardIds: Record<string, readonly CardId[]> = {
+  'level-01': ['player_antipode', 'player_meridian', 'player_error_correction'],
+  'level-02': ['player_center_condition', 'player_syzygy', 'player_boundary_condition'],
 }
 
 // Kept as an alias for existing imports and saved test fixtures.

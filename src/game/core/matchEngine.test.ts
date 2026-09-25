@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { getCardDefinition } from '../../config/cardCatalog'
 import { beginnerPlayerDeck, svarbhanuBeginnerDeck } from '../../config/decks'
 import type { CardInstance, CellId, MatchState, Side } from '../types'
-import { canPlaceCard, createMatch, finalBattleMessage, getBoardPower, passTurn, playCard, resolveFinalBattleTurn } from './matchEngine'
+import { canPlaceCard, createMatch, finalBattleMessage, getBoardPower, passTurn, playCard, resolveFinalBattleTurn, resolveIdleTurn } from './matchEngine'
 
 const makeMatch = () => createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0.42)
 
@@ -101,6 +102,7 @@ describe('beginner match engine', () => {
     expect(result.state.board[1].card).toBeNull()
     expect(result.state.board[1].coveredCards).toEqual([])
     expect(result.resolution?.removed.map((item) => item.card.instanceId)).toEqual(['enemy-one'])
+    expect(result.state.graveyard.map((card) => card.instanceId)).toEqual(['enemy-one', 'buried'])
   })
 
   it('checks a full board only after 0-Power cards have left', () => {
@@ -193,16 +195,16 @@ describe('beginner match engine', () => {
     expect(opened.status).toBe('playing')
     expect(opened.openingTurn).toBe(false)
     const covered = playCard(opened, { side: 'monster', cardInstanceId: cover.instanceId, cellId: opened.board[0].id })
-    expect(covered.state.board[0].card?.currentPower).toBe(1)
+    expect(covered.state.board[0].card?.currentPower).toBe(2)
     expect(covered.state.turn).toBe('player')
-    expect(getBoardPower(covered.state, 'monster')).toBe(1)
+    expect(getBoardPower(covered.state, 'monster')).toBe(2)
     expect(getBoardPower(covered.state, 'player')).toBe(0)
     const passed = resolveFinalBattleTurn(covered.state)
     expect(passed.turn).toBe('monster')
     expect(passed.openingTurn).toBe(true)
     const resolved = resolveFinalBattleTurn(passed)
     expect(resolved.result?.winner).toBe('monster')
-    expect(resolved.result?.monsterPower).toBe(1)
+    expect(resolved.result?.monsterPower).toBe(2)
   })
 
   it('gives the cell majority to the winner when neither side can cover and Power is tied', () => {
@@ -224,5 +226,185 @@ describe('beginner match engine', () => {
     const resolved = resolveFinalBattleTurn(state)
     expect(resolved.status).toBe('finished')
     expect(resolved.result).toEqual({ winner: 'player', playerPower: 10, monsterPower: 10 })
+  })
+
+  it('draws when Power and cell count are both tied and nobody can move', () => {
+    const state = makeMatch()
+    state.finalBattle = true
+    state.openingTurn = true
+    state.turn = 'monster'
+    state.player.hand = []
+    state.monster.hand = []
+    state.board.forEach((cell, index) => {
+      if (index === 8) return
+      const playerCell = index < 4
+      cell.card = {
+        instanceId: `board-${index}`,
+        cardId: playerCell ? 'player_observation_record' : 'sva_afterimage',
+        owner: playerCell ? 'player' : 'monster',
+        currentPower: 2,
+      }
+    })
+    const resolved = resolveFinalBattleTurn(state)
+    expect(resolved.result).toEqual({ winner: 'draw', playerPower: 8, monsterPower: 8 })
+  })
+
+  it('ends a holed board once neither side can play or draw', () => {
+    const state = makeMatch()
+    state.turn = 'player'
+    state.player.hand = []
+    state.player.deck = []
+    state.monster.hand = []
+    state.monster.deck = []
+    state.player.turnsTaken = 2
+    state.monster.turnsTaken = 2
+    state.board.forEach((cell, index) => {
+      if (index > 5) return
+      const playerCell = index < 3
+      cell.card = {
+        instanceId: `board-${index}`,
+        cardId: playerCell ? 'player_observation_record' : 'sva_afterimage',
+        owner: playerCell ? 'player' : 'monster',
+        currentPower: 2,
+      }
+    })
+    const ended = resolveIdleTurn(state)
+    expect(ended.status).toBe('finished')
+    expect(ended.result).toEqual({ winner: 'draw', playerPower: 6, monsterPower: 6 })
+
+    const monsterCanPlay = structuredClone(state)
+    monsterCanPlay.monster.hand = [{
+      instanceId: 'late-cover',
+      cardId: 'sva_occluder',
+      owner: 'monster',
+      currentPower: 4,
+    }]
+    const passed = resolveIdleTurn(monsterCanPlay)
+    expect(passed.status).toBe('playing')
+    expect(passed.turn).toBe('monster')
+  })
+})
+
+function hold(state: MatchState, side: Side, cardId: string): CardInstance {
+  const card: CardInstance = {
+    instanceId: `${side}-${cardId}-held`,
+    cardId,
+    owner: side,
+    currentPower: getCardDefinition(cardId).power,
+  }
+  state[side].hand = [card]
+  state.turn = side
+  return card
+}
+
+function top(state: MatchState, cellId: CellId) {
+  return state.board.find((cell) => cell.id === cellId)?.card
+}
+
+describe('entry effects', () => {
+  it('adds Power in the center, in a corner, and when the card is isolated', () => {
+    const center = makeMatch()
+    const node = hold(center, 'monster', 'rk_node')
+    expect(playCard(center, { side: 'monster', cardInstanceId: node.instanceId, cellId: 'cell-1-1' }).state.board.find((cell) => cell.id === 'cell-1-1')?.card?.currentPower).toBe(5)
+    const offCenter = makeMatch()
+    const nodeEdge = hold(offCenter, 'monster', 'rk_node')
+    expect(playCard(offCenter, { side: 'monster', cardInstanceId: nodeEdge.instanceId, cellId: 'cell-0-1' }).state.board[1].card?.currentPower).toBe(3)
+
+    const corner = makeMatch()
+    const horn = hold(corner, 'monster', 'moon_horn')
+    expect(playCard(corner, { side: 'monster', cardInstanceId: horn.instanceId, cellId: 'cell-0-0' }).state.board[0].card?.currentPower).toBe(5)
+    const edge = makeMatch()
+    const hornEdge = hold(edge, 'monster', 'moon_horn')
+    expect(playCard(edge, { side: 'monster', cardInstanceId: hornEdge.instanceId, cellId: 'cell-0-1' }).state.board[1].card?.currentPower).toBe(4)
+
+    const alone = makeMatch()
+    const pole = hold(alone, 'monster', 'rk_vacant_pole')
+    expect(playCard(alone, { side: 'monster', cardInstanceId: pole.instanceId, cellId: 'cell-1-1' }).state.board.find((cell) => cell.id === 'cell-1-1')?.card?.currentPower).toBe(6)
+    const crowded = makeMatch()
+    crowded.board[1].card = { instanceId: 'friend', cardId: 'sva_occluder', owner: 'monster', currentPower: 4 }
+    const beside = hold(crowded, 'monster', 'rk_vacant_pole')
+    expect(playCard(crowded, { side: 'monster', cardInstanceId: beside.instanceId, cellId: 'cell-0-0' }).state.board[0].card?.currentPower).toBe(5)
+  })
+
+  it('buffs from a mirrored card and does nothing when the mirror is the same cell', () => {
+    const mirrored = makeMatch()
+    mirrored.board[8].card = { instanceId: 'far', cardId: 'player_observation_record', owner: 'player', currentPower: 4 }
+    const dipole = hold(mirrored, 'monster', 'rk_dipole')
+    expect(playCard(mirrored, { side: 'monster', cardInstanceId: dipole.instanceId, cellId: 'cell-0-0' }).state.board[0].card?.currentPower).toBe(4)
+
+    const empty = makeMatch()
+    const lonely = hold(empty, 'monster', 'rk_dipole')
+    expect(playCard(empty, { side: 'monster', cardInstanceId: lonely.instanceId, cellId: 'cell-0-0' }).state.board[0].card?.currentPower).toBe(3)
+
+    const center = makeMatch()
+    center.board[0].card = { instanceId: 'corner', cardId: 'player_observation_record', owner: 'player', currentPower: 4 }
+    const middle = hold(center, 'monster', 'rk_dipole')
+    expect(playCard(center, { side: 'monster', cardInstanceId: middle.instanceId, cellId: 'cell-1-1' }).state.board.find((cell) => cell.id === 'cell-1-1')?.card?.currentPower).toBe(3)
+  })
+
+  it('reduces the mirrored enemy and leaves the center play untouched', () => {
+    const state = makeMatch()
+    state.board[0].card = { instanceId: 'victim', cardId: 'player_observation_record', owner: 'player', currentPower: 1 }
+    const antipode = hold(state, 'monster', 'rk_antipode')
+    const hit = playCard(state, { side: 'monster', cardInstanceId: antipode.instanceId, cellId: 'cell-2-2' })
+    expect(top(hit.state, 'cell-0-0')).toBeNull()
+    expect(hit.resolution?.removed.map((item) => item.card.instanceId)).toEqual(['victim'])
+    expect(top(hit.state, 'cell-2-2')?.currentPower).toBe(5)
+
+    const center = makeMatch()
+    center.board[0].card = { instanceId: 'safe', cardId: 'player_observation_record', owner: 'player', currentPower: 4 }
+    const middle = hold(center, 'monster', 'rk_antipode')
+    const played = playCard(center, { side: 'monster', cardInstanceId: middle.instanceId, cellId: 'cell-1-1' })
+    expect(top(played.state, 'cell-1-1')?.currentPower).toBe(5)
+    expect(top(played.state, 'cell-0-0')?.currentPower).toBe(4)
+  })
+
+  it('reduces other cards in the same row or column and removes a card reduced to 0', () => {
+    const row = makeMatch()
+    row.board[0].card = { instanceId: 'row-a', cardId: 'player_calibration', owner: 'player', currentPower: 1 }
+    row.board[2].card = { instanceId: 'row-b', cardId: 'player_observation_record', owner: 'player', currentPower: 4 }
+    row.board[3].card = { instanceId: 'other-row', cardId: 'player_observation_record', owner: 'player', currentPower: 4 }
+    const latitude = hold(row, 'monster', 'rk_latitude')
+    const across = playCard(row, { side: 'monster', cardInstanceId: latitude.instanceId, cellId: 'cell-0-1' })
+    expect(top(across.state, 'cell-0-0')).toBeNull()
+    expect(top(across.state, 'cell-0-2')?.currentPower).toBe(3)
+    expect(top(across.state, 'cell-1-0')?.currentPower).toBe(4)
+
+    const column = makeMatch()
+    column.board[0].card = { instanceId: 'col-a', cardId: 'player_calibration', owner: 'player', currentPower: 1 }
+    column.board[6].card = { instanceId: 'col-b', cardId: 'player_observation_record', owner: 'player', currentPower: 3 }
+    column.board[4].card = { instanceId: 'other-col', cardId: 'player_observation_record', owner: 'player', currentPower: 4 }
+    const longitude = hold(column, 'monster', 'rk_longitude')
+    const down = playCard(column, { side: 'monster', cardInstanceId: longitude.instanceId, cellId: 'cell-1-0' })
+    expect(top(down.state, 'cell-0-0')).toBeNull()
+    expect(top(down.state, 'cell-2-0')?.currentPower).toBe(2)
+    expect(top(down.state, 'cell-1-1')?.currentPower).toBe(4)
+  })
+
+  it('taxes enemy cards on the edge and leaves the center and friendly cards', () => {
+    const state = makeMatch()
+    state.board[0].card = { instanceId: 'edge-one', cardId: 'player_calibration', owner: 'player', currentPower: 1 }
+    state.board[2].card = { instanceId: 'edge-four', cardId: 'player_observation_record', owner: 'player', currentPower: 4 }
+    state.board[4].card = { instanceId: 'center-player', cardId: 'player_observation_record', owner: 'player', currentPower: 4 }
+    state.board[8].card = { instanceId: 'own-edge', cardId: 'sva_occluder', owner: 'monster', currentPower: 4 }
+    const tide = hold(state, 'monster', 'moon_tide')
+    const result = playCard(state, { side: 'monster', cardInstanceId: tide.instanceId, cellId: 'cell-1-0' })
+    expect(top(result.state, 'cell-0-0')).toBeNull()
+    expect(top(result.state, 'cell-0-2')?.currentPower).toBe(3)
+    expect(top(result.state, 'cell-1-1')?.currentPower).toBe(4)
+    expect(top(result.state, 'cell-2-2')?.currentPower).toBe(4)
+  })
+
+  it('adds Power only once three friendly cards, including this one, are on the board', () => {
+    const short = makeMatch()
+    short.board[0].card = { instanceId: 'one', cardId: 'sva_occluder', owner: 'monster', currentPower: 4 }
+    const early = hold(short, 'monster', 'moon_full')
+    expect(playCard(short, { side: 'monster', cardInstanceId: early.instanceId, cellId: 'cell-0-1' }).state.board[1].card?.currentPower).toBe(5)
+
+    const ready = makeMatch()
+    ready.board[0].card = { instanceId: 'one', cardId: 'sva_occluder', owner: 'monster', currentPower: 4 }
+    ready.board[2].card = { instanceId: 'two', cardId: 'sva_occluder', owner: 'monster', currentPower: 4 }
+    const full = hold(ready, 'monster', 'moon_full')
+    expect(playCard(ready, { side: 'monster', cardInstanceId: full.instanceId, cellId: 'cell-0-1' }).state.board[1].card?.currentPower).toBe(6)
   })
 })

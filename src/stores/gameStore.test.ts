@@ -40,6 +40,48 @@ describe('monster telegraph and battle restart', () => {
     expect(useGameStore.getState().telegraph).toBeUndefined()
   })
 
+  it('ends the match when the player also has nothing left to play or draw', () => {
+    const stuck = createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0.42)
+    stuck.turn = 'player'
+    stuck.player.hand = []
+    stuck.player.deck = []
+    stuck.monster.hand = []
+    stuck.monster.deck = []
+    stuck.player.turnsTaken = 2
+    stuck.monster.turnsTaken = 2
+    useGameStore.setState({ match: stuck, telegraph: undefined, resolution: undefined })
+    useGameStore.getState().passIfNoMove()
+    expect(useGameStore.getState().match?.status).toBe('finished')
+    expect(useGameStore.getState().match?.result?.winner).toBe('draw')
+  })
+
+  it('passes a shown card that no longer has a cell, instead of playing a different one', () => {
+    const trapped = createMatch('level-01', 'svarbhanu', beginnerPlayerDeck, svarbhanuBeginnerDeck, () => 0.2)
+    trapped.turn = 'monster'
+    trapped.finalBattle = true
+    trapped.openingTurn = false
+    trapped.board.forEach((cell, index) => {
+      cell.card = {
+        instanceId: `filled-${index}`,
+        cardId: 'player_observation_record',
+        owner: 'player',
+        currentPower: 3,
+      }
+      cell.coveredCards = []
+    })
+    const shown = trapped.monster.hand.find((card) => card.cardId === 'sva_afterimage')
+      ?? trapped.monster.deck.find((card) => card.cardId === 'sva_afterimage')
+    const five = trapped.monster.hand.find((card) => card.cardId === 'sva_black_box_model')
+      ?? trapped.monster.deck.find((card) => card.cardId === 'sva_black_box_model')
+    if (!shown || !five) throw new Error('missing cards')
+    trapped.monster.hand = [shown, five]
+    trapped.monster.deck = trapped.monster.deck.filter((card) => card.instanceId !== shown.instanceId && card.instanceId !== five.instanceId)
+    useGameStore.setState({ match: trapped, telegraph: { card: { ...shown } }, resolution: undefined, placementSettled: false })
+    expect(useGameStore.getState().prepareMonsterTurn()).toBe(false)
+    expect(useGameStore.getState().match?.turn).toBe('player')
+    expect(useGameStore.getState().match?.board.every((cell) => cell.card?.owner === 'player')).toBe(true)
+  })
+
   it('shows the monster’s next card through the player turn, then replaces it after that card is played', () => {
     useGameStore.getState().initialize('level-01', 'svarbhanu')
     const shown = useGameStore.getState().telegraph?.card.instanceId
@@ -66,6 +108,22 @@ describe('monster telegraph and battle restart', () => {
     expect(useInteractionStore.getState().selectedCardInstanceId).toBeUndefined()
     expect(usePresentationStore.getState().inputLocked).toBe(false)
     expect(useGameStore.getState().battleKey).toBeGreaterThan(0)
+  })
+
+  it('deals the monster deck that belongs to the level', () => {
+    useGameStore.getState().initialize('level-01', 'svarbhanu')
+    const first = [...(useGameStore.getState().match?.monster.hand ?? []), ...(useGameStore.getState().match?.monster.deck ?? [])]
+    expect(first.every((card) => card.cardId.startsWith('sva_'))).toBe(true)
+
+    useGameStore.getState().initialize('level-02', 'rahu-ketu')
+    const second = [...(useGameStore.getState().match?.monster.hand ?? []), ...(useGameStore.getState().match?.monster.deck ?? [])]
+    expect(second.some((card) => card.cardId.startsWith('rk_'))).toBe(true)
+    expect(second.every((card) => card.cardId.startsWith('rk_'))).toBe(true)
+
+    useGameStore.getState().initialize('level-03', 'moon')
+    const third = [...(useGameStore.getState().match?.monster.hand ?? []), ...(useGameStore.getState().match?.monster.deck ?? [])]
+    expect(third.every((card) => card.cardId.startsWith('moon_'))).toBe(true)
+    expect(useGameStore.getState().opponentDeck.id).toBe('player-loadout')
   })
 
   it('returns the camera to the board when a battle view is reset', () => {

@@ -14,6 +14,7 @@ export function LevelPage() {
   const initialize = useGameStore((state) => state.initialize)
   const match = useGameStore((state) => state.match)
   const prepareMonsterTurn = useGameStore((state) => state.prepareMonsterTurn)
+  const passIfNoMove = useGameStore((state) => state.passIfNoMove)
   const resolveFinalBattleTurn = useGameStore((state) => state.resolveFinalBattleTurn)
   const resolution = useGameStore((state) => state.resolution)
   const setCameraMode = useInteractionStore((state) => state.setCameraMode)
@@ -29,6 +30,13 @@ export function LevelPage() {
     const timer = window.setTimeout(resolveFinalBattleTurn, 1000)
     return () => window.clearTimeout(timer)
   }, [match?.finalBattle, match?.openingTurn, match?.round, match?.status, match?.turn, resolveFinalBattleTurn])
+
+  useEffect(() => {
+    const active = useGameStore.getState().match
+    if (!active || active.status !== 'playing' || active.turn !== 'player' || active.openingTurn) return
+    if (useGameStore.getState().resolution) return
+    passIfNoMove()
+  }, [match?.openingTurn, match?.round, match?.status, match?.turn, passIfNoMove, resolution])
 
   useEffect(() => {
     const live = useGameStore.getState()

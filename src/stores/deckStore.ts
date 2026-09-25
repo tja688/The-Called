@@ -10,12 +10,14 @@ import {
   type DeckLoadout,
   type LoadoutResult,
 } from '../config/deckLoadout'
-import type { DeckConfig } from '../config/decks'
+import { levelRewardCardIds, type DeckConfig } from '../config/decks'
 
 type DeckStore = DeckLoadout & {
+  claimedLevelIds: readonly string[]
   removeSlot: (slotIndex: number) => LoadoutResult
   placeCard: (cardId: string, slotIndex?: number) => LoadoutResult
   grant: (cardId: string, count?: number) => LoadoutResult
+  claimLevelReward: (levelId: string) => string[]
   reset: () => void
 }
 
@@ -26,10 +28,23 @@ function apply(result: LoadoutResult, set: (partial: Pick<DeckLoadout, 'slots' |
 
 export const useDeckStore = create<DeckStore>((set, get) => ({
   ...createDefaultLoadout(),
+  claimedLevelIds: [],
   removeSlot: (slotIndex) => apply(removeFromDeck(get(), slotIndex), set),
   placeCard: (cardId, slotIndex) => apply(placeFromLibrary(get(), cardId, slotIndex), set),
   grant: (cardId, count) => apply(grantToLibrary(get(), cardId, count), set),
-  reset: () => set(createDefaultLoadout()),
+  claimLevelReward: (levelId) => {
+    const rewards = levelRewardCardIds[levelId]
+    if (!rewards || get().claimedLevelIds.includes(levelId)) return []
+    let loadout: DeckLoadout = { slots: get().slots, library: get().library }
+    for (const cardId of rewards) {
+      const result = grantToLibrary(loadout, cardId)
+      if (!result.ok) return []
+      loadout = result.loadout
+    }
+    set({ slots: loadout.slots, library: loadout.library, claimedLevelIds: [...get().claimedLevelIds, levelId] })
+    return [...rewards]
+  },
+  reset: () => set({ ...createDefaultLoadout(), claimedLevelIds: [] }),
 }))
 
 /** Cards granted here wait in the library until the player seats them. */
