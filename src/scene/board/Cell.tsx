@@ -11,6 +11,7 @@ import type { CardInstance, CellId } from '../../game/types'
 import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { CARD_ASPECT_RATIO, CARD_THICKNESS, Card3D } from '../cards/Card3D'
+import { presentMonsterBoardCard } from '../cards/monsterCardHandoff'
 import { BONE, CLAY } from '../presentation/palette'
 import { STAGE_INTRO, stageNow } from '../environment/stageIntro'
 
@@ -46,21 +47,22 @@ function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, settleIm
   const settledY = 0.14 + stackDepth * CARD_THICKNESS
 
   useLayoutEffect(() => {
-    if (settleImmediately) onSettled()
-  }, [onSettled, settleImmediately])
-
-  useLayoutEffect(() => {
     if (!group.current) return
     if (!animate) {
       group.current.position.set(0, settledY, 0)
       group.current.rotation.set(0, 0, 0)
       group.current.scale.setScalar(1.54)
+      if (!isPlayer && settleImmediately) presentMonsterBoardCard(card.instanceId)
       return
     }
     group.current.position.set(startX, startY, startZ)
     group.current.rotation.set(isPlayer ? 0 : 0.32, isPlayer ? 0 : 0.16, isPlayer ? 0 : -0.06)
     group.current.scale.setScalar(startScale)
-  }, [animate, isPlayer, settledY, startScale, startX, startY, startZ])
+  }, [animate, card.instanceId, isPlayer, settleImmediately, settledY, startScale, startX, startY, startZ])
+
+  useLayoutEffect(() => {
+    if (settleImmediately) onSettled()
+  }, [onSettled, settleImmediately])
 
   useFrame((_, delta) => {
     if (!group.current || settled.current) return
@@ -80,7 +82,7 @@ function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, settleIm
     }
   })
 
-  return <group ref={group}><Card3D position={[0, 0, 0]} face={card.owner === 'player' ? 'hero' : 'monster'} card={definition} currentPower={shownPower} opacity={opacity} readout={readout} flipped={flipped} flipLift={0.7} silent /></group>
+  return <group ref={group}><Card3D position={[0, 0, 0]} face={card.owner === 'player' ? 'hero' : 'monster'} card={definition} currentPower={shownPower} opacity={opacity} readout={readout} prepareReadouts flipped={flipped} flipLift={0.7} silent /></group>
 }
 
 export function Cell({ id, position }: { id: CellId; position: readonly [number, number, number] }) {
@@ -227,6 +229,7 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
           card={getCardDefinition(coveredCard.cardId)}
           currentPower={coveredCard.currentPower}
           readout={readout}
+          prepareReadouts
           flipLift={0.7}
         />
       ))}

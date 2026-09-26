@@ -1,5 +1,10 @@
 export type TelegraphPhase = 'rest' | 'flying' | 'concealed' | 'assembling'
 
+/** The flyer stays up until the board mesh for that exact card is in place. */
+export function shouldReleaseMonsterFlight(phase: TelegraphPhase, launchedId: string | null, presentedId: string) {
+  return phase === 'flying' && launchedId !== null && launchedId === presentedId
+}
+
 /** The shown monster card may start its play even while still concealed. */
 export function shouldLaunchMonsterCard(input: {
   playing: boolean

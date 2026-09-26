@@ -7,6 +7,7 @@ import type { CameraMode, CardInstance } from '../../game/types'
 import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { usePresentationStore } from '../../stores/presentationStore'
+import { cameraDamping } from '../camera/cameraMotion'
 import { CARD_HEIGHT, CARD_THICKNESS, CARD_WIDTH, Card3D } from './Card3D'
 import { PLAYER_DECK_PILE } from './PlayerDeckPile'
 import { STAGE_INTRO, stageNow, stageProgress } from '../environment/stageIntro'
@@ -42,6 +43,7 @@ function HandCard({ card, index, count, hoveredIndex, cameraMode, flipped, drawn
   const visual = useRef<Group>(null)
   const hoverProgress = useRef(0)
   const spread = useRef(0)
+  const restTilt = useRef(CARD_TILTS[cameraMode])
   const drawProgress = useRef(drawn ? 0 : 1)
   const launchY = useRef(PLAYER_DECK_PILE[1] - HAND_POSTURES.board.lift)
   const battleKey = useGameStore((state) => state.battleKey)
@@ -67,12 +69,14 @@ function HandCard({ card, index, count, hoveredIndex, cameraMode, flipped, drawn
   useFrame((state, delta) => {
     if (!root.current || !visual.current) return
     const intro = stageProgress(stageNow(battleKey, state.clock.elapsedTime), STAGE_INTRO.handStart + index * STAGE_INTRO.handStep, STAGE_INTRO.handCardDuration)
+    const tiltDamping = cameraDamping(delta)
+    restTilt.current = MathUtils.lerp(restTilt.current, CARD_TILTS[cameraMode], tiltDamping)
     if (!introFinished.current) {
       const wave = Math.sin(intro * Math.PI) * (0.55 + index * 0.025)
       root.current.position.x = MathUtils.lerp(-4.6, pose.x, intro)
       root.current.position.y = MathUtils.lerp(-1.15, pose.y, intro) + wave
       root.current.position.z = MathUtils.lerp(3.25, restZ, intro)
-      root.current.rotation.x = MathUtils.lerp(0.35, CARD_TILTS[cameraMode], intro)
+      root.current.rotation.x = MathUtils.lerp(0.35, restTilt.current, intro)
       root.current.rotation.y = MathUtils.lerp(0.42, pose.rotation, intro)
       root.current.scale.setScalar(Math.max(0.001, intro * 0.9))
       visual.current.position.set(0, 0, 0)
@@ -89,15 +93,15 @@ function HandCard({ card, index, count, hoveredIndex, cameraMode, flipped, drawn
     const travel = 0.5 - Math.cos(drawProgress.current * Math.PI) / 2
     const spreadTarget = hoveredIndex !== null && hoveredIndex !== index ? Math.sign(index - hoveredIndex) * 0.16 : 0
     spread.current = MathUtils.lerp(spread.current, settled ? spreadTarget : 0, 1 - Math.exp(-delta * 8))
-    const restTilt = CARD_TILTS[cameraMode]
+    const cardTilt = restTilt.current
     // The hand is pitched toward the camera. A local +Y nudge therefore lunges
     // the card forward. Draw it up in world space, and stand it a little taller.
-    const tilt = restTilt + 0.16 * lift
+    const tilt = cardTilt + 0.16 * lift
     const rise = 0.92 * lift
     root.current.position.x = MathUtils.lerp(PLAYER_DECK_PILE[0], pose.x, travel) + spread.current
     root.current.position.y = MathUtils.lerp(launchY.current, pose.y, travel) + (settled ? 0 : Math.sin(drawProgress.current * Math.PI) * 0.72)
     root.current.position.z = MathUtils.lerp(PLAYER_DECK_PILE[2] - HAND_PIVOT_Z, restZ, travel)
-    root.current.rotation.x = MathUtils.lerp(0, restTilt, travel) + (settled ? 0.16 * lift : 0)
+    root.current.rotation.x = MathUtils.lerp(0, cardTilt, travel) + (settled ? 0.16 * lift : 0)
     root.current.rotation.y = MathUtils.lerp(0.02, pose.rotation, travel)
     root.current.scale.setScalar(MathUtils.lerp(1, 0.9, travel))
     visual.current.position.set(0, rise * Math.cos(tilt), -rise * Math.sin(tilt))
@@ -171,7 +175,7 @@ export function Hand3D() {
     if (!handRig.current) return
     introReady.current = stageNow(battleKey, state.clock.elapsedTime) >= STAGE_INTRO.complete
     const posture = HAND_POSTURES[cameraMode]
-    const damping = 1 - Math.exp(-delta * 5.2)
+    const damping = cameraDamping(delta)
     handRig.current.rotation.x = MathUtils.lerp(handRig.current.rotation.x, posture.tilt, damping)
     handRig.current.position.y = MathUtils.lerp(handRig.current.position.y, posture.lift, damping)
     handRig.current.position.z = MathUtils.lerp(handRig.current.position.z, HAND_PIVOT_Z + posture.z, damping)

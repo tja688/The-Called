@@ -5,6 +5,7 @@ import { getCardDefinition } from '../../config/cardCatalog'
 import type { CardInstance } from '../../game/types'
 import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
+import { cameraMotion } from '../camera/cameraMotion'
 import { CARD_HEIGHT, CARD_THICKNESS, CARD_WIDTH, Card3D } from './Card3D'
 import { STAGE_INTRO, stageNow, stageProgress } from '../environment/stageIntro'
 
@@ -90,6 +91,7 @@ function DeckCard({ card, index, count, open }: { card: CardInstance; index: num
 export function PlayerDeckPile() {
   const deck = useGameStore((state) => state.match?.player.deck ?? [])
   const tactical = useInteractionStore((state) => state.cameraMode === 'overview')
+  const pile = useRef<Group>(null)
   const [open, setOpen] = useState(false)
   const visibleCount = deck.length
   const fanWidth = Math.max(CARD_WIDTH * OPEN_SCALE, (visibleCount - 1) * OPEN_SPACING + CARD_WIDTH * OPEN_SCALE + 0.4)
@@ -98,9 +100,15 @@ export function PlayerDeckPile() {
     if (tactical) setOpen(false)
   }, [tactical])
 
+  useFrame(() => {
+    if (!pile.current) return
+    // Hide only after the camera has arrived, so the pile does not vanish on the first frame of the move.
+    pile.current.visible = !(tactical && cameraMotion.settled)
+  })
+
   return (
     <StagedProp position={PLAYER_DECK_PILE}>
-      <group visible={!tactical}>
+      <group ref={pile}>
         {deck.map((card, index) => (
           <DeckCard key={card.instanceId} card={card} index={index} count={visibleCount} open={open} />
         ))}

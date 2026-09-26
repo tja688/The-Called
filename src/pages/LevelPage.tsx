@@ -4,6 +4,7 @@ import { HUD } from '../ui/HUD'
 import { useNavigationStore } from '../stores/navigationStore'
 import { getLevelConfig, getMonsterConfig, getSceneConfig } from '../config/gameContent'
 import { useGameStore } from '../stores/gameStore'
+import { HAND_VIEW_RETURN_MS } from '../scene/camera/cameraMotion'
 import { useInteractionStore } from '../stores/interactionStore'
 
 export function LevelPage() {
@@ -53,7 +54,7 @@ export function LevelPage() {
     const wasMonsterTurn = previousTurn.current === 'monster'
     previousTurn.current = match?.turn
     if (!wasMonsterTurn || match?.turn !== 'player' || match.status !== 'playing') return
-    const timer = window.setTimeout(() => setCameraMode('board'), 1450)
+    const timer = window.setTimeout(() => setCameraMode('board'), HAND_VIEW_RETURN_MS)
     return () => window.clearTimeout(timer)
   }, [match?.round, match?.status, match?.turn, setCameraMode])
 

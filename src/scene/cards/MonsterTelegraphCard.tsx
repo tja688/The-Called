@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Group, MathUtils, Vector3 } from 'three'
 import { getCardDefinition } from '../../config/cardCatalog'
 import { cellWorldPosition, getCell } from '../../game/core/spatial'
@@ -9,7 +9,8 @@ import type { CameraMode, CardInstance, CellId } from '../../game/types'
 import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { CARD_THICKNESS, Card3D } from './Card3D'
-import { shouldLaunchMonsterCard } from './monsterTelegraphPhase'
+import { bindMonsterFlightRelease } from './monsterCardHandoff'
+import { shouldLaunchMonsterCard, shouldReleaseMonsterFlight } from './monsterTelegraphPhase'
 
 const BOARD_ORIGIN: [number, number, number] = [0, -0.1, -0.65]
 const SETTLED_LIFT = 0.14
@@ -21,8 +22,11 @@ const POSE: Record<CameraMode, { position: [number, number, number]; tilt: numbe
   overview: { position: [MONSTER_PENDING.x, MONSTER_PENDING.y, MONSTER_PENDING.z], tilt: 0.02, scale: MONSTER_PENDING.scale },
 }
 
+const HANDOFF_FRAMES = 4
+
 type Flight = {
   t: number
+  wait: number
   from: Vector3
   fromTilt: number
   fromScale: number
@@ -53,6 +57,14 @@ export function MonsterTelegraphCard() {
   const [visual, setVisual] = useState<CardInstance | null>(null)
   const [concealed, setConcealed] = useState(false)
 
+  useEffect(() => bindMonsterFlightRelease((instanceId) => {
+    if (!shouldReleaseMonsterFlight(phase.current, launchedId.current, instanceId)) return
+    flight.current = null
+    phase.current = 'concealed'
+    if (group.current) group.current.visible = false
+    setConcealed(true)
+  }), [])
+
   useFrame((_, delta) => {
     const root = group.current
     if (!root) return
@@ -76,21 +88,30 @@ export function MonsterTelegraphCard() {
 
     if (phase.current === 'flying' && flight.current) {
       const motion = flight.current
-      motion.t = Math.min(1, motion.t + delta / 0.62)
-      const eased = landingEase(motion.t)
-      root.position.lerpVectors(motion.from, motion.to, eased)
-      root.position.y += landingHop(motion.t, 0.2)
-      root.rotation.x = MathUtils.lerp(motion.fromTilt, 0, eased)
-      root.rotation.y = MathUtils.lerp(root.rotation.y, 0, eased)
-      root.rotation.z = MathUtils.lerp(root.rotation.z, 0, eased)
-      root.scale.setScalar(MathUtils.lerp(motion.fromScale, SETTLED_SCALE, eased))
-      if (shards.current) shards.current.scale.setScalar(0.001)
-      if (motion.t < 1) return
-      flight.current = null
-      phase.current = 'concealed'
-      root.visible = false
-      setConcealed(true)
-      useGameStore.getState().playMonsterTurn()
+      if (motion.t < 1) {
+        motion.t = Math.min(1, motion.t + delta / 0.62)
+        const eased = landingEase(motion.t)
+        root.position.lerpVectors(motion.from, motion.to, eased)
+        root.position.y += landingHop(motion.t, 0.2)
+        root.rotation.x = MathUtils.lerp(motion.fromTilt, 0, eased)
+        root.rotation.y = MathUtils.lerp(root.rotation.y, 0, eased)
+        root.rotation.z = MathUtils.lerp(root.rotation.z, 0, eased)
+        root.scale.setScalar(MathUtils.lerp(motion.fromScale, SETTLED_SCALE, eased))
+        if (shards.current) shards.current.scale.setScalar(0.001)
+        if (motion.t < 1) return
+        root.position.copy(motion.to)
+        root.rotation.set(0, 0, 0)
+        root.scale.setScalar(SETTLED_SCALE)
+        useGameStore.getState().playMonsterTurn()
+        return
+      }
+      motion.wait += 1
+      if (motion.wait >= HANDOFF_FRAMES) {
+        flight.current = null
+        phase.current = 'concealed'
+        root.visible = false
+        setConcealed(true)
+      }
       return
     }
 
@@ -114,6 +135,7 @@ export function MonsterTelegraphCard() {
       phase.current = 'flying'
       flight.current = {
         t: 0,
+        wait: 0,
         from: root.position.clone(),
         fromTilt: root.rotation.x,
         fromScale: root.scale.x || pose.scale,
