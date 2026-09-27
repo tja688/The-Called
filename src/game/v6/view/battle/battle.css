@@ -373,7 +373,8 @@
 
 .v6-stage-actions button,
 .v6-stage-picks button,
-.v6-stage-banner button {
+.v6-stage-banner button,
+.v6-pick-prompt__choices button {
   padding: 10px 16px;
   border: 1px solid #efeae0;
   color: #efeae0;
@@ -417,9 +418,59 @@
   color: #efeae0;
 }
 
-.v6-stage-banner p {
+.v6-stage-banner p,
+.v6-pick-prompt p {
   margin: 0;
   letter-spacing: 0.08em;
+}
+
+.v6-pick-prompt {
+  position: fixed;
+  z-index: 17;
+  top: clamp(64px, 8vh, 88px);
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 22px;
+  border: 1px solid #efeae0;
+  color: #efeae0;
+  background: rgba(20, 19, 17, 0.82);
+  font-size: 16px;
+  letter-spacing: 0.18em;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: v6-pick-prompt-in 0.28s ease;
+}
+
+.v6-pick-prompt__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.v6-stage-picks button.is-offered {
+  animation: v6-card-breathe 1.7s ease-in-out infinite;
+}
+
+@keyframes v6-pick-prompt-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+}
+
+@keyframes v6-card-breathe {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.55); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v6-pick-prompt { animation: none; }
+  .v6-stage-picks button.is-offered {
+    animation: none;
+    filter: brightness(1.25);
+  }
 }
 
 .v6-stage-picks button[aria-pressed='true'] {

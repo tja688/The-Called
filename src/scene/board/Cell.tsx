@@ -20,7 +20,7 @@ const CELL_WIDTH = 2.02
 const CELL_HEIGHT = CELL_WIDTH * CARD_ASPECT_RATIO
 const cellFrame = new BoxGeometry(CELL_WIDTH, 0.02, CELL_HEIGHT)
 
-function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, settleImmediately = false, shownPower, opacity = 1, readout, onSettled }: {
+function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, settleImmediately = false, shownPower, opacity = 1, readout, breathe = false, onSettled }: {
   card: CardInstance
   flipped: boolean
   cellPosition: readonly [number, number, number]
@@ -30,6 +30,7 @@ function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, settleIm
   shownPower: number
   opacity?: number
   readout: 'full' | 'power'
+  breathe?: boolean
   onSettled: () => void
 }) {
   const group = useRef<Group>(null)
@@ -83,7 +84,7 @@ function PlacedCard({ card, flipped, cellPosition, stackDepth, animate, settleIm
     }
   })
 
-  return <group ref={group}><Card3D position={[0, 0, 0]} face={card.owner === 'player' ? 'hero' : 'monster'} card={definition} currentPower={shownPower} opacity={opacity} readout={readout} prepareReadouts flipped={flipped} flipLift={0.7} silent /></group>
+  return <group ref={group}><Card3D position={[0, 0, 0]} face={card.owner === 'player' ? 'hero' : 'monster'} card={definition} currentPower={shownPower} opacity={opacity} readout={readout} prepareReadouts flipped={flipped} flipLift={0.7} silent breathe={breathe} /></group>
 }
 
 export function Cell({ id, position }: { id: CellId; position: readonly [number, number, number] }) {
@@ -102,6 +103,7 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
   const cueTick = useBattleCue((state) => state.tick)
   const stained = useBattleCue((state) => state.stained)
   const marked = useBattleCue((state) => state.picksIds)
+  const offered = useBattleCue((state) => state.offerIds)
   const selectedInstanceId = useInteractionStore((state) => state.selectedCardInstanceId)
   const finishCardPlacement = useInteractionStore((state) => state.finishCardPlacement)
   const showPlacementNotice = useInteractionStore((state) => state.showPlacementNotice)
@@ -263,6 +265,7 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
         shownPower={displayedPower}
         opacity={opacity}
         readout={readout}
+        breathe={offered.includes(visualCard.instanceId)}
         onSettled={() => settlePlacement(visualCard.instanceId)}
       />}
     </group>

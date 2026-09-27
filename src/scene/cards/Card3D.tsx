@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import { BoxGeometry, CanvasTexture, EdgesGeometry, Group, LinearFilter, MathUtils, Mesh, SRGBColorSpace } from 'three'
+import { AdditiveBlending, BoxGeometry, CanvasTexture, EdgesGeometry, Group, LinearFilter, MathUtils, Mesh, MeshBasicMaterial, SRGBColorSpace } from 'three'
+import { BONE } from '../presentation/palette'
 import type { CardDefinition } from '../../game/types'
 import { MONSTER_FACE, PILE_FACE, PLAYER_FACE } from '../presentation/palette'
 
@@ -34,6 +35,8 @@ type Props = {
    * changes. Paint both ahead of time so that swap does not redraw every canvas.
    */
   prepareReadouts?: boolean
+  /** Pulse the card brighter while it is waiting to be chosen. */
+  breathe?: boolean
 }
 
 function fitFontSize(context: CanvasRenderingContext2D, text: string, maxWidth: number, initialSize: number, minimumSize: number, weight: number, fontFamily: string) {
@@ -229,15 +232,44 @@ const edges = new EdgesGeometry(slab)
 
 const ignoreRaycast = () => null
 const receiveRaycast = Mesh.prototype.raycast
+const reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export function Card3D({ position, rotation = [0, 0, 0], scale = 1, face = 'hero', flipped = false, flipLift = 0.14, card, currentPower, opacity = 1, readout = 'full', silent = false, prepareReadouts = false }: Props) {
+function breathLift(now: number) {
+  const wave = reducedMotion ? 0.72 : 0.5 + 0.5 * Math.sin(now * Math.PI * 1.15)
+  return 1 + wave * 1.15
+}
+
+function BrightnessBreath({ opacity }: { opacity: number }) {
+  const material = useRef<MeshBasicMaterial>(null)
+  useFrame(({ clock }) => {
+    const page = material.current
+    if (!page) return
+    const wave = reducedMotion ? 0.72 : 0.5 + 0.5 * Math.sin(clock.elapsedTime * Math.PI * 1.15)
+    page.opacity = opacity * (0.08 + wave * 0.42)
+  })
+  return (
+    <mesh position={[0, CARD_THICKNESS / 2 + 0.008, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={ignoreRaycast}>
+      <planeGeometry args={[CARD_WIDTH * 0.92, CARD_HEIGHT * 0.92]} />
+      <meshBasicMaterial ref={material} color={BONE} transparent opacity={0.22} depthWrite={false} blending={AdditiveBlending} toneMapped={false} />
+    </mesh>
+  )
+}
+
+export function Card3D({ position, rotation = [0, 0, 0], scale = 1, face = 'hero', flipped = false, flipLift = 0.14, card, currentPower, opacity = 1, readout = 'full', silent = false, prepareReadouts = false, breathe = false }: Props) {
   const cardGroup = useRef<Group>(null)
+  const frontMat = useRef<MeshBasicMaterial>(null)
+  const backMat = useRef<MeshBasicMaterial>(null)
   const flipProgress = useRef(flipped ? 1 : 0)
   const style = !card ? PILE_FACE : face === 'hero' ? PLAYER_FACE : MONSTER_FACE
   const front = useFaceTexture(style, card, currentPower, 'front', readout, prepareReadouts)
   const back = useFaceTexture(style, card, currentPower, 'back', readout, prepareReadouts)
 
-  useFrame((_, delta) => {
+  useFrame(({ clock }, delta) => {
+    const lift = breathe ? breathLift(clock.elapsedTime) : 1
+    if (breathe || (frontMat.current && frontMat.current.color.r !== 1)) {
+      frontMat.current?.color.setRGB(lift, lift, lift)
+      backMat.current?.color.setRGB(lift, lift, lift)
+    }
     if (!cardGroup.current) return
     flipProgress.current = MathUtils.lerp(flipProgress.current, flipped ? 1 : 0, 1 - Math.exp(-delta * 16))
     const progress = flipProgress.current
@@ -256,13 +288,14 @@ export function Card3D({ position, rotation = [0, 0, 0], scale = 1, face = 'hero
         </lineSegments>
         <mesh position={[0, CARD_THICKNESS / 2 + 0.001, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={silent ? ignoreRaycast : receiveRaycast}>
           <planeGeometry args={[CARD_WIDTH, CARD_HEIGHT]} />
-          <meshBasicMaterial map={front} toneMapped={false} transparent={opacity < 1} opacity={opacity} />
+          <meshBasicMaterial ref={frontMat} map={front} toneMapped={false} transparent={opacity < 1} opacity={opacity} />
         </mesh>
         <mesh position={[0, -CARD_THICKNESS / 2 - 0.001, 0]} rotation={[Math.PI / 2, 0, Math.PI]} raycast={silent ? ignoreRaycast : receiveRaycast}>
           <planeGeometry args={[CARD_WIDTH, CARD_HEIGHT]} />
-          <meshBasicMaterial map={back} toneMapped={false} transparent={opacity < 1} opacity={opacity} />
+          <meshBasicMaterial ref={backMat} map={back} toneMapped={false} transparent={opacity < 1} opacity={opacity} />
         </mesh>
       </group>
+      {breathe ? <BrightnessBreath opacity={opacity} /> : null}
     </group>
   )
 }

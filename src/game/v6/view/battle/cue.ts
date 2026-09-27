@@ -26,10 +26,13 @@ type CueState = Handlers & {
   bound: boolean
   tick: number
   picksIds: string[]
+  /** Board cards still waiting to be chosen. Empty once the pick is cancelled or filled. */
+  offerIds: string[]
   stained: CellId[]
   bind: (handlers: Handlers) => void
   clear: () => void
   bump: (picksIds?: string[], stained?: CellId[]) => void
+  setOffers: (offerIds: string[]) => void
 }
 
 export const useBattleCue = create<CueState>((set, get) => ({
@@ -37,12 +40,18 @@ export const useBattleCue = create<CueState>((set, get) => ({
   bound: false,
   tick: 0,
   picksIds: [],
+  offerIds: [],
   stained: [],
   bind: (handlers) => set({ ...handlers, bound: true, tick: get().tick + 1 }),
-  clear: () => set({ ...idle, bound: false, picksIds: [], stained: [], tick: get().tick + 1 }),
+  clear: () => set({ ...idle, bound: false, picksIds: [], offerIds: [], stained: [], tick: get().tick + 1 }),
   bump: (picksIds, stained) => set({
     tick: get().tick + 1,
     picksIds: picksIds ?? get().picksIds,
     stained: stained ?? get().stained,
   }),
+  setOffers: (offerIds) => {
+    const current = get().offerIds
+    if (current.length === offerIds.length && current.every((id, index) => id === offerIds[index])) return
+    set({ offerIds: [...offerIds] })
+  },
 }))

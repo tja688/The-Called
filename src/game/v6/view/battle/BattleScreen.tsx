@@ -18,6 +18,7 @@ import {
 import { inspectPlay, type BattleState, type CellId } from '../../rules'
 import { ARRIVAL_COPY } from '../map'
 import { actOnCell, actOnConfirm, readPlayChoice, togglePlayTargets, type PlayChoiceView } from './playChoice'
+import { pickPhase, waitingPlayTargets } from './pickWatch'
 import { useBattleCue } from './cue'
 import {
   arrivalTelegraph,
@@ -494,8 +495,11 @@ export function BattleScreen({
       }
       if (!forward && interaction.cameraMode === 'overview') {
         playCameraTransition('down')
+        // 向后滚动放下举起的牌。出牌前的选牌挂在这张牌上，目标一起清掉。
+        sessionRef.current.targets = []
         interaction.finishCardPlacement()
         interaction.setCameraMode('board')
+        if (useBattleCue.getState().bound) useBattleCue.getState().bump([])
         event.preventDefault()
       }
     }
@@ -509,7 +513,11 @@ export function BattleScreen({
       const interaction = useInteractionStore.getState()
       const entering = interaction.cameraMode !== 'overview'
       playCameraTransition(entering ? 'up' : 'down')
-      if (!entering) interaction.finishCardPlacement()
+      if (!entering) {
+        sessionRef.current.targets = []
+        interaction.finishCardPlacement()
+        if (useBattleCue.getState().bound) useBattleCue.getState().bump([])
+      }
       interaction.setCameraMode(entering ? 'overview' : 'board')
     }
     window.addEventListener('wheel', onWheel, { passive: false })
@@ -524,6 +532,18 @@ export function BattleScreen({
   const view = snapshotEncounter(encounter)
   const choice = selectedId && mode === 'play' ? readPlayChoice(encounter.match.battle, selectedId) : null
   const choosing = Boolean(view.legalTargets?.length) && !encounter.match.over
+  const playTargets = waitingPlayTargets(choice, picks)
+  const phase = pickPhase({
+    armedCardId: selectedId,
+    playBoardIds: playTargets.boardIds,
+    playDeckIds: playTargets.deckIds,
+    effectIds: encounter.match.over ? null : view.legalTargets?.map((target) => target.instanceId) ?? null,
+  })
+  const offerKey = phase.kind === 'picking' ? phase.boardIds.join('\n') : ''
+  useLayoutEffect(() => {
+    if (!useBattleCue.getState().bound) return
+    useBattleCue.getState().setOffers(offerKey ? offerKey.split('\n') : [])
+  }, [offerKey])
   const canAct = mode === 'play' && !encounter.match.over && encounter.match.phase === 'playerAction' && !choosing
   const playerScore = projected ? getBoardPower(projected, 'player') : view.points.player
   const enemyScore = projected ? getBoardPower(projected, 'monster') : view.points.enemy
@@ -589,24 +609,27 @@ export function BattleScreen({
         </div>
       </section>
       {placementNotice ? <div className="placement-notice" role="status">{placementNotice}</div> : null}
-      {choosing ? (
-        <div className="v6-stage-banner" role="status">
-          <p>{pauseText(encounter.match.phase, view.choiceSource?.name ?? '这一张牌')}</p>
-          <div className="v6-stage-picks">
-            {view.legalTargets?.map((target) => (
-              <button key={target.instanceId} type="button" onClick={() => answerTarget(target.instanceId)}>
-                {target.name} · 第 {target.cell} 格
-              </button>
-            ))}
-          </div>
+      {phase.kind === 'picking' ? (
+        <div className="v6-pick-prompt" role="status">
+          <p>{phase.prompt}</p>
+          {phase.source === 'effect' ? (
+            <div className="v6-pick-prompt__choices">
+              {view.legalTargets?.map((target) => (
+                <button key={target.instanceId} type="button" onClick={() => answerTarget(target.instanceId)}>
+                  {target.name} · 第 {target.cell} 格
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
-      {choice && choice.from === 'deck' && choice.targets.length > 0 ? (
+      {choice && phase.kind === 'picking' && phase.source === 'play' && choice.from === 'deck' && choice.targets.length > 0 ? (
         <div className="v6-stage-picks" role="group" aria-label="牌组目标">
           {choice.targets.map((target) => (
             <button
               key={target.instanceId}
               type="button"
+              className={phase.deckIds.includes(target.instanceId) ? 'is-offered' : undefined}
               aria-pressed={picks.includes(target.instanceId)}
               onClick={() => toggleDeck(target.instanceId, choice.limit)}
             >
@@ -665,12 +688,6 @@ function statusLabel(
   if (mode === 'wait' || mode === 'lay') return '铺场'
   if (turn === 'monster' || mode === 'enemy') return '对方回合'
   return '你的回合'
-}
-
-function pauseText(phase: string, name: string): string {
-  if (phase === 'playerTurnStart') return `${name} 的回合开始效果要选一个目标`
-  if (phase === 'playerTurnEnd') return `${name} 的回合结束效果要选一个目标`
-  return `${name} 要选一个目标`
 }
 
 function hint(

@@ -1,6 +1,6 @@
 # Agent instructions
 
-Rules for agents working in this repository.
+一款非对称单击CCG卡牌冒险游戏。极简矢量几何的画面风格。
 
 ## Repository workflow
 
