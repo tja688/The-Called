@@ -18,6 +18,8 @@ export type {
   FieldQuery,
   ForceReason,
   LeavePrompt,
+  CueKind,
+  EffectCue,
   ListenerEvent,
   NegativeKind,
   Opcode,
@@ -39,6 +41,8 @@ export type {
 } from './types';
 
 export { CELL_IDS, CHAIN_DEPTH_LIMIT, HAND_LIMIT, isCellId, mirrorCell, orthogonalNeighbors } from './board';
+
+export { appendCue, cueMs, freshCues, presentCues } from './cues';
 
 export {
   activeCoverThreshold,

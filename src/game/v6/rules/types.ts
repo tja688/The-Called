@@ -397,6 +397,55 @@ export interface CoverThreshold {
   targetId: string;
 }
 
+/**
+ * One picture the board should play, in the order the kernel already settled it.
+ * Same-step board effects are emitted in cell order, then hand order.
+ */
+export type CueKind =
+  | 'arrive'
+  | 'cast'
+  | 'spawn'
+  | 'mark'
+  | 'unmark'
+  | 'points'
+  | 'double'
+  | 'reset'
+  | 'aura'
+  | 'protect'
+  | 'guard'
+  | 'revive'
+  | 'exhaust'
+  | 'seal'
+  | 'unseal'
+  | 'clear'
+  | 'remove'
+  | 'cover'
+  | 'threshold'
+  | 'faith'
+  | 'pollute'
+  | 'timer'
+  | 'swift'
+  | 'settle'
+  | 'transfer'
+  | 'draw'
+  | 'search'
+  | 'sacrifice'
+  | 'mirror'
+  | 'follow'
+  | 'absorb';
+
+export interface EffectCue {
+  seq: number;
+  kind: CueKind;
+  sourceId: string;
+  sourceCell: CellId | null;
+  targetId: string | null;
+  cell: CellId | null;
+  owner: Side | null;
+  amount: number;
+  toCell: CellId | null;
+}
+
 export interface PendingEvent {
   type: ListenerEvent;
   instanceId: string;
@@ -428,6 +477,11 @@ export interface BattleState {
   forceReasons: ForceReason[];
   /** Rules log, including the zero-check depth error. */
   log: string[];
+  /**
+   * Append-only picture trace for the view.
+   * The kernel never reads it. Each chain keeps the earlier cues and adds its own.
+   */
+  cues: EffectCue[];
   auras: Aura[];
   thresholds: CoverThreshold[];
   pendingEvents: PendingEvent[];

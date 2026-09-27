@@ -15,14 +15,14 @@ import {
   snapshotEncounter,
   type Encounter,
 } from '../../encounter'
-import { inspectPlay, type BattleState, type CellId } from '../../rules'
+import { cueMs, freshCues, inspectPlay, presentCues, type BattleState, type CellId, type EffectCue } from '../../rules'
 import { ARRIVAL_COPY } from '../map'
 import { actOnCell, actOnConfirm, readPlayChoice, togglePlayTargets, type PlayChoiceView } from './playChoice'
 import { pickPhase, waitingPlayTargets } from './pickWatch'
 import { useBattleCue } from './cue'
+import { useEffectReel } from '../../../../scene/effects/reelStore'
 import {
   arrivalTelegraph,
-  boardArrivals,
   buriedUnder,
   intentPreview,
   monsterScene,
@@ -34,21 +34,29 @@ import {
   type BoardArrival,
   type IntentPreview,
 } from './project'
+import { boardBadges, concealedIds, gainedSuppress, revealedBy, type Suppress } from './reel'
 import './battle.css'
 
 const LAY_DELAY_MS = 2800
 
 type Mode = 'wait' | 'lay' | 'play' | 'enemy'
 
+type Wait = 'place' | 'flight' | 'handoff' | 'time' | null
+
 type Session = {
   encounter: Encounter
   targets: string[]
   queue: BoardArrival[]
+  /** Pictures still waiting, in settlement order. */
+  beats: EffectCue[]
+  wait: Wait
+  suppress: Suppress[]
+  reelFrom: BattleState | null
   pending: Encounter | null
   mode: Mode
   buried: boolean
   started: boolean
-  /** End the action once this play's landing animation finishes. */
+  /** End the action once this play's pictures finish. */
   seal: boolean
 }
 
@@ -86,6 +94,10 @@ export function BattleScreen({
     encounter,
     targets: [],
     queue: [],
+    beats: [],
+    wait: null,
+    suppress: [],
+    reelFrom: null,
     pending: null,
     mode: 'play',
     buried: false,
@@ -113,8 +125,13 @@ export function BattleScreen({
   })
   const layTimer = useRef<number | undefined>(undefined)
   const returnTimer = useRef<number | undefined>(undefined)
+  const fxTimer = useRef<number | undefined>(undefined)
+  const picture = useRef<{ fx: EffectCue | null; spawn: EffectCue | null }>({ fx: null, spawn: null })
+  const kickRef = useRef<() => void>(() => {})
+  const finishRef = useRef<() => void>(() => {})
   const landedRef = useRef<() => void>(() => {})
   const [mode, setMode] = useState<Mode>('play')
+  const [reeling, setReeling] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const selectedId = useInteractionStore((state) => state.selectedCardInstanceId)
   const placementNotice = useInteractionStore((state) => state.placementNotice)
@@ -151,9 +168,19 @@ export function BattleScreen({
       placementSettled: false,
     })
     cue.bump(cue.picksIds, input.battle.polluted.map(sceneCell))
+    useEffectReel.getState().publish({
+      fx: picture.current.fx,
+      spawn: picture.current.spawn,
+      badges: boardBadges(input.battle),
+      suppress: session.suppress,
+      hidden: [...(input.hidden ?? [])],
+    })
   }
 
   const reveal = (enc: Encounter) => {
+    picture.current = { fx: null, spawn: null }
+    usePresentationStore.getState().setInputLocked(false)
+    setReeling(false)
     const preview = enc.match.over ? null : intentPreview(enc.match)
     show({
       battle: enc.match.battle,
@@ -175,6 +202,9 @@ export function BattleScreen({
   }
 
   const adopt = (after: Encounter, placed?: PlayCardAction) => {
+    picture.current = { fx: null, spawn: null }
+    usePresentationStore.getState().setInputLocked(false)
+    setReeling(false)
     const session = sessionRef.current
     const buriedId = placed ? buriedUnder(session.encounter.match.battle, after.match.battle, ruleCell(placed.cellId)) : null
     session.encounter = after
@@ -200,60 +230,163 @@ export function BattleScreen({
     onEncounterRef.current(after)
   }
 
-  const stageArrivals = (before: Encounter, after: Encounter, placed?: PlayCardAction) => {
+  const resting = (enc: Encounter): MonsterTelegraph | undefined => {
+    const preview = enc.match.over ? null : intentPreview(enc.match)
+    return preview ? previewTelegraph(preview) : undefined
+  }
+
+  const paint = (battle: BattleState, hidden: readonly string[], extra: Partial<ShowInput> = {}) => {
     const session = sessionRef.current
-    const arrivals = boardArrivals(before.match.battle, after.match.battle)
-      .filter((item) => item.instanceId !== placed?.cardInstanceId)
-    session.targets = []
-    useBattleCue.getState().bump([])
-    if (arrivals.length === 0) {
-      adopt(after, placed)
-      return
-    }
-    session.pending = after
-    session.queue = arrivals
-    session.buried = false
-    session.mode = 'enemy'
-    setMode('enemy')
-    liftCamera()
-    const first = arrivals[0]
-    if (!placed) {
-      show({
-        battle: before.match.battle,
-        faces: [before.match.battle, after.match.battle],
-        turn: 'monster',
-        over: false,
-        winner: null,
-        telegraph: arrivalTelegraph(after.match.battle, first, true),
-      })
-      return
-    }
-    const buriedId = buriedUnder(before.match.battle, after.match.battle, ruleCell(placed.cellId))
-    session.buried = Boolean(buriedId)
+    const pending = session.pending
+    const preview = pending && !pending.match.over ? intentPreview(pending.match) : null
     show({
-      battle: after.match.battle,
-      faces: [before.match.battle, after.match.battle],
-      hidden: new Set(arrivals.map((item) => item.instanceId)),
-      turn: 'monster',
+      battle,
+      faces: [battle, session.encounter.match.battle],
+      previews: preview ? [preview] : [],
+      hidden: new Set(hidden),
+      turn: extra.turn ?? (session.mode === 'enemy' ? 'monster' : 'player'),
       over: false,
       winner: null,
-      telegraph: arrivalTelegraph(after.match.battle, first, true),
-      activePlacement: placed,
-      buried: buriedId ? { cell: ruleCell(placed.cellId), instanceId: buriedId } : null,
+      telegraph: extra.telegraph,
+      activePlacement: extra.activePlacement,
+      buried: extra.buried,
     })
   }
 
+  const startReel = (before: Encounter, after: Encounter, placed?: PlayCardAction) => {
+    const cues = presentCues(freshCues(before.match.battle.cues, after.match.battle.cues))
+    if (cues.length === 0) {
+      adopt(after, placed)
+      return
+    }
+    const session = sessionRef.current
+    session.pending = after
+    session.beats = cues
+    session.reelFrom = before.match.battle
+    session.suppress = gainedSuppress(before.match.battle, after.match.battle)
+    session.targets = []
+    useBattleCue.getState().bump([])
+    if (cues.some((cue) => cue.kind === 'arrive' && cue.owner === 'enemy')) {
+      session.mode = 'enemy'
+      setMode('enemy')
+    }
+    usePresentationStore.getState().setInputLocked(true)
+    setReeling(true)
+    kickRef.current()
+  }
+
   const presentPlay = (before: Encounter, after: Encounter, placed?: PlayCardAction) => {
-    const arrivals = boardArrivals(before.match.battle, after.match.battle)
-      .filter((item) => item.instanceId !== placed?.cardInstanceId)
-    const animated = Boolean(placed) || arrivals.length > 0
-    if (!animated && actionSpent(after)) {
+    const cues = presentCues(freshCues(before.match.battle.cues, after.match.battle.cues))
+    if (cues.length === 0 && actionSpent(after)) {
       sessionRef.current.seal = false
-      stageArrivals(after, endEncounterTurn(after))
+      startReel(after, endEncounterTurn(after))
       return
     }
     sessionRef.current.seal = actionSpent(after)
-    stageArrivals(before, after, placed)
+    startReel(before, after, placed)
+  }
+
+  kickRef.current = () => {
+    window.clearTimeout(fxTimer.current)
+    const session = sessionRef.current
+    const beat = session.beats[0]
+    const after = session.pending
+    if (!beat || !after) {
+      finishRef.current()
+      return
+    }
+    const battle = after.match.battle
+    const flag = revealedBy(beat)
+    if (flag) session.suppress = session.suppress.filter((item) => item.id !== flag.id || item.flag !== flag.flag)
+    const hidden = concealedIds(battle, session.beats)
+    const skip = () => {
+      session.beats = session.beats.slice(1)
+      kickRef.current()
+    }
+    if (beat.kind === 'arrive' && beat.owner === 'player' && beat.targetId && beat.cell) {
+      picture.current = { fx: null, spawn: null }
+      session.wait = 'place'
+      const from = session.reelFrom
+      const buriedId = from ? buriedUnder(from, battle, beat.cell) : null
+      session.buried = Boolean(buriedId)
+      paint(battle, hidden, {
+        telegraph: resting(after),
+        activePlacement: { side: 'player', cardInstanceId: beat.targetId, cellId: sceneCell(beat.cell) },
+        buried: buriedId ? { cell: beat.cell, instanceId: buriedId } : null,
+        turn: 'player',
+      })
+      return
+    }
+    if (beat.kind === 'arrive' && beat.owner !== 'player' && beat.targetId && beat.cell) {
+      const card = battle.instances[beat.targetId]
+      if (!card) {
+        skip()
+        return
+      }
+      picture.current = { fx: null, spawn: null }
+      session.wait = 'flight'
+      liftCamera()
+      paint(battle, hidden, {
+        telegraph: arrivalTelegraph(battle, { instanceId: beat.targetId, cell: beat.cell, definitionId: card.definitionId }, true),
+        turn: 'monster',
+      })
+      return
+    }
+    if (beat.kind === 'arrive') {
+      skip()
+      return
+    }
+    picture.current = beat.kind === 'spawn' ? { fx: null, spawn: beat } : { fx: beat, spawn: null }
+    session.wait = 'time'
+    paint(battle, hidden, { telegraph: resting(after) })
+    fxTimer.current = window.setTimeout(() => {
+      const live = sessionRef.current
+      if (live.wait !== 'time') return
+      live.beats = live.beats.slice(1)
+      live.wait = null
+      kickRef.current()
+    }, cueMs(beat.kind))
+  }
+
+  finishRef.current = () => {
+    window.clearTimeout(fxTimer.current)
+    picture.current = { fx: null, spawn: null }
+    const session = sessionRef.current
+    const finalEnc = session.pending ?? session.encounter
+    session.beats = []
+    session.wait = null
+    session.suppress = []
+    if (session.seal && actionSpent(finalEnc)) {
+      session.seal = false
+      session.pending = null
+      session.buried = false
+      session.queue = []
+      session.encounter = finalEnc
+      session.mode = 'play'
+      setMode('play')
+      onEncounterRef.current(finalEnc)
+      startReel(finalEnc, endEncounterTurn(finalEnc))
+      return
+    }
+    if (!session.pending && !session.buried && session.mode === 'play') {
+      usePresentationStore.getState().setInputLocked(false)
+      setReeling(false)
+      return
+    }
+    const wasEnemy = session.mode === 'enemy'
+    session.pending = null
+    session.buried = false
+    session.queue = []
+    session.encounter = finalEnc
+    session.mode = 'play'
+    setMode('play')
+    onEncounterRef.current(finalEnc)
+    reveal(finalEnc)
+    if (!wasEnemy) return
+    returnTimer.current = window.setTimeout(() => {
+      playCameraTransition('down')
+      useInteractionStore.getState().setCameraMode('board')
+    }, HAND_VIEW_RETURN_MS)
   }
 
   const release = (enc: Encounter, step: ReturnType<typeof actOnCell>, placed?: PlayCardAction) => {
@@ -274,42 +407,26 @@ export function BattleScreen({
 
   landedRef.current = () => {
     const session = sessionRef.current
-    if (session.queue.length > 0) return
-    const finalEnc = session.pending ?? session.encounter
-    if (session.seal && actionSpent(finalEnc)) {
-      session.seal = false
-      session.pending = null
-      session.buried = false
-      session.queue = []
-      session.encounter = finalEnc
-      session.mode = 'play'
-      setMode('play')
-      onEncounterRef.current(finalEnc)
-      stageArrivals(finalEnc, endEncounterTurn(finalEnc))
+    if (session.wait === 'place') {
+      session.beats = session.beats.slice(1)
+      session.wait = null
+      kickRef.current()
       return
     }
-    if (!session.pending && !session.buried && session.mode === 'play') return
-    const wasEnemy = session.mode === 'enemy'
-    session.pending = null
-    session.buried = false
-    session.queue = []
-    session.encounter = finalEnc
-    session.mode = 'play'
-    setMode('play')
-    onEncounterRef.current(finalEnc)
-    reveal(finalEnc)
-    if (!wasEnemy) return
-    returnTimer.current = window.setTimeout(() => {
-      playCameraTransition('down')
-      useInteractionStore.getState().setCameraMode('board')
-    }, HAND_VIEW_RETURN_MS)
+    if (session.wait === 'handoff') {
+      session.wait = null
+      kickRef.current()
+      return
+    }
+    if (session.beats.length > 0 || session.queue.length > 0) return
+    finishRef.current()
   }
 
   api.current = {
     allows: (instanceId, cellId) => {
       const session = sessionRef.current
       const match = session.encounter.match
-      if (session.seal || session.mode !== 'play' || match.over || match.phase !== 'playerAction' || match.pendingChoice) return false
+      if (session.wait || session.beats.length > 0 || session.seal || session.mode !== 'play' || match.over || match.phase !== 'playerAction' || match.pendingChoice) return false
       const choice = readPlayChoice(match.battle, instanceId)
       if (choice.blocked || choice.placement !== 'cell') return false
       if (choice.from === 'board' && choice.targets.length > 0 && session.targets.length === 0) return false
@@ -323,7 +440,7 @@ export function BattleScreen({
       const session = sessionRef.current
       const match = session.encounter.match
       const selected = useInteractionStore.getState().selectedCardInstanceId
-      if (session.seal || session.mode !== 'play' || !selected || match.over || match.phase !== 'playerAction' || match.pendingChoice) return false
+      if (session.wait || session.beats.length > 0 || session.seal || session.mode !== 'play' || !selected || match.over || match.phase !== 'playerAction' || match.pendingChoice) return false
       const choice = readPlayChoice(match.battle, selected)
       if (choice.from !== 'board') return false
       const occupant = match.battle.cells[ruleCell(cellId)]
@@ -338,7 +455,7 @@ export function BattleScreen({
     play: (action) => {
       const session = sessionRef.current
       const enc = session.encounter
-      if (session.seal || session.mode !== 'play' || enc.match.over || enc.match.phase !== 'playerAction' || enc.match.pendingChoice) {
+      if (session.wait || session.beats.length > 0 || session.seal || session.mode !== 'play' || enc.match.over || enc.match.phase !== 'playerAction' || enc.match.pendingChoice) {
         return 'busy'
       }
       const cell = ruleCell(action.cellId)
@@ -365,6 +482,27 @@ export function BattleScreen({
     },
     land: () => {
       const session = sessionRef.current
+      if (session.wait === 'flight') {
+        const arrived = session.beats[0]
+        session.beats = session.beats.slice(1)
+        session.wait = 'handoff'
+        const after = session.pending
+        if (!arrived?.targetId || !arrived.cell || !after) {
+          kickRef.current()
+          return
+        }
+        picture.current = { fx: null, spawn: null }
+        paint(after.match.battle, concealedIds(after.match.battle, session.beats), {
+          telegraph: resting(after),
+          activePlacement: {
+            side: 'monster',
+            cardInstanceId: arrived.targetId,
+            cellId: sceneCell(arrived.cell),
+          },
+          turn: 'monster',
+        })
+        return
+      }
       const arrived = session.queue[0]
       if (!arrived) return
       session.queue = session.queue.slice(1)
@@ -398,7 +536,7 @@ export function BattleScreen({
     commit: (instanceId) => {
       const session = sessionRef.current
       const enc = session.encounter
-      if (session.seal || session.mode !== 'play' || enc.match.over || enc.match.phase !== 'playerAction' || enc.match.pendingChoice) return
+      if (session.wait || session.beats.length > 0 || session.seal || session.mode !== 'play' || enc.match.over || enc.match.phase !== 'playerAction' || enc.match.pendingChoice) return
       const choice = readPlayChoice(enc.match.battle, instanceId)
       if (choice.placement !== 'confirm' || choice.blocked || choice.targets.length > 0) return
       release(enc, actOnConfirm({ instanceId, choice, selected: [] }))
@@ -454,6 +592,8 @@ export function BattleScreen({
     return () => {
       window.clearTimeout(layTimer.current)
       window.clearTimeout(returnTimer.current)
+      window.clearTimeout(fxTimer.current)
+      useEffectReel.getState().publish({ fx: null, spawn: null, badges: [], suppress: [], hidden: [] })
       useBattleCue.getState().clear()
       clearPresentedCards()
       usePresentationStore.getState().setInputLocked(false)
@@ -544,7 +684,7 @@ export function BattleScreen({
     if (!useBattleCue.getState().bound) return
     useBattleCue.getState().setOffers(offerKey ? offerKey.split('\n') : [])
   }, [offerKey])
-  const canAct = mode === 'play' && !encounter.match.over && encounter.match.phase === 'playerAction' && !choosing
+  const canAct = mode === 'play' && !reeling && !encounter.match.over && encounter.match.phase === 'playerAction' && !choosing
   const playerScore = projected ? getBoardPower(projected, 'player') : view.points.player
   const enemyScore = projected ? getBoardPower(projected, 'monster') : view.points.enemy
   const finished = encounter.match.over && !placing && mode === 'play'
@@ -552,10 +692,10 @@ export function BattleScreen({
 
   const finishTurn = () => {
     const enc = sessionRef.current.encounter
-    if (sessionRef.current.mode !== 'play' || enc.match.over || enc.match.phase !== 'playerAction' || enc.match.pendingChoice) return
+    if (sessionRef.current.wait || sessionRef.current.beats.length > 0 || sessionRef.current.mode !== 'play' || enc.match.over || enc.match.phase !== 'playerAction' || enc.match.pendingChoice) return
     sessionRef.current.seal = false
     useInteractionStore.getState().finishCardPlacement()
-    stageArrivals(enc, endEncounterTurn(enc))
+    startReel(enc, endEncounterTurn(enc))
   }
 
   const toggleDeck = (instanceId: string, limit: number) => {

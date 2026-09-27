@@ -125,7 +125,7 @@ export function projectMatch(input: {
     board,
     player: {
       deck: input.battle.deck.flatMap((id) => (input.battle.instances[id] ? [toCard(input.battle, id)] : [])),
-      hand: input.battle.hand.flatMap((id) => (input.battle.instances[id] ? [toCard(input.battle, id)] : [])),
+      hand: input.battle.hand.flatMap((id) => (input.battle.instances[id] && !hidden.has(id) ? [toCard(input.battle, id)] : [])),
       turnsTaken: 0,
     },
     monster: { deck: [], hand: [], turnsTaken: 0 },

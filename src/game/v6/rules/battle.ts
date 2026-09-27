@@ -1,6 +1,8 @@
 import { CELL_IDS, CHAIN_DEPTH_LIMIT, HAND_LIMIT, emptyCells, isCellId, mirrorCell, orthogonalNeighbors } from './board';
+import { appendCue } from './cues';
 import { mixSeed, nextInt } from './rng';
 import type {
+  EffectCue,
   Aura,
   AuraQuery,
   BattleState,
@@ -66,6 +68,8 @@ interface LeaveFollowup {
 const leaveFollowups = new WeakMap<BattleState, LeaveFollowup[]>();
 /** Player follow-up plays granted while this chain object was resolving. */
 const grantedFollowUps = new WeakMap<BattleState, number>();
+/** Cell a card last occupied on this chain object, after it has left. */
+const vacated = new WeakMap<BattleState, Map<string, CellId>>();
 
 function queueLeaveFollowup(
   state: BattleState,
@@ -181,6 +185,42 @@ function emptyChoice(): Choice {
   return {};
 }
 
+function rememberVacated(state: BattleState, id: string, cell: CellId | null): void {
+  if (cell === null) return;
+  const map = vacated.get(state) ?? new Map<string, CellId>();
+  map.set(id, cell);
+  vacated.set(state, map);
+}
+
+function originCell(state: BattleState, id: string): CellId | null {
+  const card = state.instances[id];
+  if (card && card.zone === 'board' && card.cell !== null) return card.cell;
+  return vacated.get(state)?.get(id) ?? null;
+}
+
+function note(
+  state: BattleState,
+  ctx: ExecCtx,
+  kind: EffectCue['kind'],
+  targetId: string | null,
+  cell: CellId | null,
+  amount = 0,
+  toCell: CellId | null = null,
+): void {
+  const target = targetId ? state.instances[targetId] : undefined;
+  const source = state.instances[ctx.selfId];
+  appendCue(state, {
+    kind,
+    sourceId: ctx.selfId,
+    sourceCell: originCell(state, ctx.selfId),
+    targetId,
+    cell: cell ?? (target && target.zone === 'board' ? target.cell : null),
+    owner: target?.owner ?? source?.owner ?? ctx.controller,
+    amount,
+    toCell,
+  });
+}
+
 function ctxOf(card: CardInstance, choice: Choice | undefined, eventSubjectId: string | null = null): ExecCtx {
   return {
     selfId: card.instanceId,
@@ -213,6 +253,7 @@ export function createBattle(input: CreateBattleInput = {}): BattleState {
     forceSettlement: input.forceSettlement ?? false,
     forceReasons: [...(input.forceReasons ?? [])],
     log: [],
+    cues: [],
     auras: [],
     thresholds: [],
     pendingEvents: [],
@@ -707,26 +748,48 @@ function routeAfterLeave(state: BattleState, id: string): void {
 function clearCell(state: BattleState, id: string): CellId | null {
   const card = state.instances[id];
   const cell = card.cell;
+  rememberVacated(state, id, cell);
   if (cell && state.cells[cell] === id) state.cells[cell] = null;
   card.cell = null;
   dropGranted(state, id);
   return cell;
 }
 
-function removeInstance(state: BattleState, id: string, reason: RemovalReason): void {
+function removeInstance(state: BattleState, id: string, reason: RemovalReason, sourceId?: string): void {
   const card = state.instances[id];
   if (state.resolutionHalted) return;
   if (!card || card.zone !== 'board' || card.cell === null) return;
   if (!consumeDepth(state)) return;
 
+  const actor = sourceId ?? id;
   if (reason !== 'cover' && card.protected) {
     card.protected = false;
     state.log.push(`protect:${id}`);
+    appendCue(state, {
+      kind: 'guard',
+      sourceId: actor,
+      sourceCell: originCell(state, actor),
+      targetId: id,
+      cell: card.cell,
+      owner: card.owner,
+      amount: 0,
+      toCell: null,
+    });
     return;
   }
 
   const sealed = card.sealed;
   const leftCell = clearCell(state, id);
+  appendCue(state, {
+    kind: reason === 'cover' ? 'cover' : 'remove',
+    sourceId: actor,
+    sourceCell: originCell(state, actor),
+    targetId: id,
+    cell: leftCell,
+    owner: card.owner,
+    amount: 0,
+    toCell: null,
+  });
   const definition = defOf(state, card);
   state.log.push(`leave:${id}`);
   if (!sealed) {
@@ -761,6 +824,16 @@ function seat(state: BattleState, card: CardInstance, cell: CellId): void {
   state.cells[cell] = card.instanceId;
   card.zone = 'board';
   card.cell = cell;
+  appendCue(state, {
+    kind: 'arrive',
+    sourceId: card.instanceId,
+    sourceCell: null,
+    targetId: card.instanceId,
+    cell,
+    owner: card.owner,
+    amount: 0,
+    toCell: null,
+  });
 }
 
 function resolveTargets(state: BattleState, spec: TargetSpec, ctx: ExecCtx): string[] {
@@ -811,13 +884,16 @@ function clearOneNegative(state: BattleState, id: string, ctx: ExecCtx): void {
   const preference = ctx.choice.negatives?.[id] ?? ctx.choice.negative;
   if (debuff && sealed && preference === 'debuff') {
     card.permanentMod += 1;
+    note(state, ctx, 'clear', id, card.cell, 1);
     return;
   }
   if (sealed) {
     card.sealed = false;
+    note(state, ctx, 'clear', id, card.cell, 0);
     return;
   }
   card.permanentMod += 1;
+  note(state, ctx, 'clear', id, card.cell, 1);
 }
 
 function preflight(
@@ -858,7 +934,7 @@ function preflight(
   return { ok: true, skip };
 }
 
-function sacrifice(state: BattleState, count: number): void {
+function sacrifice(state: BattleState, count: number, ctx: ExecCtx): void {
   if (state.deck.length < count) throw new Error('Sacrifice underpaid after preflight');
   for (let index = 0; index < count; index += 1) {
     const rolled = nextInt(state.rng, state.deck.length);
@@ -866,6 +942,7 @@ function sacrifice(state: BattleState, count: number): void {
     const id = state.deck[rolled.n];
     state.deck.splice(rolled.n, 1);
     const card = state.instances[id];
+    note(state, ctx, 'sacrifice', id, null);
     if (card.toHandWhenSacrificed) {
       // TODO 【建议默认】亡魂被献祭时入手；手牌已满则进弃牌堆。被别的方式丢进弃牌堆不改道。
       forget(state, id);
@@ -960,6 +1037,16 @@ function spawn(state: BattleState, opcode: Extract<Opcode, { op: 'spawn' }>, ctx
   state.instances[instanceId] = card;
   state.cells[cell] = instanceId;
   state.log.push(`enter:${instanceId}`);
+  appendCue(state, {
+    kind: 'spawn',
+    sourceId: ctx.selfId,
+    sourceCell: originCell(state, ctx.selfId),
+    targetId: instanceId,
+    cell,
+    owner,
+    amount: basePoints,
+    toCell: null,
+  });
   runSegment(state, definition.effects ?? [], ctxOf(card, ctx.choice));
   queueEvent(state, 'entered', instanceId, cell);
 }
@@ -975,13 +1062,14 @@ function deckFieldMatches(state: BattleState, minBase: number): string[] {
   return matches;
 }
 
-function moveDeckCardToHand(state: BattleState, id: string): void {
-  if (!state.deck.includes(id) || state.hand.length >= HAND_LIMIT) return;
+function moveDeckCardToHand(state: BattleState, id: string): boolean {
+  if (!state.deck.includes(id) || state.hand.length >= HAND_LIMIT) return false;
   state.deck = state.deck.filter((entry) => entry !== id);
   const card = state.instances[id];
   card.zone = 'hand';
   card.cell = null;
   state.hand.push(id);
+  return true;
 }
 
 /**
@@ -994,12 +1082,12 @@ function searchDeck(state: BattleState, opcode: Extract<Opcode, { op: 'search' }
   if (matches.length === 0) return;
   const picked = ctx.choice.targets?.[0];
   if (picked && matches.includes(picked)) {
-    moveDeckCardToHand(state, picked);
+    if (moveDeckCardToHand(state, picked)) note(state, ctx, 'search', picked, null);
     return;
   }
   if (matches.length === 1) {
     const only = matches[0];
-    if (only) moveDeckCardToHand(state, only);
+    if (only && moveDeckCardToHand(state, only)) note(state, ctx, 'search', only, null);
   }
 }
 
@@ -1013,6 +1101,7 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
         if (ctx.controller === 'enemy' && card.zone === 'hand') continue;
         const onBoard = card.zone === 'board';
         card.permanentMod += amount;
+        if (amount !== 0) note(state, ctx, 'points', id, onBoard ? card.cell : null, amount);
         if (onBoard && opcode.onLeft && opcode.onLeft.length > 0) {
           queueLeaveFollowup(state, id, opcode.onLeft, ctx, currentPoints(state, id) === 0);
         }
@@ -1040,6 +1129,7 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
           target: { kind: 'fixed', instanceIds: resolveTargets(state, opcode.target, ctx) },
         });
       }
+      note(state, ctx, 'aura', ctx.selfId, null, opcode.amount);
       return;
     }
     case 'doubleBasePermanent': {
@@ -1049,6 +1139,7 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
         // 只翻基础+永久。新永久 = 2*(基础+永久)-基础。第 4.6 节公式少写了乘 2，按句首实现，否则翻倍是空操作。光环不写入永久。
         const sum = card.basePoints + card.permanentMod;
         card.permanentMod = sum * 2 - card.basePoints;
+        note(state, ctx, 'double', id, card.cell, card.permanentMod);
       }
       return;
     }
@@ -1056,6 +1147,8 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
       for (const id of resolveTargets(state, opcode.target, ctx)) {
         const card = state.instances[id];
         if (!livePointTarget(card)) continue;
+        if (card.permanentMod === 0) continue;
+        note(state, ctx, 'reset', id, card.cell, card.permanentMod);
         card.permanentMod = 0;
       }
       return;
@@ -1074,13 +1167,17 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
         if (card.zone !== 'board' && card.zone !== 'hand') continue;
         if (card.analyzed) continue;
         card.analyzed = true;
+        note(state, ctx, 'mark', id, card.cell);
         queueEvent(state, 'gainedMark', id, card.cell);
       }
       return;
     }
     case 'removeMark': {
       for (const id of resolveTargets(state, opcode.target, ctx)) {
-        state.instances[id].analyzed = false;
+        const card = state.instances[id];
+        if (!card.analyzed) continue;
+        card.analyzed = false;
+        note(state, ctx, 'unmark', id, card.cell);
       }
       return;
     }
@@ -1089,6 +1186,7 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
         const card = state.instances[id];
         if (card.zone !== 'board' || card.sealed) continue;
         card.sealed = true;
+        note(state, ctx, 'seal', id, card.cell);
         queueEvent(state, 'sealed', id, card.cell);
       }
       return;
@@ -1098,21 +1196,36 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
       return;
     }
     case 'giveProtect': {
-      for (const id of resolveTargets(state, opcode.target, ctx)) state.instances[id].protected = true;
+      for (const id of resolveTargets(state, opcode.target, ctx)) {
+        const card = state.instances[id];
+        if (card.protected) continue;
+        card.protected = true;
+        note(state, ctx, 'protect', id, card.cell);
+      }
       return;
     }
     case 'giveRevive': {
-      for (const id of resolveTargets(state, opcode.target, ctx)) state.instances[id].revive = true;
+      for (const id of resolveTargets(state, opcode.target, ctx)) {
+        const card = state.instances[id];
+        if (card.revive) continue;
+        card.revive = true;
+        note(state, ctx, 'revive', id, card.cell);
+      }
       return;
     }
     case 'setExhaust': {
-      for (const id of resolveTargets(state, opcode.target, ctx)) state.instances[id].exhaust = true;
+      for (const id of resolveTargets(state, opcode.target, ctx)) {
+        const card = state.instances[id];
+        if (card.exhaust) continue;
+        card.exhaust = true;
+        note(state, ctx, 'exhaust', id, card.cell);
+      }
       return;
     }
     case 'remove': {
       for (const id of resolveTargets(state, opcode.target, ctx)) {
         if (!matchesWhen(state, id, opcode.when)) continue;
-        removeInstance(state, id, 'effect');
+        removeInstance(state, id, 'effect', ctx.selfId);
       }
       return;
     }
@@ -1125,35 +1238,46 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
           targetId: id,
         };
         state.thresholds.push(threshold);
+        note(state, ctx, 'threshold', id, state.instances[id].cell, opcode.min);
       }
       return;
     }
     case 'sacrifice': {
       if (ctx.controller !== 'player') return;
-      sacrifice(state, opcode.count);
+      sacrifice(state, opcode.count, ctx);
       return;
     }
     case 'gainFaith': {
-      state.faith[ctx.controller] = clampFaith(state.faith[ctx.controller] + opcode.amount);
+      const before = state.faith[ctx.controller];
+      state.faith[ctx.controller] = clampFaith(before + opcode.amount);
+      if (state.faith[ctx.controller] !== before) note(state, ctx, 'faith', null, null, state.faith[ctx.controller] - before);
       return;
     }
     case 'spendFaith': {
+      const before = state.faith[ctx.controller];
       if (opcode.amount === 'all') {
-        ctx.lastFaithSpent = state.faith[ctx.controller];
+        ctx.lastFaithSpent = before;
         state.faith[ctx.controller] = 0;
-        return;
+      } else {
+        state.faith[ctx.controller] = clampFaith(before - opcode.amount);
+        ctx.lastFaithSpent = opcode.amount;
       }
-      state.faith[ctx.controller] = clampFaith(state.faith[ctx.controller] - opcode.amount);
-      ctx.lastFaithSpent = opcode.amount;
+      if (state.faith[ctx.controller] !== before) note(state, ctx, 'faith', null, null, state.faith[ctx.controller] - before);
       return;
     }
     case 'doubleFaith': {
-      state.faith[ctx.controller] = clampFaith(state.faith[ctx.controller] * 2);
+      const before = state.faith[ctx.controller];
+      state.faith[ctx.controller] = clampFaith(before * 2);
+      if (state.faith[ctx.controller] !== before) note(state, ctx, 'faith', null, null, state.faith[ctx.controller] - before);
       return;
     }
     case 'pollute': {
       const cell = opcode.cell === 'choice' ? ctx.choice.cells?.[0] : opcode.cell;
-      if (cell && isCellId(cell)) polluteCell(state, cell);
+      if (cell && isCellId(cell)) {
+        const fresh = !state.polluted.includes(cell);
+        polluteCell(state, cell);
+        if (fresh) note(state, ctx, 'pollute', null, cell);
+      }
       return;
     }
     case 'armTimer': {
@@ -1163,23 +1287,32 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
         card.timer = opcode.turns;
         card.timerMax = opcode.turns;
         card.timerEffects = opcode.onZero ? structuredClone(opcode.onZero) : [];
+        note(state, ctx, 'timer', id, card.cell, opcode.turns);
       }
       return;
     }
     case 'grantSwift': {
-      for (const id of resolveTargets(state, opcode.target, ctx)) state.instances[id].swift = true;
+      for (const id of resolveTargets(state, opcode.target, ctx)) {
+        const card = state.instances[id];
+        if (card.swift) continue;
+        card.swift = true;
+        note(state, ctx, 'swift', id, card.cell);
+      }
       return;
     }
     case 'forceSettlement': {
+      const had = state.forceReasons.includes('special');
       addReason(state, 'special');
+      if (!had) note(state, ctx, 'settle', ctx.selfId, null);
       return;
     }
     case 'transferOwner': {
       const nextOwner = opcode.to === 'opponent' ? OTHER[ctx.controller] : opcode.to;
       for (const id of resolveTargets(state, opcode.target, ctx)) {
         const card = state.instances[id];
-        if (card.zone !== 'board' || card.cell === null) continue;
+        if (card.zone !== 'board' || card.cell === null || card.owner === nextOwner) continue;
         card.owner = nextOwner;
+        note(state, ctx, 'transfer', id, card.cell);
       }
       return;
     }
@@ -1192,6 +1325,7 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
         const card = state.instances[id];
         const onDraw = defOf(state, card).onDraw ?? [];
         state.log.push(`draw:${id}`);
+        note(state, ctx, 'draw', id, null);
         if (onDraw.length > 0) {
           runSegment(state, onDraw, ctxOf(card, emptyChoice()));
           if (!isTracked(state, id)) putPrinted(state, id, 'discard');
@@ -1214,9 +1348,11 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
         if (card.zone !== 'board' || card.cell === null) continue;
         const mirror = mirrorCell(card.cell);
         if (mirror === null || state.cells[mirror]) continue;
+        const from = card.cell;
         state.cells[card.cell] = null;
         state.cells[mirror] = id;
         card.cell = mirror;
+        note(state, ctx, 'mirror', id, from, 0, mirror);
       }
       return;
     }
@@ -1237,6 +1373,7 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
       if (ctx.controller !== 'player') return;
       grantedFollowUps.set(state, (grantedFollowUps.get(state) ?? 0) + 1);
       state.log.push('follow-up');
+      note(state, ctx, 'follow', ctx.selfId, null);
       return;
     }
     case 'forEach': {
@@ -1530,7 +1667,7 @@ function absorbAllyPlay(
   choice: Choice | undefined,
 ): void {
   const recorded = currentPoints(state, occupantId);
-  removeInstance(state, occupantId, 'effect');
+  removeInstance(state, occupantId, 'effect', card.instanceId);
   if (state.resolutionHalted) {
     finishUntracked(state, card.instanceId);
     return;
@@ -1543,6 +1680,16 @@ function absorbAllyPlay(
   }
   seat(state, card, cell);
   card.permanentMod += recorded;
+  appendCue(state, {
+    kind: 'absorb',
+    sourceId: card.instanceId,
+    sourceCell: cell,
+    targetId: card.instanceId,
+    cell,
+    owner: card.owner,
+    amount: recorded,
+    toCell: null,
+  });
   if (state.polluted.includes(cell)) card.permanentMod -= 1;
   queueEvent(state, 'played', card.instanceId, cell);
   queueEvent(state, 'entered', card.instanceId, cell);
@@ -1559,8 +1706,10 @@ function playResolved(state: BattleState, id: string, request: PlayRequest): voi
   const choice = request.choice;
 
   if (definition.ruleType === 'spell') {
+    const ctx = ctxOf(card, choice);
+    note(state, ctx, 'cast', id, null);
     queueEvent(state, 'played', id, null);
-    runSegment(state, definition.effects ?? [], ctxOf(card, choice));
+    runSegment(state, definition.effects ?? [], ctx);
     finishUntracked(state, id);
     resolveQueue(state);
     return;
@@ -1586,7 +1735,7 @@ function playResolved(state: BattleState, id: string, request: PlayRequest): voi
   const defense = currentPoints(state, occupant);
   const attack = currentPoints(state, id);
   if (attack > defense) {
-    removeInstance(state, occupant, 'cover');
+    removeInstance(state, occupant, 'cover', id);
     if (state.resolutionHalted) {
       finishUntracked(state, id);
       return;
@@ -1602,7 +1751,7 @@ function playResolved(state: BattleState, id: string, request: PlayRequest): voi
     return;
   }
 
-  removeInstance(state, occupant, 'cover');
+  removeInstance(state, occupant, 'cover', id);
   finishUntracked(state, id);
   queueEvent(state, 'played', id, null);
   resolveQueue(state);
@@ -1669,7 +1818,18 @@ export function unseal(state: BattleState, side: Side): BattleState {
   const next = openChain(state);
   for (const id of boardInstanceIds(next)) {
     const card = next.instances[id];
-    if (card.owner === side) card.sealed = false;
+    if (card.owner !== side || !card.sealed) continue;
+    card.sealed = false;
+    appendCue(next, {
+      kind: 'unseal',
+      sourceId: id,
+      sourceCell: card.cell,
+      targetId: id,
+      cell: card.cell,
+      owner: card.owner,
+      amount: 0,
+      toCell: null,
+    });
   }
   return closeChain(next);
 }
@@ -1688,6 +1848,16 @@ export function tickTimers(state: BattleState, side: Side): BattleState {
     if (card.timer <= 0) {
       const effects = card.timerEffects ?? defOf(next, card).onTimer ?? [];
       next.log.push(`timer:${id}`);
+      appendCue(next, {
+        kind: 'timer',
+        sourceId: id,
+        sourceCell: card.cell,
+        targetId: id,
+        cell: card.cell,
+        owner: card.owner,
+        amount: 0,
+        toCell: null,
+      });
       runSegment(next, effects, ctxOf(card, emptyChoice()));
       if (next.instances[id].zone === 'board') next.instances[id].timer = next.instances[id].timerMax;
     }
