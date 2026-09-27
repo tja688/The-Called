@@ -13,10 +13,16 @@
   overflow: hidden;
 }
 
-.v6-run.v6-run--map {
+.v6-run.v6-run--map,
+.v6-run.v6-run--board {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.v6-run.v6-run--board > .v6-board {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .v6-run.v6-run--map .v6-run__bar {

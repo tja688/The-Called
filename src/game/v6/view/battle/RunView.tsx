@@ -73,7 +73,7 @@ export function RunView({ onExit }: { onExit: () => void }) {
   const title = fight && isMonsterId(fight.monsterId) ? monsterName(fight.monsterId) : '战斗'
 
   return (
-    <div className={phase === 'map' ? 'v6-run v6-run--map' : 'v6-run'}>
+    <div className={phase === 'map' ? 'v6-run v6-run--map' : phase === 'deck' || phase === 'reward' ? 'v6-run v6-run--board' : 'v6-run'}>
       {phase === 'map' ? (
         <>
           <div className="v6-run__bar">
@@ -94,10 +94,11 @@ export function RunView({ onExit }: { onExit: () => void }) {
       ) : null}
 
       {phase === 'deck' ? (
-        <div className="v6-run__sheet">
-          <button type="button" className="v6-run__back" onClick={() => setPhase('map')}>返回地图</button>
-          <DeckScreen campaign={campaign} onCampaign={setCampaign} />
-        </div>
+        <DeckScreen
+          campaign={campaign}
+          onCampaign={setCampaign}
+          onBack={() => setPhase('map')}
+        />
       ) : null}
 
       {phase === 'battle' && fight ? (
@@ -112,17 +113,15 @@ export function RunView({ onExit }: { onExit: () => void }) {
       ) : null}
 
       {phase === 'reward' && reward ? (
-        <div className="v6-run__sheet">
-          {reward.monsterId === 'the-caller' ? <p className="v6-run__arrival">{ARRIVAL_COPY}</p> : null}
-          <RewardScreen
-            result={reward.result}
-            monsterId={reward.monsterId}
-            goldBefore={reward.goldBefore}
-            campaign={campaign}
-            onCampaign={setCampaign}
-          />
-          <button type="button" className="v6-run__back" onClick={() => setPhase('map')}>回到地图</button>
-        </div>
+        <RewardScreen
+          result={reward.result}
+          monsterId={reward.monsterId}
+          goldBefore={reward.goldBefore}
+          campaign={campaign}
+          onCampaign={setCampaign}
+          arrival={reward.monsterId === 'the-caller' ? ARRIVAL_COPY : null}
+          onDone={() => setPhase('map')}
+        />
       ) : null}
     </div>
   )
