@@ -111,7 +111,7 @@ describe('intent reveal', () => {
 });
 
 describe('forced settlement', () => {
-  it('judges a full preset board by points on the first turn start and never offers a play', () => {
+  it('ends on the opening turn start when the board is already full and the player is strictly ahead', () => {
     const match = startMatch(
       {
         seed: 3,
@@ -141,41 +141,88 @@ describe('forced settlement', () => {
     });
   });
 
-  it('records a full board on the play and judges it on the next turn start', () => {
+  it('lets the acting side play when a full board opens with them behind', () => {
+    const match = startMatch(
+      {
+        seed: 3,
+        cards: [
+          ...occupy('player', 2, [1, 2, 3, 4]),
+          ...occupy('enemy', 3, [5, 6, 7, 8, 9]),
+          ...copies(field('brick', 4), 6, 'deck'),
+        ],
+        intents: [{ definition: field('Alpha', 9, { name: 'Alpha' }) }],
+      },
+      { placeIntent: () => 1 },
+    );
+
+    expect(match.over).toBe(false);
+    expect(match.winner).toBeNull();
+    expect(match.phase).toBe('playerAction');
+    expect(match.playsRemaining).toBe(1);
+    expect(match.battle.forceReasons).toContain('board');
+    expect(totalPoints(match.battle, 'player')).toBe(8);
+    expect(totalPoints(match.battle, 'enemy')).toBe(15);
+  });
+
+  it('keeps alternating after the board fills until the side about to move is strictly ahead', () => {
     let placed = 0;
-    const finisher = field('finisher', 10);
     let match = startMatch(
       {
         seed: 4,
-        cards: [...occupy('enemy', 1, [1, 2, 3, 4, 5, 6, 7, 8]), ...copies(finisher, 5, 'deck')],
-        intents: [{ definition: field('Alpha', 8, { name: 'Alpha' }) }],
+        cards: [
+          ...occupy('player', 5, [1, 2, 3]),
+          ...occupy('enemy', 2, [4, 5, 6, 7, 8]),
+          { definition: field('finisher', 6), owner: 'player', zone: 'hand', instanceId: 'finisher' },
+          { definition: field('surge', 12), owner: 'player', zone: 'hand', instanceId: 'surge' },
+          ...copies(field('brick', 1), 8, 'deck'),
+        ],
+        intents: [
+          { definition: field('Alpha', 14, { name: 'Alpha' }) },
+          { definition: field('Beta', 8, { name: 'Beta' }) },
+        ],
       },
       {
         placeIntent: () => {
           placed += 1;
-          return 9;
+          return placed === 1 ? 1 : 2;
         },
       },
     );
 
-    const played = play(match, { instanceId: handId(match, 'finisher'), cell: 9 });
-    expect(played.ok).toBe(true);
-    if (!played.ok) return;
-    match = played.match;
+    const filled = play(match, { instanceId: 'finisher', cell: 9 });
+    expect(filled.ok).toBe(true);
+    if (!filled.ok) return;
+    match = filled.match;
     expect(match.over).toBe(false);
     expect(match.winner).toBeNull();
-    expect(match.phase).toBe('playerAction');
-    expect(match.battle.forceSettlement).toBe(true);
     expect(match.battle.forceReasons).toContain('board');
+    expect(totalPoints(match.battle, 'player')).toBe(21);
+    expect(totalPoints(match.battle, 'enemy')).toBe(10);
 
     match = endTurn(match);
-    expect(placed).toBe(0);
+    expect(placed).toBe(1);
+    expect(match.over).toBe(false);
+    expect(match.phase).toBe('playerAction');
+    expect(totalPoints(match.battle, 'player')).toBe(16);
+    expect(totalPoints(match.battle, 'enemy')).toBe(19);
+
+    const surged = play(match, { instanceId: 'surge', cell: 4 });
+    expect(surged.ok).toBe(true);
+    if (!surged.ok) return;
+    match = surged.match;
+    expect(match.over).toBe(false);
+    expect(totalPoints(match.battle, 'player')).toBe(26);
+    expect(totalPoints(match.battle, 'enemy')).toBe(17);
+
+    match = endTurn(match);
+    expect(placed).toBe(2);
     expect(match.over).toBe(true);
-    expect(match.phase).toBe('enemyTurnStart');
+    expect(match.phase).toBe('playerTurnStart');
     expect(match.winner).toBe('player');
-    expect(totalPoints(match.battle, 'player')).toBe(10);
-    expect(totalPoints(match.battle, 'enemy')).toBe(8);
-    expect(play(match, { instanceId: handId(match, 'finisher'), cell: 1 }).ok).toBe(false);
+    expect(match.battle.forceReasons).toEqual(['board']);
+    expect(totalPoints(match.battle, 'player')).toBe(21);
+    expect(totalPoints(match.battle, 'enemy')).toBe(20);
+    expect(play(match, { instanceId: handId(match, 'brick'), cell: 3 }).ok).toBe(false);
   });
 
   it('raises resource when the deck is empty and nothing in hand is legal', () => {
@@ -328,6 +375,35 @@ describe('player action', () => {
     if (!swift.ok) return;
     expect(swift.match.playsRemaining).toBe(0);
     expect(swift.match.battle.cells[2]).toBe('quick');
+  });
+
+  it('returns the play a follow-up effect just granted', () => {
+    const poet = field('poet', 3, { effects: [{ op: 'followUpPlay' }] });
+    const brick = field('brick', 1);
+    const match = startMatch(
+      {
+        seed: 3,
+        cards: [
+          { definition: poet, owner: 'player', zone: 'hand', instanceId: 'poet' },
+          ...copies(brick, 5, 'deck'),
+        ],
+        intents: [{ definition: field('Alpha', 1) }],
+      },
+      { placeIntent: () => 'skip' },
+    );
+
+    const played = play(match, { instanceId: 'poet', cell: 1 });
+    expect(played.ok).toBe(true);
+    if (!played.ok) return;
+    expect(played.match.playsRemaining).toBe(1);
+    expect(played.match.battle.log).toContain('follow-up');
+
+    const brickId = handId(played.match, 'brick');
+    const second = play(played.match, { instanceId: brickId, cell: 2 });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.match.playsRemaining).toBe(0);
+    expect(second.match.battle.cells[2]).toBe(brickId);
   });
 });
 

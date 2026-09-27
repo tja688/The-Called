@@ -7,6 +7,7 @@ import {
   currentPoints,
   evaluateForceSettlement,
   executeOpcodes,
+  appraiseBoard,
   judgeWinner,
   mirrorCell,
   occupiedCount,
@@ -900,6 +901,35 @@ describe('pipelines that the turn driver will call', () => {
     expect(judgeWinner(tied, 'enemy')).toBe('player');
     expect(judgeWinner(createBattle(), 'player')).toBe('enemy');
   });
+
+  it('appraises only the side about to move, and only when they are strictly ahead', () => {
+    const ahead = createBattle({
+      cards: [
+        at(field('us', 19), 'board', { cell: 1, instanceId: 'us' }),
+        at(field('them', 18), 'board', { owner: 'enemy', cell: 2, instanceId: 'them' }),
+      ],
+    });
+    expect(appraiseBoard(ahead, 'player')).toBe('player');
+    expect(appraiseBoard(ahead, 'enemy')).toBeNull();
+
+    const behind = createBattle({
+      cards: [
+        at(field('us', 19), 'board', { cell: 1, instanceId: 'us' }),
+        at(field('them', 21), 'board', { owner: 'enemy', cell: 2, instanceId: 'them' }),
+      ],
+    });
+    expect(appraiseBoard(behind, 'player')).toBeNull();
+    expect(appraiseBoard(behind, 'enemy')).toBe('enemy');
+
+    const tied = createBattle({
+      cards: [
+        at(field('us', 21), 'board', { cell: 1, instanceId: 'us' }),
+        at(field('them', 21), 'board', { owner: 'enemy', cell: 2, instanceId: 'them' }),
+      ],
+    });
+    expect(appraiseBoard(tied, 'player')).toBeNull();
+    expect(appraiseBoard(tied, 'enemy')).toBeNull();
+  });
 });
 
 describe('operations with an explicit choice, and placeholders', () => {
@@ -1093,13 +1123,29 @@ describe('operations with an explicit choice, and placeholders', () => {
       { op: 'discardToField' },
       { op: 'shuffleIntoDeck' },
       { op: 'shuffleCopy' },
-      { op: 'followUpPlay' },
       { op: 'onDrawResolve' },
     ];
     for (const opcode of placeholders) {
       expect(() => executeOpcodes(state, [opcode], { selfId: 'body' })).toThrow(`Unimplemented opcode: ${opcode.op}`);
     }
     expect(state.instances.body.zone).toBe('board');
+  });
+
+  it('grants one player follow-up and ignores the same opcode from the enemy', () => {
+    const poet = field('poet', 3, { effects: [{ op: 'followUpPlay' }] });
+    const result = playCard(createBattle({ cards: [at(poet, 'hand')] }), { instanceId: 'poet', cell: 1 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.followUps).toBe(1);
+    expect(result.consumedPlay).toBe(true);
+    expect(result.state.log).toContain('follow-up');
+
+    const quiet = executeOpcodes(
+      createBattle({ cards: [at(field('body', 2), 'board', { cell: 1, instanceId: 'body' })] }),
+      [{ op: 'followUpPlay' }],
+      { selfId: 'body', controller: 'enemy' },
+    );
+    expect(quiet.log).not.toContain('follow-up');
   });
 
   it('adds an ally current points before pollution, so a 1-point absorber on a polluted cell stays', () => {

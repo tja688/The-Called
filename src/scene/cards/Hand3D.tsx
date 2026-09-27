@@ -4,6 +4,7 @@ import { BoxGeometry, Group, MathUtils, Mesh } from 'three'
 import { playCardFlip, playCardSelect } from '../../audio/gameAudio'
 import { getCardDefinition } from '../../config/cardCatalog'
 import type { CameraMode, CardInstance } from '../../game/types'
+import { useBattleCue } from '../../game/v6/view/battle/cue'
 import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { usePresentationStore } from '../../stores/presentationStore'
@@ -227,6 +228,7 @@ export function Hand3D() {
             if (!canPlayMatch || !introReady.current || usePresentationStore.getState().inputLocked) return
             playCardSelect()
             beginCardPlacement(instanceId)
+            if (useBattleCue.getState().bound) useBattleCue.getState().commit(instanceId)
             setHoveredIndex(null)
           }}
         />

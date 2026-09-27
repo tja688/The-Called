@@ -31,7 +31,6 @@ const UNIMPLEMENTED = new Set<Opcode['op']>([
   'shuffleIntoDeck',
   'shuffleCopy',
   'absorbAlly',
-  'followUpPlay',
   'onDrawResolve',
 ]);
 

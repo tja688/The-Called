@@ -8,6 +8,7 @@ import {
   checkZero,
   createBattle,
   currentPoints,
+  appraiseBoard,
   evaluateForceSettlement,
   executeOpcodes,
   judgeWinner,
@@ -96,7 +97,7 @@ export function play(match: MatchState, request: PlayRequest): PlayOutcome {
       {
         ...match,
         battle: result.state,
-        playsRemaining: result.consumedPlay ? match.playsRemaining - 1 : match.playsRemaining,
+        playsRemaining: (result.consumedPlay ? match.playsRemaining - 1 : match.playsRemaining) + result.followUps,
       },
       'action',
     ),
@@ -268,7 +269,8 @@ function finishTurnStart(match: MatchState, side: Side): MatchState {
   let battle = step.state;
   if (match.hooks.onSideTurnStart) battle = match.hooks.onSideTurnStart(battle, side);
   battle = checkZero(battle);
-  if (!battle.forceSettlement) {
+  const winner = settleTurnStart(battle, side);
+  if (!winner) {
     return withLeaveGate(
       {
         ...match,
@@ -289,11 +291,23 @@ function finishTurnStart(match: MatchState, side: Side): MatchState {
     side,
     playsRemaining: 0,
     over: true,
-    winner: judgeWinner(battle, side),
+    winner,
     pendingChoice: null,
     turnStartChoices: {},
     turnStartDone: [],
   };
+}
+
+/**
+ * Resource and special settlement still end the match here.
+ * A full board only appraises the side that is starting: they win when strictly ahead, otherwise the turn goes on.
+ */
+function settleTurnStart(battle: BattleState, side: Side): Side | null {
+  if (battle.forceReasons.includes('resource') || battle.forceReasons.includes('special')) {
+    return judgeWinner(battle, side);
+  }
+  if (battle.forceReasons.includes('board')) return appraiseBoard(battle, side);
+  return null;
 }
 
 function finishEnemyAndOpen(match: MatchState): MatchState {

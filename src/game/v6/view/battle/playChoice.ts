@@ -78,9 +78,20 @@ export function actOnCell(input: {
     !input.selected.includes(occupant) &&
     input.selected.length < input.choice.limit
   if (room && occupant) {
-    return { kind: 'choose', targetIds: togglePlayTargets(input.selected, occupant, input.choice.limit) }
+    const targetIds = togglePlayTargets(input.selected, occupant, input.choice.limit)
+    if (input.choice.placement === 'confirm' && input.choice.limit > 0 && targetIds.length >= input.choice.limit) {
+      const request = playRequestFromChoice({
+        instanceId: input.instanceId,
+        choice: input.choice,
+        selected: targetIds,
+      })
+      if (request) return { kind: 'play', request }
+    }
+    return { kind: 'choose', targetIds }
   }
-  if (input.choice.placement === 'confirm') return { kind: 'wait', message: '这张法术不占格，再确认打出' }
+  if (input.choice.placement === 'confirm') {
+    return { kind: 'wait', message: input.choice.targets.length > 0 ? '先点场上的那张牌' : '这张法术不占格' }
+  }
   if (input.choice.targets.length > 0 && input.selected.length === 0) return { kind: 'wait', message: '先选择目标' }
   const request = playRequestFromChoice(input)
   if (!request) return { kind: 'wait', message: '先选择目标' }

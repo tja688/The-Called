@@ -11,7 +11,7 @@ export type RuleType = 'field' | 'spell';
 
 export type ForceReason = 'board' | 'resource' | 'special';
 
-/** Winner of a forced-settlement comparison. */
+/** Winner of a board appraisal or a terminal settlement. */
 export type Winner = Side;
 
 export type RemovalReason = 'cover' | 'zero' | 'effect';
@@ -185,6 +185,11 @@ export type Opcode =
    * Invoking the opcode outside that play does not move cards or change points.
    */
   | { op: 'absorbAlly' }
+  /**
+   * Grants the player one more play in this action, after the card that ran it
+   * spends its own. An enemy controller does nothing. The player may end
+   * without using the extra play.
+   */
   | { op: 'followUpPlay' }
   | { op: 'onDrawResolve' }
   /** Run `effects` once per board card that matches `query`, in cell order. */
@@ -487,7 +492,7 @@ export type PlayRejection =
   | 'no-target';
 
 export type PlayResult =
-  | { ok: true; state: BattleState; consumedPlay: boolean }
+  | { ok: true; state: BattleState; consumedPlay: boolean; /** Player follow-up plays this resolution granted. */ followUps: number }
   | { ok: false; reason: PlayRejection; state: BattleState };
 
 export interface EffectRequest {

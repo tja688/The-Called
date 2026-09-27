@@ -8,6 +8,8 @@ type Handlers = {
   play: (action: PlayCardAction) => string | undefined
   land: () => void
   answer: (cell: CellId) => void
+  /** A hand click that needs no further pick. Field cards and targeted spells ignore it. */
+  commit: (instanceId: string) => void
 }
 
 const idle: Handlers = {
@@ -17,6 +19,7 @@ const idle: Handlers = {
   play: () => 'MATCH_NOT_READY',
   land: () => undefined,
   answer: () => undefined,
+  commit: () => undefined,
 }
 
 type CueState = Handlers & {

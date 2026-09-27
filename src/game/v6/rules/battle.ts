@@ -38,7 +38,6 @@ const UNIMPLEMENTED = new Set<Opcode['op']>([
   'discardToField',
   'shuffleIntoDeck',
   'shuffleCopy',
-  'followUpPlay',
   'onDrawResolve',
 ]);
 
@@ -65,6 +64,8 @@ interface LeaveFollowup {
 
 /** Tied to the battle object that queued them. A clone does not inherit the list. */
 const leaveFollowups = new WeakMap<BattleState, LeaveFollowup[]>();
+/** Player follow-up plays granted while this chain object was resolving. */
+const grantedFollowUps = new WeakMap<BattleState, number>();
 
 function queueLeaveFollowup(
   state: BattleState,
@@ -1230,9 +1231,14 @@ function applyOpcode(state: BattleState, opcode: Opcode, ctx: ExecCtx): void {
     }
     case 'shuffleIntoDeck':
     case 'shuffleCopy':
-    case 'followUpPlay':
     case 'onDrawResolve':
       throw new Error(`Unimplemented opcode: ${opcode.op}`);
+    case 'followUpPlay': {
+      if (ctx.controller !== 'player') return;
+      grantedFollowUps.set(state, (grantedFollowUps.get(state) ?? 0) + 1);
+      state.log.push('follow-up');
+      return;
+    }
     case 'forEach': {
       const ids = matchFieldQuery(state, state.instances[ctx.selfId], ctx.controller, opcode.query, ctx.choice);
       for (const eachId of ids) {
@@ -1611,7 +1617,7 @@ export function playCard(state: BattleState, request: PlayRequest): PlayResult {
   const next = openChain(state);
   rememberLeaveChoices(next, request.leaveChoices);
   playResolved(next, request.instanceId, request);
-  return { ok: true, state: closeChain(next), consumedPlay };
+  return { ok: true, state: closeChain(next), consumedPlay, followUps: grantedFollowUps.get(next) ?? 0 };
 }
 
 export function executeOpcodes(state: BattleState, opcodes: Opcode[], request: EffectRequest): BattleState {
@@ -1982,6 +1988,22 @@ export function evaluateForceSettlement(
   return closeChain(next);
 }
 
+/**
+ * Board appraisal for the side whose turn is starting.
+ * That side wins only when their total points are strictly greater.
+ * A tie or a deficit is not a result, and the turn continues.
+ */
+export function appraiseBoard(state: BattleState, side: Side): Winner | null {
+  const other: Side = side === 'player' ? 'enemy' : 'player';
+  return totalPoints(state, side) > totalPoints(state, other) ? side : null;
+}
+
+/**
+ * Terminal comparison for resource and special settlement.
+ * Higher total points wins. A points tie goes to the side with more cells.
+ * If cells also tie, the side about to start loses.
+ * A full board does not use this. See `appraiseBoard`.
+ */
 export function judgeWinner(state: BattleState, sideAboutToStart: Side): Winner {
   const playerPoints = totalPoints(state, 'player');
   const enemyPoints = totalPoints(state, 'enemy');

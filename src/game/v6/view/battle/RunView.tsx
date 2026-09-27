@@ -73,7 +73,7 @@ export function RunView({ onExit }: { onExit: () => void }) {
   const title = fight && isMonsterId(fight.monsterId) ? monsterName(fight.monsterId) : '战斗'
 
   return (
-    <div className="v6-run">
+    <div className={phase === 'map' ? 'v6-run v6-run--map' : 'v6-run'}>
       {phase === 'map' ? (
         <>
           <div className="v6-run__bar">

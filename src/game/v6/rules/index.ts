@@ -51,6 +51,7 @@ export {
   checkZero,
   createBattle,
   currentPoints,
+  appraiseBoard,
   evaluateForceSettlement,
   executeOpcodes,
   hasLegalPlay,

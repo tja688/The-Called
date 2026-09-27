@@ -114,4 +114,21 @@ describe('打出前的目标', () => {
       message: '这张法术现在不能打出',
     })
   })
+
+  it('点中场上的目标就打出法术', () => {
+    const whisper = scriptedWitch('亡者低语').definition
+    const state = createBattle({
+      cards: [
+        { definition: whisper, owner: 'player', zone: 'hand', instanceId: 'whisper' },
+        { definition: foe, owner: 'enemy', zone: 'board', cell: 2, instanceId: 'foe' },
+      ],
+    })
+    const choice = readPlayChoice(state, 'whisper')
+    expect(choice.placement).toBe('confirm')
+    expect(choice.blocked).toBe(false)
+    expect(actOnCell({ instanceId: 'whisper', choice, selected: [], cell: 2, occupantId: 'foe' })).toEqual({
+      kind: 'play',
+      request: { instanceId: 'whisper', choice: { targets: ['foe'] } },
+    })
+  })
 })

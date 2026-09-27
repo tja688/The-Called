@@ -52,7 +52,7 @@ export function createMatch(
   }
 }
 
-export const finalBattleMessage = '终局之战。回合开始时，点数更高的一方获胜。'
+export const finalBattleMessage = '终局之战。回合开始时，若这一方的点数高于对方，这一方获胜。'
 
 export function getBoardPower(state: MatchState, side: Side) {
   return state.board.reduce((total, cell) => total + (cell.card?.owner === side ? cell.card.currentPower : 0), 0)

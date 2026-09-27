@@ -47,6 +47,8 @@ type Session = {
   mode: Mode
   buried: boolean
   started: boolean
+  /** End the action once this play's landing animation finishes. */
+  seal: boolean
 }
 
 type ShowInput = {
@@ -87,6 +89,7 @@ export function BattleScreen({
     mode: 'play',
     buried: false,
     started: false,
+    seal: false,
   })
   const onEncounterRef = useRef(onEncounter)
   const monsterRef = useRef(monsterId)
@@ -97,6 +100,7 @@ export function BattleScreen({
     play: (action: PlayCardAction) => string | undefined
     land: () => void
     answer: (cell: PlayCardAction['cellId']) => void
+    commit: (instanceId: string) => void
   }>({
     allows: () => false,
     picks: () => false,
@@ -104,9 +108,11 @@ export function BattleScreen({
     play: () => 'MATCH_NOT_READY',
     land: () => undefined,
     answer: () => undefined,
+    commit: () => undefined,
   })
   const layTimer = useRef<number | undefined>(undefined)
   const returnTimer = useRef<number | undefined>(undefined)
+  const landedRef = useRef<() => void>(() => {})
   const [mode, setMode] = useState<Mode>('play')
   const [leaving, setLeaving] = useState(false)
   const selectedId = useInteractionStore((state) => state.selectedCardInstanceId)
@@ -236,11 +242,73 @@ export function BattleScreen({
     })
   }
 
+  const presentPlay = (before: Encounter, after: Encounter, placed?: PlayCardAction) => {
+    const arrivals = boardArrivals(before.match.battle, after.match.battle)
+      .filter((item) => item.instanceId !== placed?.cardInstanceId)
+    const animated = Boolean(placed) || arrivals.length > 0
+    if (!animated && actionSpent(after)) {
+      sessionRef.current.seal = false
+      stageArrivals(after, endEncounterTurn(after))
+      return
+    }
+    sessionRef.current.seal = actionSpent(after)
+    stageArrivals(before, after, placed)
+  }
+
+  const release = (enc: Encounter, step: ReturnType<typeof actOnCell>, placed?: PlayCardAction) => {
+    if (step.kind === 'wait') {
+      useInteractionStore.getState().showPlacementNotice(step.message)
+      return step.message
+    }
+    if (step.kind !== 'play') return 'choose'
+    const played = playEncounterCard(enc, step.request)
+    if (!played.ok) {
+      useInteractionStore.getState().showPlacementNotice(failureText(played.reason))
+      return played.reason
+    }
+    useInteractionStore.getState().finishCardPlacement()
+    presentPlay(enc, played.encounter, placed)
+    return undefined
+  }
+
+  landedRef.current = () => {
+    const session = sessionRef.current
+    if (session.queue.length > 0) return
+    const finalEnc = session.pending ?? session.encounter
+    if (session.seal && actionSpent(finalEnc)) {
+      session.seal = false
+      session.pending = null
+      session.buried = false
+      session.queue = []
+      session.encounter = finalEnc
+      session.mode = 'play'
+      setMode('play')
+      onEncounterRef.current(finalEnc)
+      stageArrivals(finalEnc, endEncounterTurn(finalEnc))
+      return
+    }
+    if (!session.pending && !session.buried && session.mode === 'play') return
+    const wasEnemy = session.mode === 'enemy'
+    session.pending = null
+    session.buried = false
+    session.queue = []
+    session.encounter = finalEnc
+    session.mode = 'play'
+    setMode('play')
+    onEncounterRef.current(finalEnc)
+    reveal(finalEnc)
+    if (!wasEnemy) return
+    returnTimer.current = window.setTimeout(() => {
+      playCameraTransition('down')
+      useInteractionStore.getState().setCameraMode('board')
+    }, HAND_VIEW_RETURN_MS)
+  }
+
   api.current = {
     allows: (instanceId, cellId) => {
       const session = sessionRef.current
       const match = session.encounter.match
-      if (session.mode !== 'play' || match.over || match.phase !== 'playerAction' || match.pendingChoice) return false
+      if (session.seal || session.mode !== 'play' || match.over || match.phase !== 'playerAction' || match.pendingChoice) return false
       const choice = readPlayChoice(match.battle, instanceId)
       if (choice.blocked || choice.placement !== 'cell') return false
       if (choice.from === 'board' && choice.targets.length > 0 && session.targets.length === 0) return false
@@ -254,7 +322,7 @@ export function BattleScreen({
       const session = sessionRef.current
       const match = session.encounter.match
       const selected = useInteractionStore.getState().selectedCardInstanceId
-      if (session.mode !== 'play' || !selected || match.over || match.phase !== 'playerAction' || match.pendingChoice) return false
+      if (session.seal || session.mode !== 'play' || !selected || match.over || match.phase !== 'playerAction' || match.pendingChoice) return false
       const choice = readPlayChoice(match.battle, selected)
       if (choice.from !== 'board') return false
       const occupant = match.battle.cells[ruleCell(cellId)]
@@ -269,7 +337,7 @@ export function BattleScreen({
     play: (action) => {
       const session = sessionRef.current
       const enc = session.encounter
-      if (session.mode !== 'play' || enc.match.over || enc.match.phase !== 'playerAction' || enc.match.pendingChoice) {
+      if (session.seal || session.mode !== 'play' || enc.match.over || enc.match.phase !== 'playerAction' || enc.match.pendingChoice) {
         return 'busy'
       }
       const cell = ruleCell(action.cellId)
@@ -292,17 +360,7 @@ export function BattleScreen({
         useBattleCue.getState().bump(session.targets)
         return 'choose'
       }
-      if (step.kind === 'wait') {
-        useInteractionStore.getState().showPlacementNotice(step.message)
-        return step.message
-      }
-      const played = playEncounterCard(enc, step.request)
-      if (!played.ok) {
-        useInteractionStore.getState().showPlacementNotice(failureText(played.reason))
-        return played.reason
-      }
-      stageArrivals(enc, played.encounter, action)
-      return undefined
+      return release(enc, step, choice.placement === 'cell' ? action : undefined)
     },
     land: () => {
       const session = sessionRef.current
@@ -334,8 +392,15 @@ export function BattleScreen({
       const cell = ruleCell(cellId)
       const target = snapshotEncounter(enc).legalTargets?.find((item) => item.cell === cell)
       if (!target) return
-      const next = answerEncounterChoice(enc, target.instanceId)
-      stageArrivals(enc, next)
+      presentPlay(enc, answerEncounterChoice(enc, target.instanceId))
+    },
+    commit: (instanceId) => {
+      const session = sessionRef.current
+      const enc = session.encounter
+      if (session.seal || session.mode !== 'play' || enc.match.over || enc.match.phase !== 'playerAction' || enc.match.pendingChoice) return
+      const choice = readPlayChoice(enc.match.battle, instanceId)
+      if (choice.placement !== 'confirm' || choice.blocked || choice.targets.length > 0) return
+      release(enc, actOnConfirm({ instanceId, choice, selected: [] }))
     },
   }
 
@@ -383,6 +448,7 @@ export function BattleScreen({
       play: (action) => api.current.play(action),
       land: () => api.current.land(),
       answer: (cell) => api.current.answer(cell),
+      commit: (instanceId) => api.current.commit(instanceId),
     })
     return () => {
       window.clearTimeout(layTimer.current)
@@ -398,24 +464,7 @@ export function BattleScreen({
   useEffect(() => useGameStore.subscribe((state, previous) => {
     if (!useBattleCue.getState().bound) return
     if (!previous.activePlacement || state.activePlacement) return
-    const session = sessionRef.current
-    if (session.queue.length > 0) return
-    if (!session.pending && !session.buried && session.mode === 'play') return
-    const finalEnc = session.pending ?? session.encounter
-    const wasEnemy = session.mode === 'enemy'
-    session.pending = null
-    session.buried = false
-    session.queue = []
-    session.encounter = finalEnc
-    session.mode = 'play'
-    setMode('play')
-    onEncounterRef.current(finalEnc)
-    reveal(finalEnc)
-    if (!wasEnemy) return
-    returnTimer.current = window.setTimeout(() => {
-      playCameraTransition('down')
-      useInteractionStore.getState().setCameraMode('board')
-    }, HAND_VIEW_RETURN_MS)
+    landedRef.current()
   }), [])
 
   useEffect(() => {
@@ -484,41 +533,26 @@ export function BattleScreen({
   const finishTurn = () => {
     const enc = sessionRef.current.encounter
     if (sessionRef.current.mode !== 'play' || enc.match.over || enc.match.phase !== 'playerAction' || enc.match.pendingChoice) return
+    sessionRef.current.seal = false
     useInteractionStore.getState().finishCardPlacement()
     stageArrivals(enc, endEncounterTurn(enc))
   }
 
-  const confirmSpell = () => {
-    const enc = sessionRef.current.encounter
-    if (!canAct || !selectedId || !choice) return
-    const step = actOnConfirm({
-      instanceId: selectedId,
-      choice,
-      selected: sessionRef.current.targets,
-    })
-    if (step.kind === 'wait') {
-      showPlacementNotice(step.message)
-      return
-    }
-    if (step.kind !== 'play') return
-    const played = playEncounterCard(enc, step.request)
-    if (!played.ok) {
-      showPlacementNotice(failureText(played.reason))
-      return
-    }
-    useInteractionStore.getState().finishCardPlacement()
-    stageArrivals(enc, played.encounter)
-  }
-
   const toggleDeck = (instanceId: string, limit: number) => {
+    const enc = sessionRef.current.encounter
+    const selected = useInteractionStore.getState().selectedCardInstanceId
     const next = togglePlayTargets(sessionRef.current.targets, instanceId, limit)
     sessionRef.current.targets = next
     useBattleCue.getState().bump(next)
+    if (!selected || !canAct) return
+    const deckChoice = readPlayChoice(enc.match.battle, selected)
+    if (deckChoice.placement !== 'confirm' || deckChoice.limit <= 0 || next.length < deckChoice.limit) return
+    release(enc, actOnConfirm({ instanceId: selected, choice: deckChoice, selected: next }))
   }
 
   const answerTarget = (instanceId: string) => {
     const enc = sessionRef.current.encounter
-    stageArrivals(enc, answerEncounterChoice(enc, instanceId))
+    presentPlay(enc, answerEncounterChoice(enc, instanceId))
   }
 
   const leave = () => {
@@ -583,9 +617,6 @@ export function BattleScreen({
       ) : null}
       <div className="v6-stage-actions">
         <p className="v6-stage-hint">{hint(canAct, choosing, Boolean(selectedId), choice, picks.length)}</p>
-        {choice?.placement === 'confirm' ? (
-          <button type="button" disabled={!canAct || choice.blocked} onClick={confirmSpell}>确认打出</button>
-        ) : null}
         <button type="button" disabled={!canAct} onClick={finishTurn}>结束回合</button>
       </div>
       {finished ? (
@@ -606,6 +637,12 @@ export function BattleScreen({
 
 function needsChoice(enc: Encounter) {
   return Boolean(snapshotEncounter(enc).legalTargets?.length) && !enc.match.over
+}
+
+/** The action has no play left, so the turn can close on its own. */
+function actionSpent(enc: Encounter) {
+  const match = enc.match
+  return !match.over && !match.pendingChoice && match.phase === 'playerAction' && match.playsRemaining <= 0
 }
 
 function previewTelegraph(preview: IntentPreview): MonsterTelegraph {
@@ -648,13 +685,13 @@ function hint(
   if (!selected || !choice) return '点一张手牌，再点格子'
   if (choice.blocked) return '这张法术没有合法目标'
   if (choice.skipped && choice.placement === 'cell') return '没有可指向的目标，直接点格子'
-  if (choice.skipped) return '没有可检索的牌，仍可确认打出'
-  if (choice.from === 'deck' && picked === 0) return '从牌组点一张牌，再确认'
+  if (choice.skipped) return '没有可检索的牌，点这张手牌就会打出'
+  if (choice.from === 'deck' && picked === 0) return '从牌组点一张牌'
   if (choice.from === 'board' && picked === 0) {
-    return choice.placement === 'confirm' ? '先点场上的合法牌，再确认' : '先点场上的合法牌，再点格子'
+    return choice.placement === 'confirm' ? '点场上的那张牌' : '先点场上的合法牌，再点格子'
   }
   if (choice.limit > 1 && picked < choice.limit) return `已选 ${picked} 张，还可以再点，或点格子放入`
-  if (choice.placement === 'confirm') return '再确认打出'
+  if (choice.placement === 'confirm') return '点选目标后就会打出'
   return '再点一个格子放入'
 }
 
