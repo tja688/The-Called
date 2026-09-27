@@ -176,7 +176,7 @@ function useFaceTexture(style: FaceStyle, card: CardDefinition | undefined, curr
     power: prepareBoth ? createFaceTexture() : null,
   }), [prepareBoth])
   const painted = useRef({ full: '', power: '' })
-  const contentKey = `${card?.id ?? ''}|${currentPower ?? ''}|${side}|${style.fill}|${style.ink}|${style.line}`
+  const contentKey = `${card?.id ?? ''}|${card?.name ?? ''}|${card?.description ?? ''}|${currentPower ?? ''}|${side}|${style.fill}|${style.ink}|${style.line}`
 
   useLayoutEffect(() => {
     const draw = (which: CardReadout) => {

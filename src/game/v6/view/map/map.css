@@ -1,0 +1,140 @@
+.v6-map {
+  box-sizing: border-box;
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 28px 24px 40px;
+  color: #efeae0;
+  background: #141311;
+  font-family: var(--font-family-body, "PingFang SC", "Microsoft YaHei", sans-serif);
+}
+
+.v6-map__header {
+  margin: 0 0 8px;
+  text-align: center;
+}
+
+.v6-map__kicker {
+  margin: 0;
+  color: rgba(239, 234, 224, 0.62);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+}
+
+.v6-map__heading {
+  margin: 6px 0 0;
+  color: #f2fcbb;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.v6-map__here-distance {
+  margin: 6px 0 0;
+  color: rgba(239, 234, 224, 0.82);
+  font-size: 14px;
+}
+
+.v6-map__arrival {
+  margin: 10px 0 0;
+  color: #f2fcbb;
+  font-size: 18px;
+}
+
+.v6-map__graph {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.v6-map__link {
+  stroke: rgba(239, 234, 224, 0.32);
+  stroke-width: 1.5;
+}
+
+.v6-map__node {
+  outline: none;
+}
+
+.v6-map__node rect {
+  fill: rgba(239, 234, 224, 0.04);
+  stroke: rgba(239, 234, 224, 0.5);
+  stroke-width: 1.5;
+}
+
+.v6-map__node--here rect {
+  fill: rgba(242, 252, 187, 0.14);
+  stroke: #f2fcbb;
+  stroke-width: 2;
+}
+
+.v6-map__node--shop:not(.v6-map__node--here) rect {
+  stroke: #77fba6;
+}
+
+.v6-map__node--combat:not(.v6-map__node--here) rect {
+  stroke: rgba(225, 22, 63, 0.85);
+}
+
+.v6-map__node[role='button'] {
+  cursor: pointer;
+}
+
+.v6-map__node[role='button']:hover rect,
+.v6-map__node[role='button']:focus-visible rect {
+  fill: rgba(239, 234, 224, 0.12);
+  stroke: #f2fcbb;
+}
+
+.v6-map__title {
+  fill: #efeae0;
+  font-size: 16px;
+  pointer-events: none;
+}
+
+.v6-map__node--here .v6-map__title {
+  fill: #f2fcbb;
+}
+
+.v6-map__distance {
+  fill: rgba(239, 234, 224, 0.72);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.v6-map__action {
+  min-height: 48px;
+  margin-top: 4px;
+  text-align: center;
+}
+
+.v6-map__fight {
+  border: 1px solid #77fba6;
+  padding: 10px 22px;
+  color: #141311;
+  background: #77fba6;
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.v6-map__fight:hover,
+.v6-map__fight:focus-visible {
+  outline: 2px solid #f2fcbb;
+  outline-offset: 3px;
+}
+
+.v6-map__lock,
+.v6-map__shop {
+  margin: 0 auto;
+  max-width: 36em;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.v6-map__lock {
+  color: #f0c7b8;
+}
+
+.v6-map__shop {
+  color: #efeae0;
+}

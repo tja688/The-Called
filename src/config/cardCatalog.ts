@@ -43,8 +43,19 @@ export const cardCatalog = {
 
 export type CardId = keyof typeof cardCatalog
 
+const presented = new Map<string, CardDefinition>()
+
+/** Faces for the battle currently on the table. Later calls overwrite by id and keep the rest. */
+export function presentCards(cards: readonly CardDefinition[]) {
+  for (const card of cards) presented.set(card.id, card)
+}
+
+export function clearPresentedCards() {
+  presented.clear()
+}
+
 export function getCardDefinition(cardId: string): CardDefinition {
-  const card = cardCatalog[cardId as CardId]
+  const card = presented.get(cardId) ?? cardCatalog[cardId as CardId]
   if (!card) throw new Error(`Unknown card: ${cardId}`)
   return card
 }

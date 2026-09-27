@@ -7,6 +7,7 @@ import { useFrame } from '@react-three/fiber'
 import { useLayoutEffect, useRef } from 'react'
 import { Group, MathUtils } from 'three'
 import { useInteractionStore } from '../../stores/interactionStore'
+import { monsterMark } from './monsterMark'
 import { PerspectiveGrid } from './PerspectiveGrid'
 import { StageAtmosphere } from './StageAtmosphere'
 import type { MonsterConfig, SceneConfig } from '../../config/gameContent'
@@ -29,23 +30,7 @@ function OpponentMark({ config, tactical }: { config: MonsterConfig; tactical: b
   const battleKey = useGameStore((state) => state.battleKey)
   const group = useRef<Group>(null)
   const radius = config.visual.height * 0.22
-  const rings = config.id === 'moon'
-    ? [
-        { radius: radius * 1.15, x: 0, y: 0, tube: radius * 0.035 },
-        { radius: radius * 0.72, x: radius * 0.38, y: 0, tube: radius * 0.5 },
-        { radius: radius * 0.22, x: -radius * 0.55, y: radius * 0.35, tube: radius * 0.02 },
-      ]
-    : config.id === 'rahu-ketu'
-      ? [
-          { radius: radius * 0.48, x: -radius * 0.72, y: radius * 0.42, tube: radius * 0.045 },
-          { radius: radius * 0.48, x: radius * 0.72, y: -radius * 0.42, tube: radius * 0.045 },
-          { radius: radius * 0.2, x: -radius * 0.72, y: radius * 0.42, tube: radius * 0.02 },
-          { radius: radius * 0.2, x: radius * 0.72, y: -radius * 0.42, tube: radius * 0.02 },
-        ]
-      : [
-          { radius, x: 0, y: 0, tube: radius * 0.06 },
-          { radius: radius * 0.62, x: 0, y: radius * 0.28, tube: radius * 0.04 },
-        ]
+  const mark = monsterMark(config.id, radius)
   const initialScale = config.visual.scale
   const initialZ = -config.visual.distance
 
@@ -70,12 +55,18 @@ function OpponentMark({ config, tactical }: { config: MonsterConfig; tactical: b
 
   return (
     <group ref={group} position={[0, FLOOR_SURFACE_Y + radius * initialScale, initialZ]} scale={initialScale}>
-      {rings.map((item) => (
+      {mark.rings.map((item) => (
         <Ring key={`${item.x}-${item.y}-${item.radius}`} radius={item.radius} x={item.x} y={item.y} tube={item.tube} />
       ))}
-      {config.id === 'rahu-ketu' && (
+      {mark.slash && (
         <mesh position={[0, 0, 0]} rotation={[0, 0, 0.55]} raycast={() => null}>
           <planeGeometry args={[radius * 1.35, radius * 0.035]} />
+          <meshBasicMaterial color={BONE} />
+        </mesh>
+      )}
+      {mark.stem && (
+        <mesh position={[0, -radius * 0.15, 0]} raycast={() => null}>
+          <planeGeometry args={[radius * 0.08, radius * 1.1]} />
           <meshBasicMaterial color={BONE} />
         </mesh>
       )}

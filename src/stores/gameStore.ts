@@ -6,6 +6,7 @@ import { driveThink, thinkCanYield } from '../game/ai/thinkLane'
 import { createMatch, passTurn, playCard, resolveFinalBattleTurn as resolveFinalBattleTurnState, resolveIdleTurn } from '../game/core/matchEngine'
 import type { CardInstance, CellId, MatchState, PlayCardAction, PlayResolution } from '../game/types'
 import { getBattleDeck } from './deckStore'
+import { useBattleCue } from '../game/v6/view/battle/cue'
 import { useInteractionStore } from './interactionStore'
 import { usePresentationStore } from './presentationStore'
 
@@ -147,7 +148,7 @@ function concedeTurn(match: MatchState) {
   return resolveIdleTurn(passed)
 }
 
-let openingTimer = 0
+let openingTimer: ReturnType<typeof globalThis.setTimeout> | undefined
 
 function scheduleOpening(match: MatchState | null) {
   const clear = globalThis.clearTimeout
@@ -214,6 +215,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
   },
   play: (action) => {
+    if (useBattleCue.getState().bound) return useBattleCue.getState().play(action)
     const match = get().match
     if (!match) return 'MATCH_NOT_READY'
     if (usePresentationStore.getState().inputLocked) {
@@ -227,6 +229,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return result.error
   },
   prepareMonsterTurn: () => {
+    if (useBattleCue.getState().bound) return false
     const match = get().match
     if (!match || match.status !== 'playing' || match.turn !== 'monster' || match.openingTurn) return false
     if (get().resolution) return false
@@ -269,6 +272,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return true
   },
   passIfNoMove: () => {
+    if (useBattleCue.getState().bound) return
     const match = get().match
     const telegraph = get().telegraph
     if (!match || match.status !== 'playing' || match.turn !== 'player' || match.openingTurn) return
@@ -282,6 +286,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
   },
   playMonsterTurn: () => {
+    if (useBattleCue.getState().bound) {
+      useBattleCue.getState().land()
+      return
+    }
     const match = get().match
     const telegraph = get().telegraph
     if (!match || match.openingTurn || !telegraph) return
@@ -331,6 +339,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     publishPlay(result as { state: MatchState; resolution: PlayResolution }, action, get().opponentDeck, telegraph, set)
   },
   resolveFinalBattleTurn: () => {
+    if (useBattleCue.getState().bound) return
     const match = get().match
     if (!match) return
     const next = resolveFinalBattleTurnState(match)

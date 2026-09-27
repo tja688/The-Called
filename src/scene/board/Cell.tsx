@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { landingEase, landingHop } from './landingEase'
 import { DEPART_FADE_MS, POWER_COUNT_MS } from './resolutionBeat'
 import { PLAYER_PENDING } from '../cards/tacticalCards'
+import { useBattleCue } from '../../game/v6/view/battle/cue'
 import { usePresentationStore } from '../../stores/presentationStore'
 import { BoxGeometry, Group, MathUtils } from 'three'
 import { getCardDefinition } from '../../config/cardCatalog'
@@ -97,6 +98,10 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
   const placementSettled = useGameStore((state) => state.placementSettled)
   const settlePlacement = useGameStore((state) => state.settlePlacement)
   const inputLocked = usePresentationStore((state) => state.inputLocked)
+  const cueBound = useBattleCue((state) => state.bound)
+  const cueTick = useBattleCue((state) => state.tick)
+  const stained = useBattleCue((state) => state.stained)
+  const marked = useBattleCue((state) => state.picksIds)
   const selectedInstanceId = useInteractionStore((state) => state.selectedCardInstanceId)
   const finishCardPlacement = useInteractionStore((state) => state.finishCardPlacement)
   const showPlacementNotice = useInteractionStore((state) => state.showPlacementNotice)
@@ -121,11 +126,21 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
     : (visualCard?.currentPower ?? 0)
   const selectedCard = match?.player.hand.find((card) => card.instanceId === selectedInstanceId)
   const isEmptyCell = !cell?.card
-  const isPlacementTarget = Boolean(!inputLocked && match && selectedCard && match.turn === 'player' && (isEmptyCell || canPlaceCard(match, selectedCard, cell!)))
-  const isBlockedEnemy = Boolean(!inputLocked && selectedCard && cell?.card?.owner !== selectedCard.owner && !isPlacementTarget)
+  const cue = useBattleCue.getState()
+  void cueTick
+  const picksTarget = Boolean(cueBound && selectedCard && cue.picks(id))
+  const answersChoice = Boolean(cueBound && !selectedCard && cue.answers(id))
+  const isPlacementTarget = cueBound
+    ? Boolean(!inputLocked && match && selectedCard && match.turn === 'player' && !match.openingTurn && cue.allows(selectedCard.instanceId, id))
+    : Boolean(!inputLocked && match && selectedCard && match.turn === 'player' && (isEmptyCell || canPlaceCard(match, selectedCard, cell!)))
+  const isBlockedEnemy = cueBound
+    ? Boolean(!inputLocked && selectedCard && cell?.card?.owner === 'monster' && !isPlacementTarget && !picksTarget)
+    : Boolean(!inputLocked && selectedCard && cell?.card?.owner !== selectedCard.owner && !isPlacementTarget)
   const canFlip = cameraMode === 'overview' && !selectedCard && Boolean(cell?.card)
   const readout = cameraMode === 'overview' ? 'full' : 'power'
-  const isInteractive = isPlacementTarget || isBlockedEnemy || canFlip
+  const aimed = Boolean(cell?.card && marked.includes(cell.card.instanceId))
+  const dirty = cueBound && stained.includes(id)
+  const isInteractive = isPlacementTarget || picksTarget || answersChoice || isBlockedEnemy || canFlip
 
   useFrame((state) => {
     introReady.current = stageNow(battleKey, state.clock.elapsedTime) >= STAGE_INTRO.complete
@@ -194,7 +209,11 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
       onClick={(event) => {
         event.stopPropagation()
         if (!introReady.current || inputLocked) return
-        if (isPlacementTarget && match && selectedCard) {
+        if (answersChoice) {
+          useBattleCue.getState().answer(id)
+          return
+        }
+        if ((isPlacementTarget || picksTarget) && match && selectedCard) {
           const error = play({ side: 'player', cardInstanceId: selectedCard.instanceId, cellId: id })
           if (!error) finishCardPlacement()
           return
@@ -217,7 +236,7 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
       </mesh>
       <lineSegments position={[0, 0.05, 0]} raycast={() => null}>
         <edgesGeometry args={[cellFrame, 1]} />
-        <lineBasicMaterial color={hovered ? (isBlockedEnemy ? CLAY : BONE) : BONE} transparent opacity={hovered ? 1 : isPlacementTarget ? 0.95 : 0.55} />
+        <lineBasicMaterial color={hovered ? (isBlockedEnemy ? CLAY : BONE) : dirty ? CLAY : BONE} transparent opacity={hovered ? 1 : aimed || answersChoice || isPlacementTarget || picksTarget ? 0.95 : dirty ? 0.85 : 0.55} />
       </lineSegments>
       {coveredCards.map((coveredCard, index) => (
         <Card3D

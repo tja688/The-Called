@@ -1,0 +1,155 @@
+import type { CardDefinition, NameKind, Rarity, RuleKind } from './types'
+
+function neutralCard(input: {
+  slug: string
+  name: string
+  ruleKind: RuleKind
+  nameKind: NameKind
+  basePower: number | null
+  rarity: Rarity
+  timing: string
+  target: string
+  effectText: string
+  keywords: string[]
+}): CardDefinition {
+  return {
+    id: `card.neutral.${input.slug}`,
+    name: input.name,
+    ownerKind: 'player',
+    ruleKind: input.ruleKind,
+    nameKind: input.nameKind,
+    basePower: input.basePower,
+    school: 'neutral',
+    rarity: input.rarity,
+    effectText: input.effectText,
+    timing: input.timing,
+    target: input.target,
+    origin: 'existing',
+    keywords: input.keywords,
+    pool: 'playable',
+    orphan: false,
+  }
+}
+
+export const neutralCards: CardDefinition[] = [
+  neutralCard({
+    slug: 'scout',
+    name: '斥候',
+    ruleKind: 'permanent',
+    nameKind: 'person',
+    basePower: 4,
+    rarity: 'white',
+    timing: '无',
+    target: '无',
+    effectText: '无效果',
+    keywords: [],
+  }),
+  neutralCard({
+    slug: 'barricade',
+    name: '掩体',
+    ruleKind: 'permanent',
+    nameKind: 'object',
+    basePower: 3,
+    rarity: 'white',
+    timing: '入场',
+    target: '自身',
+    effectText: '入场时有相邻敌方，则点数 +2',
+    keywords: ['入场', '相邻'],
+  }),
+  neutralCard({
+    slug: 'poet',
+    name: '诗人',
+    ruleKind: 'permanent',
+    nameKind: 'person',
+    basePower: 3,
+    rarity: 'blue',
+    timing: '入场',
+    target: '无，然后玩家再打 1 张',
+    effectText: '抽 1 张，随后再打出一张手牌',
+    keywords: ['入场'],
+  }),
+  neutralCard({
+    slug: 'champion',
+    name: '勇士',
+    ruleKind: 'permanent',
+    nameKind: 'person',
+    basePower: 10,
+    rarity: 'gold',
+    timing: '无',
+    target: '无',
+    effectText: '无效果',
+    keywords: [],
+  }),
+  neutralCard({
+    slug: 'core-drill',
+    name: '钻心器',
+    ruleKind: 'permanent',
+    nameKind: 'object',
+    basePower: 5,
+    rarity: 'white',
+    timing: '无',
+    target: '无',
+    effectText: '无效果',
+    keywords: [],
+  }),
+  neutralCard({
+    slug: 'ponder',
+    name: '思考',
+    ruleKind: 'spell',
+    nameKind: 'concept',
+    basePower: null,
+    rarity: 'blue',
+    timing: '打出',
+    target: '无',
+    effectText: '抽两张',
+    keywords: [],
+  }),
+  neutralCard({
+    slug: 'memory-wipe',
+    name: '记忆抹除',
+    ruleKind: 'spell',
+    nameKind: 'concept',
+    basePower: null,
+    rarity: 'gold',
+    timing: '打出',
+    target: '玩家选场上任意 1 张',
+    effectText: '点数重置为初始点数',
+    keywords: [],
+  }),
+  neutralCard({
+    slug: 'usurper',
+    name: '霸占者',
+    ruleKind: 'permanent',
+    nameKind: 'person',
+    basePower: 8,
+    rarity: 'white',
+    timing: '入场',
+    target: '玩家选 1 张相邻己方',
+    effectText: '使其点数 -2',
+    keywords: ['入场', '相邻'],
+  }),
+  neutralCard({
+    slug: 'shelter',
+    name: '庇护',
+    ruleKind: 'spell',
+    nameKind: 'concept',
+    basePower: null,
+    rarity: 'blue',
+    timing: '打出',
+    target: '玩家选场上任意 1 张',
+    effectText: '给予保护，并抽 1 张',
+    keywords: ['保护'],
+  }),
+  neutralCard({
+    slug: 'apprentice',
+    name: '学徒',
+    ruleKind: 'permanent',
+    nameKind: 'person',
+    basePower: 4,
+    rarity: 'gold',
+    timing: '反应：己方打出其他牌',
+    target: '自身',
+    effectText: '点数 +1',
+    keywords: [],
+  }),
+]

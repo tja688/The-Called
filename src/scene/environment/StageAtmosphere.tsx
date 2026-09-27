@@ -3,6 +3,7 @@ import { useMemo, useRef } from 'react'
 import { BufferGeometry, Group, Line, LineBasicMaterial, MathUtils, Vector3 } from 'three'
 import { useInteractionStore } from '../../stores/interactionStore'
 import { BONE } from '../presentation/palette'
+import { stageMotif } from './monsterMark'
 
 function circleGeometry(radius: number, from = 0, to = Math.PI * 2, segments = 80) {
   const points: Vector3[] = []
@@ -133,7 +134,7 @@ function FloorMotif({ motif }: { motif: 'eclipse' | 'split' | 'crescent' }) {
 }
 
 export function StageAtmosphere({ monsterId }: { monsterId: string }) {
-  const motif = monsterId === 'rahu-ketu' ? 'split' : monsterId === 'moon' ? 'crescent' : 'eclipse'
+  const motif = stageMotif(monsterId)
   const tactical = useInteractionStore((state) => state.cameraMode === 'overview')
   const sky = useRef<Group>(null)
   const stars = useMemo(() => {
