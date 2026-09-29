@@ -6,7 +6,7 @@
 
 1. **Do not create branches on your own.** Stay on the branch the user is already on unless they explicitly ask you to create or switch branches.
 2. **Do not use git worktrees.** If a skill, script, or workflow expects a worktree, implement the same outcome on the current branch in this clone instead.
-3. 设计文档：C:\Users\jinji\Desktop\文档\MyNote\游戏开发项目\project_TheCall\第四版 。
+3. 设计文档：C:\Users\jinji\Documents\GitHub\The-Called\docs\game design。
 
 ## Agent skills
 
