@@ -4,8 +4,6 @@ import { polygonPath } from '../../../../scene/home/glyphPose'
 import {
   canMoveTo,
   createSession,
-  DEFAULT_MAP_SEED,
-  generateMap,
   type MapSession,
 } from '../../map'
 import {
@@ -13,7 +11,6 @@ import {
   layoutMap,
   MAP_CENTER,
   projectPlot,
-  TIER_RADIUS,
   type MapFrame,
   type MapPlot,
 } from './layout'
@@ -27,7 +24,7 @@ export interface MapViewProps {
   /** 走到可战斗的节点时交给外面。本组件不自己换页。 */
   onEnterBattle: (monsterId: string, nodeId: string) => void
   /**
-   * 父组件接手会话时传入。战斗回来后仍是同一个会话，迷雾和所在节点都留着。
+   * 父组件接手会话时传入。战斗回来后仍是同一个会话，所在节点留着。
    * 不传时，组件自己持有一份开局会话。
    */
   session?: MapSession
@@ -63,7 +60,7 @@ function trim(from: MapPlot, to: MapPlot, pad: number) {
 }
 
 export function MapView({ onEnterBattle, session: controlledSession, onSessionChange }: MapViewProps) {
-  const [ownedSession, setOwnedSession] = useState<MapSession>(() => createSession(generateMap(DEFAULT_MAP_SEED)))
+  const [ownedSession, setOwnedSession] = useState<MapSession>(() => createSession())
   const session = controlledSession ?? ownedSession
   const [trip, setTrip] = useState<Trip | null>(null)
   const [live, setLive] = useState<{ x: number, y: number } | null>(null)
@@ -138,10 +135,7 @@ export function MapView({ onEnterBattle, session: controlledSession, onSessionCh
     live?.y ?? herePlot?.y ?? MAP_CENTER,
     frame,
   )
-  const standing = view.arrival
-    ?? (view.action.type === 'locked' ? view.action.reason : null)
-    ?? (view.action.type === 'shop' ? view.action.text : null)
-  const status = trip ? `前往${trip.title}` : (hint ?? standing)
+  const status = trip ? `前往${trip.title}` : (hint ?? view.arrival)
 
   const startTrip = (place: MapPlaceView) => {
     if (trip) return
@@ -179,7 +173,7 @@ export function MapView({ onEnterBattle, session: controlledSession, onSessionCh
       <div className="v6-map__readout">
         <p className="v6-map__where">{here?.title ?? '地图'}</p>
         <p
-          className={!trip && !hint && view.action.type === 'locked' ? 'v6-map__status v6-map__status--lock' : 'v6-map__status'}
+          className="v6-map__status"
           role="status"
         >
           {status ?? ''}
@@ -202,17 +196,6 @@ export function MapView({ onEnterBattle, session: controlledSession, onSessionCh
             <stop offset="100%" stopColor="#f2fcbb" stopOpacity="0" />
           </radialGradient>
         </defs>
-        {TIER_RADIUS.slice(1).map((radius) => (
-          <ellipse
-            key={radius}
-            className="v6-map__ring"
-            cx={frame.originX}
-            cy={frame.originY}
-            rx={radius * frame.scaleX}
-            ry={radius * frame.scaleY}
-          />
-        ))}
-
         {session.graph.edges.map(([leftId, rightId]) => {
           const left = plotById.get(leftId)
           const right = plotById.get(rightId)
@@ -224,12 +207,11 @@ export function MapView({ onEnterBattle, session: controlledSession, onSessionCh
           const from = projectPlot(line.x1, line.y1, frame)
           const to = projectPlot(line.x2, line.y2, frame)
           const walked = session.visited.includes(leftId) && session.visited.includes(rightId)
-          const known = leftPlace.sight !== 'fog' || rightPlace.sight !== 'fog'
           const liveEdge = trip !== null && (
             (leftId === session.currentNodeId && rightId === trip.nodeId)
             || (rightId === session.currentNodeId && leftId === trip.nodeId)
           )
-          const tone = liveEdge ? 'live' : walked ? 'walked' : known ? 'known' : 'dim'
+          const tone = liveEdge ? 'live' : walked ? 'walked' : 'known'
           return (
             <line
               key={`${leftId}|${rightId}`}
@@ -256,7 +238,7 @@ export function MapView({ onEnterBattle, session: controlledSession, onSessionCh
           return (
             <g
               key={place.id}
-              className={`v6-map__node v6-map__node--${place.sight}${place.sight === 'fog' ? '' : ` v6-map__node--${place.kind}`}${clickable ? ' v6-map__node--hot' : ''}`}
+              className={`v6-map__node v6-map__node--${place.sight} v6-map__node--${place.kind}${clickable ? ' v6-map__node--hot' : ''}`}
               transform={`translate(${spot.x} ${spot.y})`}
               data-node-id={place.id}
               data-sight={place.sight}
@@ -267,7 +249,7 @@ export function MapView({ onEnterBattle, session: controlledSession, onSessionCh
               aria-label={label}
               onClick={clickable ? () => startTrip(place) : undefined}
               onKeyDown={clickable ? (event) => onKey(event, place) : undefined}
-              onMouseEnter={place.sight === 'fog' ? undefined : () => {
+              onMouseEnter={() => {
                 setHint(place.sight === 'open' ? `走到${place.title}` : place.title)
               }}
               onMouseLeave={() => setHint((current) => (

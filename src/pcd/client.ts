@@ -1,4 +1,4 @@
-import type { PcdAdvance, PcdCatalog } from './types'
+import type { PcdAdvance, PcdCatalog, PcdDeckReport } from './types'
 
 async function readError(response: Response) {
   try {
@@ -20,11 +20,25 @@ export function fetchCatalog() {
   return request<PcdCatalog>('/api/catalog')
 }
 
-export function startMatch(monsterId: string, deckId: string, seed: number) {
+export function startMatch(body: {
+  monsterId: string
+  seed: number
+  deckId?: string
+  buildDeck?: string[]
+  buildBacks?: string[]
+}) {
   return request<PcdAdvance>('/api/start', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ monsterId, deckId, seed }),
+    body: JSON.stringify(body),
+  })
+}
+
+export function validateDeck(cards: string[], backs: string[]) {
+  return request<PcdDeckReport>('/api/deck/validate', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ cards, backs }),
   })
 }
 

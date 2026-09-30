@@ -125,6 +125,15 @@ function paintCard(canvas: HTMLCanvasElement, style: FaceStyle, card?: CardDefin
     context.lineTo(width / 2 - 78, height / 2)
     context.closePath()
     context.stroke()
+    const label = card?.backLabel
+    if (!label) return
+    const fontFamily = cardFontFamily()
+    context.fillStyle = style.ink
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    const size = fitFontSize(context, label, width - 180, 54, 28, 600, fontFamily)
+    context.font = `600 ${size}px ${fontFamily}`
+    context.fillText(label, width / 2, height * 0.72)
     return
   }
 

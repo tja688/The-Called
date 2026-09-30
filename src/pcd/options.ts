@@ -1,5 +1,5 @@
 import type { CellId } from '../game/types'
-import { ruleCell } from '../game/v6/view/battle/project'
+import { ruleCell } from './cells'
 import { readInstance } from './ids'
 import type { PcdOption } from './types'
 

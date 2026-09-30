@@ -1,9 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { playCameraTransition } from '../audio/gameAudio'
 import { GameCanvas } from '../scene/GameCanvas'
+import { HAND_VIEW_RETURN_MS } from '../scene/camera/cameraMotion'
 import { clearPresentedCards } from '../config/cardCatalog'
-import type { CellId } from '../game/types'
+import type { CameraMode, CellId } from '../game/types'
 import { useBattleCue } from '../game/v6/view/battle/cue'
-import { monsterScene, sceneCell } from '../game/v6/view/battle/project'
+import { boardTargetIds, canPlayFromHand, nextCameraMode, type PendingView } from './battleView'
+import { monsterScene, sceneCell, type RuleCell } from './cells'
 import '../game/v6/view/battle/battle.css'
 import { useGameStore } from '../stores/gameStore'
 import { useInteractionStore } from '../stores/interactionStore'
@@ -51,9 +54,56 @@ export function PcdBattle({
   const submitRef = useRef<(optionId: string) => void>(() => {})
   const shownRef = useRef<PcdView | null>(null)
   const liveRef = useRef(true)
+  const returnTimer = useRef<number | null>(null)
+  const settleRef = useRef<(pending: PendingView | null, boardInstances: ReadonlySet<number>) => void>(() => {})
+  const liftRef = useRef<() => void>(() => {})
   const match = useGameStore((state) => state.match)
   const placementNotice = useInteractionStore((state) => state.placementNotice)
   const selectedId = useInteractionStore((state) => state.selectedCardInstanceId)
+
+  const clearReturn = () => {
+    if (returnTimer.current != null) window.clearTimeout(returnTimer.current)
+    returnTimer.current = null
+  }
+  const moveCamera = (mode: CameraMode) => {
+    const interaction = useInteractionStore.getState()
+    if (interaction.cameraMode === mode) return
+    playCameraTransition(mode === 'overview' ? 'up' : 'down')
+    interaction.setCameraMode(mode)
+  }
+  liftRef.current = () => {
+    clearReturn()
+    moveCamera('overview')
+  }
+  settleRef.current = (pending, boardInstances) => {
+    const interaction = useInteractionStore.getState()
+    const next = nextCameraMode(
+      interaction.cameraMode,
+      Boolean(interaction.selectedCardInstanceId),
+      pending,
+      boardInstances,
+    )
+    if (next === 'overview') {
+      clearReturn()
+      moveCamera('overview')
+      return
+    }
+    if (interaction.cameraMode !== 'overview') return
+    clearReturn()
+    returnTimer.current = window.setTimeout(() => {
+      returnTimer.current = null
+      const live = useInteractionStore.getState()
+      const resolved = nextCameraMode(
+        live.cameraMode,
+        Boolean(live.selectedCardInstanceId),
+        pending,
+        boardInstances,
+      )
+      if (resolved === live.cameraMode) return
+      playCameraTransition(resolved === 'overview' ? 'up' : 'down')
+      live.setCameraMode(resolved)
+    }, HAND_VIEW_RETURN_MS)
+  }
 
   submitRef.current = (optionId: string) => {
     if (busyRef.current) return
@@ -70,6 +120,7 @@ export function PcdBattle({
         if (!liveRef.current) return
         usePresentationStore.getState().setInputLocked(false)
         setNotice(reason instanceof Error ? reason.message : '对局请求失败')
+        settleRef.current(null, new Set())
       },
     )
   }
@@ -112,6 +163,8 @@ export function PcdBattle({
     })
     return () => {
       liveRef.current = false
+      if (returnTimer.current != null) window.clearTimeout(returnTimer.current)
+      returnTimer.current = null
       useBattleCue.getState().clear()
       usePresentationStore.getState().setInputLocked(false)
       useGameStore.getState().abandon()
@@ -127,6 +180,9 @@ export function PcdBattle({
     busyRef.current = true
     setReady(false)
     usePresentationStore.getState().setInputLocked(true)
+    useBattleCue.getState().setOffers([])
+    if (returnTimer.current != null) window.clearTimeout(returnTimer.current)
+    returnTimer.current = null
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const beats = beatsFor(shownRef.current, advance)
     void (async () => {
@@ -136,6 +192,7 @@ export function PcdBattle({
         const sameIntent = Boolean(flown && beat.view.revealedIntent === flown)
         if (beat.fly?.side === 'monster') {
           flown = beat.fly.cardId
+          if (!reduce) liftRef.current()
           paint(beat, 'fly', catalog, monsterId, setScore)
           if (!reduce) await waitLand(landRef, living)
           if (!living()) return
@@ -155,20 +212,83 @@ export function PcdBattle({
       shownRef.current = advance.view
       const over = Boolean(advance.result || advance.view.winner)
       const player = advance.pending?.actor === 'player' && !over
+      const pending = player ? advance.pending : null
+      const boardInstances = new Set(
+        advance.view.cells.flatMap((cell) => (cell.card ? [cell.card.instance] : [])),
+      )
       const live = useGameStore.getState().match
-      if (live && player && live.turn !== 'player') {
-        useGameStore.setState({ match: { ...live, turn: 'player', openingTurn: false, status: 'playing' } })
+      if (live && player && pending) {
+        useGameStore.setState({
+          match: { ...live, turn: 'player', openingTurn: !canPlayFromHand(pending), status: 'playing' },
+        })
       }
-      optionsRef.current = player ? advance.pending?.options ?? [] : []
+      optionsRef.current = pending?.options ?? []
       snapshotRef.current = advance.snapshot
       busyRef.current = false
       usePresentationStore.getState().setInputLocked(!player)
+      useBattleCue.getState().setOffers(pending ? boardTargetIds(pending.options, boardInstances) : [])
+      settleRef.current(pending, boardInstances)
       setReady(player)
     })()
     return () => {
       alive = false
+      if (returnTimer.current != null) window.clearTimeout(returnTimer.current)
+      returnTimer.current = null
     }
   }, [advance, catalog, monsterId])
+
+  useEffect(() => {
+    if (!placementNotice) return
+    const timer = window.setTimeout(() => useInteractionStore.getState().showPlacementNotice(undefined), 2400)
+    return () => window.clearTimeout(timer)
+  }, [placementNotice])
+
+  useEffect(() => {
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) < 8) return
+      const target = event.target
+      if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"]')) return
+      const live = useGameStore.getState().match
+      if (!live || live.status !== 'playing' || live.turn !== 'player' || live.openingTurn) return
+      if (usePresentationStore.getState().inputLocked) return
+      const interaction = useInteractionStore.getState()
+      const forward = event.deltaY < 0
+      if (forward && interaction.cameraMode !== 'overview') {
+        clearReturn()
+        playCameraTransition('up')
+        interaction.setCameraMode('overview')
+        event.preventDefault()
+      }
+      if (!forward && interaction.cameraMode === 'overview') {
+        clearReturn()
+        playCameraTransition('down')
+        interaction.finishCardPlacement()
+        interaction.setCameraMode('board')
+        event.preventDefault()
+      }
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey || event.repeat) return
+      const target = event.target as HTMLElement | null
+      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
+      const live = useGameStore.getState().match
+      if (!live || live.status !== 'playing' || live.openingTurn) return
+      if (usePresentationStore.getState().inputLocked) return
+      event.preventDefault()
+      const interaction = useInteractionStore.getState()
+      const entering = interaction.cameraMode !== 'overview'
+      clearReturn()
+      playCameraTransition(entering ? 'up' : 'down')
+      if (!entering) interaction.finishCardPlacement()
+      interaction.setCameraMode(entering ? 'overview' : 'board')
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [])
 
   const options = ready ? advance.pending?.options ?? [] : []
   const endTurn = optionForEndTurn(options)
@@ -242,7 +362,7 @@ export function PcdBattle({
           <div className="match-result__panel">
             <strong>{winner === 'player' ? '你赢了' : winner === 'monster' ? '对方赢了' : '平局'}</strong>
             <span>YOU {score?.player ?? 0} — {score?.monster ?? 0} {monsterName}</span>
-            <button type="button" onClick={onDone}>回到选择</button>
+            <button type="button" onClick={onDone}>回到地图</button>
           </div>
         </div>
       ) : null}
@@ -304,7 +424,7 @@ function cardOn(cell: CellId) {
 }
 
 function asCell(cell: number) {
-  return cell as Parameters<typeof sceneCell>[0]
+  return cell as RuleCell
 }
 
 function waitLand(landRef: { current: (() => void) | null }, alive: () => boolean) {

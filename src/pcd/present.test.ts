@@ -3,7 +3,7 @@ import { clearPresentedCards, getCardDefinition } from '../config/cardCatalog'
 import { beatsFor } from './playback'
 import { looseCardOptions, optionForAnswer, optionForCast, optionForEndTurn, optionForPlay } from './options'
 import { projectBattle, publishProjection } from './project'
-import { sceneCell } from '../game/v6/view/battle/project'
+import { sceneCell } from './cells'
 import choice from './fixtures/choice.json'
 import opening from './fixtures/opening.json'
 import type { PcdCatalog, PcdOption, PcdView } from './types'
@@ -55,6 +55,24 @@ describe('内核视图投影', () => {
     expect(getCardDefinition('pcd-4')).toMatchObject({ name: '巨型机械', power: 6, description: '没有额外效果。' })
     expect(getCardDefinition('intent:0:card.c016').name).toBe('科学研究器')
     expect(getCardDefinition('pcd-1').name).toBe('失控机械')
+  })
+
+  it('把手牌卡背的名字写到牌面上', () => {
+    const view = structuredClone(recorded.view)
+    const hand = view.hand[0]
+    if (!hand) throw new Error('fixture has no hand card')
+    view.hand = [{ ...hand, cardBackId: 'back.002' }]
+    const projected = projectBattle({
+      view,
+      catalog: {
+        ...catalog,
+        backs: [{ id: 'back.002', name: '厚实', load: 1, isBack: true, text: '点数 +1。' }],
+      },
+      monsterId: 'monster.001',
+      turn: 'player',
+    })
+    publishProjection(projected)
+    expect(getCardDefinition(`pcd-${hand.instance}`).backLabel).toBe('厚实')
   })
 
   it('开局直接采用最终视图，之后的步骤按事件往前走', () => {

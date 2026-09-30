@@ -7,7 +7,6 @@ import { useBattleCue } from '../../game/v6/view/battle/cue'
 import { usePresentationStore } from '../../stores/presentationStore'
 import { BoxGeometry, Group, MathUtils } from 'three'
 import { getCardDefinition } from '../../config/cardCatalog'
-import { canPlaceCard } from '../../game/core/matchEngine'
 import type { CardInstance, CellId } from '../../game/types'
 import { useGameStore } from '../../stores/gameStore'
 import { useInteractionStore } from '../../stores/interactionStore'
@@ -127,17 +126,16 @@ export function Cell({ id, position }: { id: CellId; position: readonly [number,
     ? (placementSettled ? shownPower : coverHere.fromPower)
     : (visualCard?.currentPower ?? 0)
   const selectedCard = match?.player.hand.find((card) => card.instanceId === selectedInstanceId)
-  const isEmptyCell = !cell?.card
   const cue = useBattleCue.getState()
   void cueTick
   const picksTarget = Boolean(cueBound && selectedCard && cue.picks(id))
   const answersChoice = Boolean(cueBound && !selectedCard && cue.answers(id))
-  const isPlacementTarget = cueBound
-    ? Boolean(!inputLocked && match && selectedCard && match.turn === 'player' && !match.openingTurn && cue.allows(selectedCard.instanceId, id))
-    : Boolean(!inputLocked && match && selectedCard && match.turn === 'player' && (isEmptyCell || canPlaceCard(match, selectedCard, cell!)))
-  const isBlockedEnemy = cueBound
-    ? Boolean(!inputLocked && selectedCard && cell?.card?.owner === 'monster' && !isPlacementTarget && !picksTarget)
-    : Boolean(!inputLocked && selectedCard && cell?.card?.owner !== selectedCard.owner && !isPlacementTarget)
+  const isPlacementTarget = Boolean(
+    cueBound && !inputLocked && match && selectedCard && match.turn === 'player' && !match.openingTurn && cue.allows(selectedCard.instanceId, id),
+  )
+  const isBlockedEnemy = Boolean(
+    cueBound && !inputLocked && selectedCard && cell?.card?.owner === 'monster' && !isPlacementTarget && !picksTarget,
+  )
   const canFlip = cameraMode === 'overview' && !selectedCard && Boolean(cell?.card)
   const readout = cameraMode === 'overview' ? 'full' : 'power'
   const aimed = Boolean(cell?.card && marked.includes(cell.card.instanceId))

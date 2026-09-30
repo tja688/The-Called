@@ -2,17 +2,17 @@ import { useEffect, useState } from 'react'
 import { GlobalAudio } from '../audio/GlobalAudio'
 import { LoadingScreen } from '../loading/LoadingScreen'
 import { preloadGameAssets } from '../loading/preloadAssets'
-import { RunView } from '../game/v6/view/battle'
-import { PcdShell } from '../pcd/PcdShell'
+import { DeckBuild } from '../pcd/DeckBuild'
+import { ForkRun } from '../pcd/ForkRun'
 import { HomePage } from '../pages/HomePage'
-import { LevelPage } from '../pages/LevelPage'
-import { PausePage } from '../pages/PausePage'
 import { useNavigationStore } from '../stores/navigationStore'
 import { SceneTransition } from '../ui/SceneTransition'
 
 export function App() {
   const screen = useNavigationStore((state) => state.screen)
   const exitToHome = useNavigationStore((state) => state.exitToHome)
+  const openDeck = useNavigationStore((state) => state.openDeck)
+  const closeDeck = useNavigationStore((state) => state.closeDeck)
   const [progress, setProgress] = useState(0)
   const [isReady, setIsReady] = useState(false)
 
@@ -39,10 +39,8 @@ export function App() {
         {(displayedScreen) => (
           <>
             {displayedScreen === 'home' && <HomePage />}
-            {displayedScreen === 'kernel' && <PcdShell onExit={exitToHome} />}
-            {displayedScreen === 'map' && <RunView onExit={exitToHome} />}
-            {(displayedScreen === 'level' || displayedScreen === 'pause') && <LevelPage />}
-            {displayedScreen === 'pause' && <PausePage />}
+            {displayedScreen === 'map' && <ForkRun onExit={exitToHome} onDeck={() => openDeck('map')} />}
+            {displayedScreen === 'deck' && <DeckBuild onBack={closeDeck} />}
           </>
         )}
       </SceneTransition>

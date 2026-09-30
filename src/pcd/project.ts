@@ -2,7 +2,7 @@ import { presentCards } from '../config/cardCatalog'
 import { createBoard } from '../game/core/spatial'
 import type { CardDefinition, CardInstance, CellId, MatchState } from '../game/types'
 import type { MonsterTelegraph } from '../stores/gameStore'
-import { sceneCell } from '../game/v6/view/battle/project'
+import { sceneCell, type RuleCell } from './cells'
 import { instanceKey, intentKey } from './ids'
 import type { PcdCatalog, PcdView, PcdViewCard } from './types'
 
@@ -52,11 +52,11 @@ export function projectBattle(input: {
     const instanceId = instanceKey(cell.card.instance)
     if (instanceId === input.concealInstance) continue
     slot.card = toInstance(cell.card)
-    faces.push(faceFor(catalog, instanceId, cell.card.cardId, cell.card.currentPoints, cell.card.owner))
+    faces.push(faceFor(catalog, instanceId, cell.card.cardId, cell.card.currentPoints, cell.card.owner, cell.card.cardBackId))
   }
   const hand = view.hand.map((card) => {
     const instance = toInstance(card)
-    faces.push(faceFor(catalog, instance.cardId, card.cardId, card.currentPoints, 'player'))
+    faces.push(faceFor(catalog, instance.cardId, card.cardId, card.currentPoints, 'player', card.cardBackId))
     return instance
   })
   const winner = view.winner === 'player' || view.winner === 'monster' || view.winner === 'draw' ? view.winner : null
@@ -144,8 +144,16 @@ function toInstance(card: PcdViewCard): CardInstance {
   }
 }
 
-function faceFor(catalog: PcdCatalog, id: string, cardId: string, power: number, owner: string): CardDefinition {
+function faceFor(
+  catalog: PcdCatalog,
+  id: string,
+  cardId: string,
+  power: number,
+  owner: string,
+  backId?: string | null,
+): CardDefinition {
   const info = catalog.cards.find((card) => card.id === cardId)
+  const backName = backId ? catalog.backs.find((back) => back.id === backId)?.name : undefined
   return {
     id,
     name: info?.name ?? cardId,
@@ -153,9 +161,10 @@ function faceFor(catalog: PcdCatalog, id: string, cardId: string, power: number,
     description: info?.text ?? '',
     effect: { type: 'none' },
     art: owner === 'player' ? playerArt : monsterArt,
+    backLabel: backName,
   }
 }
 
 function asCell(cell: number) {
-  return cell as Parameters<typeof sceneCell>[0]
+  return cell as RuleCell
 }

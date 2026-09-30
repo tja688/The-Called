@@ -29,6 +29,8 @@ export type CardDefinition = {
   description: string
   effect: CardEffect
   art: CardArtConfig
+  /** Name painted on the geometric back. */
+  backLabel?: string
 }
 
 export type CardInstance = {

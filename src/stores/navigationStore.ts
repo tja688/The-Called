@@ -1,67 +1,29 @@
 import { create } from 'zustand'
-import { currentLevelId } from './campaignStore'
-import { canEnterBattle } from './deckStore'
 import { useGameStore } from './gameStore'
 
-export type AppScreen = 'home' | 'map' | 'level' | 'pause' | 'kernel'
-export type SessionStatus = 'idle' | 'playing' | 'suspended'
+export type AppScreen = 'home' | 'map' | 'deck'
 
 type NavigationStore = {
   screen: AppScreen
-  levelId: string | null
-  sessionStatus: SessionStatus
+  deckReturn: 'home' | 'map'
   openMap: () => void
-  openKernel: () => void
-  startLevel: (levelId: string) => void
-  pauseLevel: () => void
-  resumeLevel: () => void
-  exitToMap: () => void
+  openDeck: (from: 'home' | 'map') => void
+  closeDeck: () => void
   exitToHome: () => void
 }
 
 export const useNavigationStore = create<NavigationStore>((set, get) => ({
   screen: 'home',
-  levelId: null,
-  sessionStatus: 'idle',
+  deckReturn: 'home',
 
   openMap: () => set({ screen: 'map' }),
 
-  openKernel: () => set({ screen: 'kernel', levelId: null, sessionStatus: 'playing' }),
+  openDeck: (from) => set({ screen: 'deck', deckReturn: from }),
 
-  startLevel: (levelId) => {
-    if (currentLevelId() !== levelId || !canEnterBattle()) return
-    set({
-      screen: 'level',
-      levelId,
-      sessionStatus: 'playing',
-    })
-  },
-
-  pauseLevel: () => {
-    if (get().screen !== 'level') return
-    set({ screen: 'pause', sessionStatus: 'suspended' })
-  },
-
-  resumeLevel: () => {
-    if (get().screen !== 'pause' || get().levelId === null) return
-    set({ screen: 'level', sessionStatus: 'playing' })
-  },
-
-  exitToMap: () => {
-    useGameStore.getState().abandon()
-    set({
-      screen: 'map',
-      levelId: null,
-      sessionStatus: 'idle',
-    })
-  },
+  closeDeck: () => set({ screen: get().deckReturn }),
 
   exitToHome: () => {
     useGameStore.getState().abandon()
-    set({
-      screen: 'home',
-      levelId: null,
-      sessionStatus: 'idle',
-    })
+    set({ screen: 'home', deckReturn: 'home' })
   },
 }))

@@ -1,98 +1,30 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { useCampaignStore } from './campaignStore'
-import { useDeckStore } from './deckStore'
 import { useGameStore } from './gameStore'
-import { useInteractionStore } from './interactionStore'
 import { useNavigationStore } from './navigationStore'
 
-describe('navigation state machine', () => {
+describe('navigation', () => {
   beforeEach(() => {
-    useCampaignStore.setState({ cleared: 0 })
-    useDeckStore.getState().reset()
-    useNavigationStore.setState({
-      screen: 'home',
-      levelId: null,
-      sessionStatus: 'idle',
-    })
+    useGameStore.getState().abandon()
+    useNavigationStore.setState({ screen: 'home', deckReturn: 'home' })
   })
 
-  it('starts a level from the map', () => {
-    const navigation = useNavigationStore.getState()
-    navigation.openMap()
-    navigation.startLevel('level-01')
-
-    expect(useNavigationStore.getState()).toMatchObject({
-      screen: 'level',
-      levelId: 'level-01',
-      sessionStatus: 'playing',
-    })
-  })
-
-  it('suspends and resumes the active level', () => {
-    useNavigationStore.getState().startLevel('level-01')
-    useNavigationStore.getState().pauseLevel()
-
-    expect(useNavigationStore.getState()).toMatchObject({
-      screen: 'pause',
-      levelId: 'level-01',
-      sessionStatus: 'suspended',
-    })
-
-    useNavigationStore.getState().resumeLevel()
-    expect(useNavigationStore.getState()).toMatchObject({
-      screen: 'level',
-      levelId: 'level-01',
-      sessionStatus: 'playing',
-    })
-  })
-
-  it('clears the session when leaving for the map or home', () => {
-    useNavigationStore.getState().startLevel('level-01')
-    useNavigationStore.getState().exitToMap()
-    expect(useNavigationStore.getState()).toMatchObject({
-      screen: 'map',
-      levelId: null,
-      sessionStatus: 'idle',
-    })
-
-    useNavigationStore.getState().startLevel('level-01')
-    useNavigationStore.getState().exitToHome()
-    expect(useNavigationStore.getState()).toMatchObject({
-      screen: 'home',
-      levelId: null,
-      sessionStatus: 'idle',
-    })
-  })
-
-  it('refuses to start a level while the battle deck is short', () => {
-    useDeckStore.getState().removeSlot(0)
+  it('opens the map, the deck, and returns to where the deck was opened', () => {
     useNavigationStore.getState().openMap()
-    useNavigationStore.getState().startLevel('level-01')
-    expect(useNavigationStore.getState()).toMatchObject({
-      screen: 'map',
-      levelId: null,
-      sessionStatus: 'idle',
-    })
+    useNavigationStore.getState().openDeck('map')
+    expect(useNavigationStore.getState().screen).toBe('deck')
+    useNavigationStore.getState().closeDeck()
+    expect(useNavigationStore.getState().screen).toBe('map')
+
+    useNavigationStore.getState().openDeck('home')
+    useNavigationStore.getState().closeDeck()
+    expect(useNavigationStore.getState().screen).toBe('home')
   })
 
-  it('only starts the encounter that is currently open', () => {
-    useNavigationStore.getState().startLevel('level-02')
-    expect(useNavigationStore.getState().screen).toBe('home')
-
-    useCampaignStore.getState().complete('level-01')
-    useNavigationStore.getState().startLevel('level-01')
-    expect(useNavigationStore.getState().screen).toBe('home')
-    useNavigationStore.getState().startLevel('level-02')
-    expect(useNavigationStore.getState()).toMatchObject({ screen: 'level', levelId: 'level-02' })
-  })
-
-  it('drops the previous battle when leaving', () => {
-    useGameStore.getState().initialize('level-01', 'svarbhanu')
-    useInteractionStore.getState().beginCardPlacement('stuck-card')
-    useNavigationStore.getState().startLevel('level-01')
+  it('clears the table when leaving for home', () => {
+    useGameStore.setState({ battleKey: 2, match: null })
+    useNavigationStore.getState().openMap()
     useNavigationStore.getState().exitToHome()
+    expect(useNavigationStore.getState().screen).toBe('home')
     expect(useGameStore.getState().match).toBeNull()
-    expect(useInteractionStore.getState().cameraMode).toBe('board')
-    expect(useInteractionStore.getState().selectedCardInstanceId).toBeUndefined()
   })
 })

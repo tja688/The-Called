@@ -134,6 +134,12 @@ export type PcdStep = {
   events: PcdEvent[]
 }
 
+export type PcdDeckReport = {
+  ok: boolean
+  issues: string[]
+  load: number
+}
+
 export type PcdAdvance = {
   view: PcdView
   pending: PcdDecision | null

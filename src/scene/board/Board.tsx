@@ -3,7 +3,6 @@ import { createBoard, cellWorldPosition } from '../../game/core/spatial'
 import { useGameStore } from '../../stores/gameStore'
 import { BONE } from '../presentation/palette'
 import { Cell } from './Cell'
-import { EffectStage } from '../effects/EffectStage'
 import { resolutionBeatMs } from './resolutionBeat'
 import { useFrame } from '@react-three/fiber'
 import { useLayoutEffect, useRef } from 'react'
@@ -68,7 +67,6 @@ export function Board() {
         <lineBasicMaterial color={BONE} />
       </lineSegments>
       <ResolutionClock />
-      <EffectStage />
       {cells.map((cell, index) => (
         <StagedCell key={cell.id} index={index} id={cell.id} position={cellWorldPosition(cell.row, cell.col)} />
       ))}
