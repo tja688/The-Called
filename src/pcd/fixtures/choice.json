@@ -1,0 +1,85 @@
+{
+  "view": {
+    "audience": "player",
+    "phase": "player-action",
+    "round": 1,
+    "remainingOpportunities": 1,
+    "revealedIntent": "card.c016",
+    "intentIndex": 0,
+    "intentMode": "on-turn",
+    "committedCell": 0,
+    "committedTarget": 0,
+    "intents": ["card.c016", "card.c003", "card.c017"],
+    "unseen": [],
+    "playerPoints": 0,
+    "monsterPoints": 8,
+    "playerOccupancy": 0,
+    "monsterOccupancy": 1,
+    "handCount": 1,
+    "matchDeckCount": 4,
+    "playerDiscardCount": 0,
+    "monsterDiscardCount": 0,
+    "pools": [{ "owner": "player", "id": "resource.faith", "amount": 2 }],
+    "winner": null,
+    "endReason": null,
+    "cells": [
+      { "cell": 1, "polluted": true, "card": null },
+      { "cell": 2, "polluted": false, "card": null },
+      { "cell": 3, "polluted": false, "card": null },
+      { "cell": 4, "polluted": false, "card": null },
+      {
+        "cell": 5,
+        "polluted": false,
+        "card": {
+          "instance": 1,
+          "cardId": "card.m001",
+          "owner": "monster",
+          "zone": "board",
+          "cell": 5,
+          "basePoints": 8,
+          "currentPoints": 8,
+          "cardBackId": null,
+          "modifierCount": 0,
+          "isSpell": false,
+          "timer": 0,
+          "statuses": []
+        }
+      },
+      { "cell": 6, "polluted": false, "card": null },
+      { "cell": 7, "polluted": false, "card": null },
+      { "cell": 8, "polluted": false, "card": null },
+      { "cell": 9, "polluted": false, "card": null }
+    ],
+    "hand": [
+      {
+        "instance": 4,
+        "cardId": "card.c002",
+        "owner": "player",
+        "zone": "hand",
+        "cell": 0,
+        "basePoints": 6,
+        "currentPoints": 6,
+        "cardBackId": null,
+        "modifierCount": 0,
+        "isSpell": false,
+        "timer": 0,
+        "statuses": []
+      }
+    ],
+    "matchDeck": [],
+    "playerDiscard": [],
+    "monsterDiscard": [],
+    "playerVoid": [],
+    "monsterVoid": [],
+    "cards": [],
+    "instanceHighWater": 4
+  },
+  "options": [
+    { "id": "play:4:9", "kind": "play", "instance": 4, "cell": 9, "cardId": "card.c002" },
+    { "id": "play:4:1", "kind": "play", "instance": 4, "cell": 1, "cardId": "card.c002" },
+    { "id": "cast:7", "kind": "cast", "instance": 7, "cell": 0, "cardId": "card.c003" },
+    { "id": "end-turn", "kind": "end-turn", "instance": 0, "cell": 0, "cardId": null },
+    { "id": "cell:3", "kind": "cell", "instance": 0, "cell": 3, "cardId": null },
+    { "id": "card:12", "kind": "card", "instance": 12, "cell": 5, "cardId": "card.m001" }
+  ]
+}

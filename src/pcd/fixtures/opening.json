@@ -1,0 +1,441 @@
+{
+  "view": {
+    "audience": "player",
+    "phase": "player-action",
+    "round": 1,
+    "remainingOpportunities": 1,
+    "revealedIntent": "card.c016",
+    "intentIndex": 0,
+    "intentMode": "on-turn",
+    "committedCell": 0,
+    "committedTarget": 0,
+    "intents": [
+      "card.c016",
+      "card.c003",
+      "card.c017"
+    ],
+    "unseen": [
+      "card.c001",
+      "card.c001",
+      "card.c002",
+      "card.c002",
+      "card.c003",
+      "card.c003",
+      "card.c004",
+      "card.c005",
+      "card.c005",
+      "card.c005"
+    ],
+    "playerPoints": 0,
+    "monsterPoints": 5,
+    "playerOccupancy": 0,
+    "monsterOccupancy": 1,
+    "handCount": 5,
+    "matchDeckCount": 10,
+    "playerDiscardCount": 0,
+    "monsterDiscardCount": 0,
+    "pools": [],
+    "winner": null,
+    "endReason": null,
+    "cells": [
+      {
+        "cell": 1,
+        "polluted": false,
+        "card": null
+      },
+      {
+        "cell": 2,
+        "polluted": false,
+        "card": null
+      },
+      {
+        "cell": 3,
+        "polluted": false,
+        "card": null
+      },
+      {
+        "cell": 4,
+        "polluted": false,
+        "card": null
+      },
+      {
+        "cell": 5,
+        "polluted": false,
+        "card": {
+          "instance": 16,
+          "cardId": "card.m001",
+          "owner": "monster",
+          "zone": "board",
+          "cell": 5,
+          "basePoints": 5,
+          "currentPoints": 5,
+          "cardBackId": null,
+          "modifierCount": 0,
+          "isSpell": false,
+          "timer": 0,
+          "statuses": []
+        }
+      },
+      {
+        "cell": 6,
+        "polluted": false,
+        "card": null
+      },
+      {
+        "cell": 7,
+        "polluted": false,
+        "card": null
+      },
+      {
+        "cell": 8,
+        "polluted": false,
+        "card": null
+      },
+      {
+        "cell": 9,
+        "polluted": false,
+        "card": null
+      }
+    ],
+    "hand": [
+      {
+        "instance": 7,
+        "cardId": "card.c003",
+        "owner": "player",
+        "zone": "hand",
+        "cell": 0,
+        "basePoints": 0,
+        "currentPoints": 0,
+        "cardBackId": null,
+        "modifierCount": 0,
+        "isSpell": true,
+        "timer": 0,
+        "statuses": []
+      },
+      {
+        "instance": 10,
+        "cardId": "card.c004",
+        "owner": "player",
+        "zone": "hand",
+        "cell": 0,
+        "basePoints": 5,
+        "currentPoints": 5,
+        "cardBackId": null,
+        "modifierCount": 0,
+        "isSpell": false,
+        "timer": 0,
+        "statuses": []
+      },
+      {
+        "instance": 4,
+        "cardId": "card.c002",
+        "owner": "player",
+        "zone": "hand",
+        "cell": 0,
+        "basePoints": 6,
+        "currentPoints": 6,
+        "cardBackId": null,
+        "modifierCount": 0,
+        "isSpell": false,
+        "timer": 0,
+        "statuses": []
+      },
+      {
+        "instance": 11,
+        "cardId": "card.c004",
+        "owner": "player",
+        "zone": "hand",
+        "cell": 0,
+        "basePoints": 5,
+        "currentPoints": 5,
+        "cardBackId": null,
+        "modifierCount": 0,
+        "isSpell": false,
+        "timer": 0,
+        "statuses": []
+      },
+      {
+        "instance": 3,
+        "cardId": "card.c001",
+        "owner": "player",
+        "zone": "hand",
+        "cell": 0,
+        "basePoints": 4,
+        "currentPoints": 4,
+        "cardBackId": null,
+        "modifierCount": 0,
+        "isSpell": false,
+        "timer": 0,
+        "statuses": []
+      }
+    ],
+    "matchDeck": [],
+    "playerDiscard": [],
+    "monsterDiscard": [],
+    "playerVoid": [],
+    "monsterVoid": [],
+    "cards": [],
+    "instanceHighWater": 16
+  },
+  "options": [
+    {
+      "id": "play:3:1",
+      "kind": "play",
+      "instance": 3,
+      "cell": 1,
+      "cardId": "card.c001"
+    },
+    {
+      "id": "play:3:2",
+      "kind": "play",
+      "instance": 3,
+      "cell": 2,
+      "cardId": "card.c001"
+    },
+    {
+      "id": "play:3:3",
+      "kind": "play",
+      "instance": 3,
+      "cell": 3,
+      "cardId": "card.c001"
+    },
+    {
+      "id": "play:3:4",
+      "kind": "play",
+      "instance": 3,
+      "cell": 4,
+      "cardId": "card.c001"
+    },
+    {
+      "id": "play:3:6",
+      "kind": "play",
+      "instance": 3,
+      "cell": 6,
+      "cardId": "card.c001"
+    },
+    {
+      "id": "play:3:7",
+      "kind": "play",
+      "instance": 3,
+      "cell": 7,
+      "cardId": "card.c001"
+    },
+    {
+      "id": "play:3:8",
+      "kind": "play",
+      "instance": 3,
+      "cell": 8,
+      "cardId": "card.c001"
+    },
+    {
+      "id": "play:3:9",
+      "kind": "play",
+      "instance": 3,
+      "cell": 9,
+      "cardId": "card.c001"
+    },
+    {
+      "id": "play:4:1",
+      "kind": "play",
+      "instance": 4,
+      "cell": 1,
+      "cardId": "card.c002"
+    },
+    {
+      "id": "play:4:2",
+      "kind": "play",
+      "instance": 4,
+      "cell": 2,
+      "cardId": "card.c002"
+    },
+    {
+      "id": "play:4:3",
+      "kind": "play",
+      "instance": 4,
+      "cell": 3,
+      "cardId": "card.c002"
+    },
+    {
+      "id": "play:4:4",
+      "kind": "play",
+      "instance": 4,
+      "cell": 4,
+      "cardId": "card.c002"
+    },
+    {
+      "id": "play:4:5",
+      "kind": "play",
+      "instance": 4,
+      "cell": 5,
+      "cardId": "card.c002"
+    },
+    {
+      "id": "play:4:6",
+      "kind": "play",
+      "instance": 4,
+      "cell": 6,
+      "cardId": "card.c002"
+    },
+    {
+      "id": "play:4:7",
+      "kind": "play",
+      "instance": 4,
+      "cell": 7,
+      "cardId": "card.c002"
+    },
+    {
+      "id": "play:4:8",
+      "kind": "play",
+      "instance": 4,
+      "cell": 8,
+      "cardId": "card.c002"
+    },
+    {
+      "id": "play:4:9",
+      "kind": "play",
+      "instance": 4,
+      "cell": 9,
+      "cardId": "card.c002"
+    },
+    {
+      "id": "cast:7",
+      "kind": "cast",
+      "instance": 7,
+      "cell": 0,
+      "cardId": "card.c003"
+    },
+    {
+      "id": "play:10:1",
+      "kind": "play",
+      "instance": 10,
+      "cell": 1,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:10:2",
+      "kind": "play",
+      "instance": 10,
+      "cell": 2,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:10:3",
+      "kind": "play",
+      "instance": 10,
+      "cell": 3,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:10:4",
+      "kind": "play",
+      "instance": 10,
+      "cell": 4,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:10:5",
+      "kind": "play",
+      "instance": 10,
+      "cell": 5,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:10:6",
+      "kind": "play",
+      "instance": 10,
+      "cell": 6,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:10:7",
+      "kind": "play",
+      "instance": 10,
+      "cell": 7,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:10:8",
+      "kind": "play",
+      "instance": 10,
+      "cell": 8,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:10:9",
+      "kind": "play",
+      "instance": 10,
+      "cell": 9,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:11:1",
+      "kind": "play",
+      "instance": 11,
+      "cell": 1,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:11:2",
+      "kind": "play",
+      "instance": 11,
+      "cell": 2,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:11:3",
+      "kind": "play",
+      "instance": 11,
+      "cell": 3,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:11:4",
+      "kind": "play",
+      "instance": 11,
+      "cell": 4,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:11:5",
+      "kind": "play",
+      "instance": 11,
+      "cell": 5,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:11:6",
+      "kind": "play",
+      "instance": 11,
+      "cell": 6,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:11:7",
+      "kind": "play",
+      "instance": 11,
+      "cell": 7,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:11:8",
+      "kind": "play",
+      "instance": 11,
+      "cell": 8,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "play:11:9",
+      "kind": "play",
+      "instance": 11,
+      "cell": 9,
+      "cardId": "card.c004"
+    },
+    {
+      "id": "end-turn",
+      "kind": "end-turn",
+      "instance": 0,
+      "cell": 0,
+      "cardId": null
+    }
+  ]
+}

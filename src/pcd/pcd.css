@@ -1,0 +1,110 @@
+.pcd-select {
+  min-height: 100%;
+  display: grid;
+  align-content: center;
+  gap: 28px;
+  padding: clamp(28px, 6vh, 72px) clamp(24px, 6vw, 80px);
+  color: #efeae0;
+  background:
+    radial-gradient(circle at 80% 20%, rgba(239, 234, 224, 0.05), transparent 28%),
+    #141311;
+}
+
+.pcd-select__head p,
+.pcd-select h2 {
+  margin: 0 0 12px;
+  color: rgba(239, 234, 224, 0.62);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+}
+
+.pcd-select h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 500;
+  letter-spacing: 0.22em;
+}
+
+.pcd-select__status {
+  margin: 0;
+  max-width: 36em;
+  line-height: 1.6;
+}
+
+.pcd-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 280px));
+  gap: 36px;
+}
+
+.pcd-choices {
+  display: grid;
+  gap: 10px;
+}
+
+.pcd-choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(239, 234, 224, 0.42);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pcd-choice span {
+  min-width: 2.4em;
+  color: rgba(239, 234, 224, 0.62);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.pcd-choice b {
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+
+.pcd-choice.is-current,
+.pcd-choice:hover,
+.pcd-choice:focus-visible {
+  border-color: #efeae0;
+  outline: none;
+}
+
+.pcd-select__actions {
+  display: flex;
+  gap: 12px;
+}
+
+.pcd-select__actions button,
+.v6-stage-actions button {
+  padding: 10px 16px;
+  border: 1px solid #efeae0;
+  color: #efeae0;
+  background: transparent;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.pcd-select__actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pcd-select__actions button:not(:disabled):hover,
+.pcd-select__actions button:not(:disabled):focus-visible {
+  color: #141311;
+  background: #efeae0;
+  outline: none;
+}
+
+@media (max-width: 720px) {
+  .pcd-columns {
+    grid-template-columns: 1fr;
+  }
+}

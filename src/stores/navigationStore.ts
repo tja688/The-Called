@@ -3,7 +3,7 @@ import { currentLevelId } from './campaignStore'
 import { canEnterBattle } from './deckStore'
 import { useGameStore } from './gameStore'
 
-export type AppScreen = 'home' | 'map' | 'level' | 'pause'
+export type AppScreen = 'home' | 'map' | 'level' | 'pause' | 'kernel'
 export type SessionStatus = 'idle' | 'playing' | 'suspended'
 
 type NavigationStore = {
@@ -11,6 +11,7 @@ type NavigationStore = {
   levelId: string | null
   sessionStatus: SessionStatus
   openMap: () => void
+  openKernel: () => void
   startLevel: (levelId: string) => void
   pauseLevel: () => void
   resumeLevel: () => void
@@ -24,6 +25,8 @@ export const useNavigationStore = create<NavigationStore>((set, get) => ({
   sessionStatus: 'idle',
 
   openMap: () => set({ screen: 'map' }),
+
+  openKernel: () => set({ screen: 'kernel', levelId: null, sessionStatus: 'playing' }),
 
   startLevel: (levelId) => {
     if (currentLevelId() !== levelId || !canEnterBattle()) return

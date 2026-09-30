@@ -58,8 +58,16 @@ function publicAssetsPlugin(): Plugin {
   }
 }
 
+const kernelApi = process.env.PCD_API
+
 export default defineConfig({
   base: './',
   plugins: [react(), publicAssetsPlugin()],
-  server: { port: 4174, strictPort: true },
+  server: {
+    port: 4174,
+    strictPort: true,
+    proxy: kernelApi
+      ? { '/api': { target: kernelApi, changeOrigin: true } }
+      : undefined,
+  },
 })

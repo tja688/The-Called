@@ -3,6 +3,7 @@ import { GlobalAudio } from '../audio/GlobalAudio'
 import { LoadingScreen } from '../loading/LoadingScreen'
 import { preloadGameAssets } from '../loading/preloadAssets'
 import { RunView } from '../game/v6/view/battle'
+import { PcdShell } from '../pcd/PcdShell'
 import { HomePage } from '../pages/HomePage'
 import { LevelPage } from '../pages/LevelPage'
 import { PausePage } from '../pages/PausePage'
@@ -38,6 +39,7 @@ export function App() {
         {(displayedScreen) => (
           <>
             {displayedScreen === 'home' && <HomePage />}
+            {displayedScreen === 'kernel' && <PcdShell onExit={exitToHome} />}
             {displayedScreen === 'map' && <RunView onExit={exitToHome} />}
             {(displayedScreen === 'level' || displayedScreen === 'pause') && <LevelPage />}
             {displayedScreen === 'pause' && <PausePage />}
