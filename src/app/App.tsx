@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { GlobalAudio } from '../audio/GlobalAudio'
 import { LoadingScreen } from '../loading/LoadingScreen'
 import { preloadGameAssets } from '../loading/preloadAssets'
+import { warmKernel } from '../pcd/browserKernel'
 import { DeckBuild } from '../pcd/DeckBuild'
 import { ForkRun } from '../pcd/ForkRun'
 import { HomePage } from '../pages/HomePage'
@@ -18,6 +19,7 @@ export function App() {
 
   useEffect(() => {
     let active = true
+    warmKernel()
 
     void preloadGameAssets((nextProgress) => {
       if (active) setProgress(nextProgress)

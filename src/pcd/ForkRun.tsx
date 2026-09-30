@@ -9,7 +9,7 @@ function remember(next: MapSession) {
   return next
 }
 import '../game/v6/view/battle/battle.css'
-import { fetchCatalog, startMatch, validateDeck } from './client'
+import { fetchCatalog, kernelOfflineMessage, startMatch, validateDeck } from './client'
 import { filled, loadBuild, starterBuild } from './deck'
 import { PcdBattle } from './PcdBattle'
 import type { PcdAdvance, PcdCatalog } from './types'
@@ -38,8 +38,9 @@ export function ForkRun({ onExit, onDeck }: { onExit: () => void; onDeck: () => 
         for (const monster of next.monsters) titles[monster.id] = monster.name
         setSession((current) => remember({ ...current, graph: forkGraph(titles) }))
       },
-      () => {
-        if (alive) setError('内核没有连上。请用 start-game.bat 同时启动对局服务和网页。')
+      (reason: unknown) => {
+        if (!alive) return
+        setError(kernelOfflineMessage(reason))
       },
     )
     return () => {

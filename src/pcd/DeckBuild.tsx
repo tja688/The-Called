@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchCatalog, validateDeck } from './client'
+import { fetchCatalog, kernelOfflineMessage, validateDeck } from './client'
 import { clearSlot, filled, loadBuild, placeCard, saveBuild, setBack, starterBuild, type Build } from './deck'
 import type { PcdCatalog, PcdDeckReport } from './types'
 import './pcd.css'
@@ -24,8 +24,9 @@ export function DeckBuild({ onBack }: { onBack: () => void }) {
         setCatalog(next)
         setBuild(loadBuild() ?? starterBuild(next))
       },
-      () => {
-        if (alive) setError('内核没有连上。请用 start-game.bat 同时启动对局服务和网页。')
+      (reason: unknown) => {
+        if (!alive) return
+        setError(kernelOfflineMessage(reason))
       },
     )
     return () => {

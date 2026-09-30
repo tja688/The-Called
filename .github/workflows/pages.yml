@@ -2,7 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [the_called5]
+    branches: [the_called7]
   workflow_dispatch:
 
 permissions:
@@ -19,12 +19,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install WebAssembly tools
+        run: dotnet workload install wasm-tools
+
+      - name: Checkout rules kernel
+        uses: actions/checkout@v4
+        with:
+          repository: tja688/P_CD
+          ref: 020ea979b59590ada6dacfd504043bd3e3d32a08
+          path: pcd
+
+      - name: Publish browser kernel
+        run: dotnet publish pcd/src/Pcd.Wasm/Pcd.Wasm.csproj -c Release
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
       - run: npm ci
       - run: npm run build
+
+      - name: Stage browser kernel
+        run: mkdir -p dist/kernel && cp -a pcd/src/Pcd.Wasm/bin/Release/net10.0/browser-wasm/AppBundle/_framework dist/kernel/_framework
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
