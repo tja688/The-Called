@@ -29,7 +29,7 @@ https://github.com/tja688/The-Called.git?path=/src/Pcd.Kernel#<标签>
 https://github.com/tja688/The-Called.git?path=/content#<标签>
 ```
 
-内核是 C# 9 / .NET Standard 2.1，不引用 UnityEngine。内容不要打进内核程序集。Unity 读出 YAML 文本后交给内核：
+内核是 C# 9 / .NET Standard 2.1，不引用 UnityEngine。内容不要打进内核程序集。这两个包里的文件和子目录都带有 `.meta`；Unity 6 不会在 Git 包里自动生成它们。Unity 读出 YAML 文本后交给内核：
 
 ```csharp
 ContentCatalog catalog = ContentCatalog.Parse(yamlText);

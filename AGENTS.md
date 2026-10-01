@@ -6,6 +6,7 @@
 
 - **内核** `src/Pcd.Kernel`：规则只写在这里。Unity 用 `https://github.com/tja688/The-Called.git?path=/src/Pcd.Kernel#<标签>` 引用这一包。
 - **数据** `content/`：卡牌、卡背、怪物、牌组的 YAML。Unity 用 `https://github.com/tja688/The-Called.git?path=/content#<标签>` 引用。宿主读出文本再交给内核，不要嵌进 `Pcd.Kernel`。
+- Unity 6 的 Git 包目录不可写，不会补 `.meta`。内核包和内容包里每新增一个文件或子目录，都要带上同名 `.meta`，否则程序集和 YAML 会被忽略。
 - **网页表现层** `src/` 里除 `Pcd.*` 以外的 TypeScript：三维场景、地图、构筑和启动页。合法操作只来自内核给出的选项。局外地图和牌组留在网页，进对局时只提交对局配置。
 
 分界和取舍见 `docs/adr/0012-one-repo-kernel-content-web.md`。术语以 `CONTEXT.md` 为准。规则文档在 `docs/game design`。其余架构决定在 `docs/adr/`。
