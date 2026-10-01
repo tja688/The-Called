@@ -1,0 +1,59 @@
+name: 污染格不叠加且不影响生成，解析标记不叠加
+cards:
+  - id: card.ta
+    points: 4
+    name: 打出
+  - id: card.tb
+    points: 3
+    name: 生成
+    abilities:
+      - actions:
+          - kind: copy
+            of: self
+            to: mirror
+          - kind: add-status
+            status: status.mark
+            target: self
+          - kind: add-status
+            status: status.mark
+            target: self
+  - id: card.ti
+    points: 1
+    name: 意图
+statuses:
+  - id: status.mark
+    name: 解析标记
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  opportunities: 2
+  polluted: [1, 9]
+  player:
+    hand:
+      - card: card.ta
+      - card: card.tb
+steps:
+  - answer: play:1:1
+    board:
+      - cell: 1
+        card: card.ta
+        owner: player
+        points: 3
+        modifiers: 1
+  - answer: play:2:2
+    board:
+      - cell: 2
+        card: card.tb
+        owner: player
+        points: 3
+        statuses: [status.mark]
+      - cell: 8
+        card: card.tb
+        owner: player
+        points: 3
+        modifiers: 0
+    result: ongoing

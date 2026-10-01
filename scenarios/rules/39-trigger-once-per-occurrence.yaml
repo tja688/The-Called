@@ -1,0 +1,61 @@
+name: 一次移除多张时离场按次数触发
+cards:
+  - id: card.ta
+    points: 4
+    name: 清除
+    abilities:
+      - target:
+          pick: all
+          side: opponent
+        actions:
+          - kind: remove
+  - id: card.tb
+    points: 2
+    name: 甲
+    abilities:
+      - trigger: leave
+        actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 1
+  - id: card.tc
+    points: 2
+    name: 乙
+    abilities:
+      - trigger: leave
+        actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 1
+  - id: card.ti
+    name: 意图
+resources:
+  - id: resource.faith
+    name: 信仰
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.ta
+  board:
+    - cell: 1
+      card: card.tb
+      owner: monster
+    - cell: 9
+      card: card.tc
+      owner: monster
+steps:
+  - answer: play:3:5
+    monsterFaith: 2
+    boardExact: true
+    board:
+      - cell: 5
+        card: card.ta
+        owner: player
+        points: 4
+    result: ongoing

@@ -1,0 +1,58 @@
+cards:
+  - id: card.c901
+    name: 一点
+    points: 1
+  - id: card.c902
+    name: 两点
+    points: 2
+  - id: card.c903
+    name: 三点
+    points: 3
+  - id: card.c904
+    name: 四点
+    points: 4
+  - id: card.c905
+    name: 五点
+    points: 5
+  - id: card.c906
+    name: 六点
+    points: 6
+  - id: card.m901
+    name: 驻点
+    points: 4
+  - id: card.m902
+    name: 冲锋
+    points: 3
+  - id: card.m903
+    name: 重击
+    points: 5
+  - id: card.m904
+    name: 骚扰
+    points: 2
+monsters:
+  - id: monster.901
+    name: 白板怪物
+    starting:
+      - card: card.m901
+        cell: 5
+    intents:
+      - card.m902
+      - card.m903
+      - card.m904
+defaultMonster: monster.901
+defaultDeck:
+  - card.c901
+  - card.c902
+  - card.c903
+  - card.c904
+  - card.c905
+  - card.c906
+  - card.c901
+  - card.c902
+  - card.c903
+  - card.c904
+  - card.c905
+  - card.c906
+  - card.c903
+  - card.c904
+  - card.c905

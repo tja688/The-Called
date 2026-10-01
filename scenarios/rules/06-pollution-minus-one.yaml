@@ -1,0 +1,41 @@
+name: 打进空的污染格后点数减一
+cards:
+  - id: card.ta01
+    points: 4
+    name: 落子
+  - id: card.ta02
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ta02
+position:
+  phase: player-action
+  round: 1
+  polluted: [1]
+  player:
+    hand:
+      - card: card.ta01
+steps:
+  - answer: play:1:1
+    events:
+      - type: card-played
+        cell: 1
+      - type: card-entered
+        cell: 1
+        reason: play
+      - type: points-changed
+        source: polluted-cell
+        before: 4
+        after: 3
+      - type: turn-ended
+        owner: player
+      - type: turn-started
+        owner: monster
+    board:
+      - cell: 1
+        owner: player
+        points: 3
+        modifiers: 1
+    result: ongoing

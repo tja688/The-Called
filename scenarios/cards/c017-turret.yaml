@@ -1,0 +1,28 @@
+name: 攻击炮台在回合结束打击带解析标记的敌方卡
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  board:
+    - cell: 1
+      card: card.c017
+      owner: player
+    - cell: 2
+      card: card.c002
+      owner: monster
+      statuses: [status.mark]
+opening:
+  pending:
+    options:
+      - end-turn
+steps:
+  - answer: end-turn
+    pending:
+      type: choose-card
+  - answer: card:2
+    board:
+      - cell: 2
+        points: 4
+        statuses: [status.mark]
+    result: ongoing

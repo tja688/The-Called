@@ -1,0 +1,38 @@
+name: 计时在己方回合开始倒数，归零触发并重置
+cards:
+  - id: card.ta
+    points: 4
+    name: 计时
+    abilities:
+      - trigger: countdown
+        countdown: 2
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 3
+            target: self
+  - id: card.ti
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand:
+      - card: card.ti
+  board:
+    - cell: 4
+      card: card.ta
+      owner: player
+      timer: 1
+      timerMax: 2
+opening:
+  board:
+    - cell: 4
+      card: card.ta
+      points: 7
+      timer: 2
+  result: ongoing

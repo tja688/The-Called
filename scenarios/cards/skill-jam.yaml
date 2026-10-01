@@ -1,0 +1,18 @@
+name: 干扰在初始卡入场后污染三个格
+catalog: content/rules/catalog.yaml
+monster: monster.003
+seed: 1
+deck:
+  - card.c002
+opening:
+  events:
+    - type: card-entered
+      reason: setup
+    - type: cell-polluted
+    - type: cell-polluted
+    - type: cell-polluted
+    - type: card-drawn
+    - type: turn-started
+    - type: intent-revealed
+    - type: draw-skipped
+  result: ongoing

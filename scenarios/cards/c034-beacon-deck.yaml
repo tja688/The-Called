@@ -1,0 +1,25 @@
+name: 燎原使者在牌组多于五张时把复制洗入牌组
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    deck:
+      - card: card.c002
+      - card: card.c002
+      - card: card.c002
+      - card: card.c002
+      - card: card.c002
+      - card: card.c002
+    hand:
+      - card: card.c034
+steps:
+  - answer: play:7:4
+    deckCount: 7
+    board:
+      - cell: 4
+        card: card.c034
+        owner: player
+        points: 4
+    result: ongoing

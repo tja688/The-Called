@@ -1,0 +1,29 @@
+name: 记忆抹除把点数重置为初始点数
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c047
+  board:
+    - cell: 5
+      card: card.c002
+      owner: monster
+      base: 6
+      modifiers:
+        - source: effect
+          amount: 3
+steps:
+  - answer: cast:2
+    pending:
+      type: choose-card
+  - answer: card:1
+    board:
+      - cell: 5
+        card: card.c002
+        owner: monster
+        points: 6
+        modifiers: 0
+    result: ongoing

@@ -1,0 +1,14 @@
+{
+  "name": "com.pcd.kernel",
+  "version": "0.1.0",
+  "displayName": "PCD 规则内核",
+  "description": "The Called 的规则内核，网页与 Unity 共用。不引用 UnityEngine。内容在同仓库的 content 包，不嵌在本程序集里。",
+  "unity": "6000.0",
+  "keywords": [
+    "rules",
+    "kernel"
+  ],
+  "author": {
+    "name": "tja688"
+  }
+}

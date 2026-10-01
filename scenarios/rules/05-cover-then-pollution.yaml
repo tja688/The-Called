@@ -1,0 +1,54 @@
+name: 覆盖落定后再结算污染格
+cards:
+  - id: card.ta01
+    points: 4
+    name: 打出
+  - id: card.ta02
+    points: 2
+    name: 被盖
+monster:
+  id: monster.t01
+  intents:
+    - card.ta02
+position:
+  phase: player-action
+  round: 1
+  polluted: [5]
+  player:
+    hand:
+      - card: card.ta01
+  board:
+    - cell: 5
+      card: card.ta02
+      owner: monster
+steps:
+  - answer: play:2:5
+    events:
+      - type: card-played
+        cell: 5
+      - type: card-removed
+        reason: cover
+        instance: 1
+      - type: points-changed
+        source: cover
+        before: 4
+        after: 2
+      - type: card-entered
+        cell: 5
+        reason: play
+      - type: points-changed
+        source: polluted-cell
+        before: 2
+        after: 1
+      - type: turn-ended
+        owner: player
+      - type: turn-started
+        owner: monster
+    boardExact: true
+    board:
+      - cell: 5
+        owner: player
+        card: card.ta01
+        points: 1
+        modifiers: 2
+    result: ongoing

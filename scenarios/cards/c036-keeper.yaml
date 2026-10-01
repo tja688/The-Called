@@ -1,0 +1,33 @@
+name: 守墓人在占场卡离场时加点
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  opportunities: 1
+  player:
+    hand:
+      - card: card.c021
+  board:
+    - cell: 1
+      card: card.c002
+      owner: monster
+      points: 6
+    - cell: 5
+      card: card.c036
+      owner: player
+      points: 5
+steps:
+  - answer: play:3:1
+    board:
+      - cell: 1
+        card: card.c021
+        owner: player
+        points: 4
+      - cell: 5
+        card: card.c036
+        owner: player
+        points: 7
+    monsterDiscard:
+      - card: card.c002
+    result: ongoing

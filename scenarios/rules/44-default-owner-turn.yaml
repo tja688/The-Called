@@ -1,0 +1,49 @@
+name: 未写阵营的回合开始默认己方
+cards:
+  - id: card.ta
+    points: 3
+    name: 玩家
+    abilities:
+      - trigger: turn-start
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 1
+            target: self
+  - id: card.tb
+    points: 3
+    name: 怪物
+    abilities:
+      - trigger: turn-start
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 1
+            target: self
+  - id: card.ti
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand:
+      - card: card.ti
+  board:
+    - cell: 1
+      card: card.ta
+      owner: player
+    - cell: 2
+      card: card.tb
+      owner: monster
+opening:
+  board:
+    - cell: 1
+      points: 4
+    - cell: 2
+      points: 3
+  result: ongoing

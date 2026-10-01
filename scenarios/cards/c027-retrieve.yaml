@@ -1,0 +1,21 @@
+name: 拾回把弃牌放回手牌
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c027
+    discard:
+      - card: card.c002
+steps:
+  - answer: cast:1
+    pending:
+      type: choose-card
+  - answer: card:2
+    hand:
+      - card: card.c002
+    playerDiscard:
+      - card: card.c027
+    result: ongoing

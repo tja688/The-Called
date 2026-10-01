@@ -1,0 +1,32 @@
+name: 沙漏计时归零后再打出一张手牌
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-turn-start
+  round: 1
+  player:
+    deck:
+      - card: card.c001
+    hand:
+      - card: card.c002
+  board:
+    - cell: 4
+      card: card.c025
+      owner: player
+      timer: 1
+      timerMax: 2
+opening:
+  pending:
+    type: play-card
+steps:
+  - answer: play:3:1
+    board:
+      - cell: 4
+        card: card.c025
+        owner: player
+        timer: 2
+      - cell: 1
+        card: card.c002
+        owner: player
+        points: 6
+    result: ongoing

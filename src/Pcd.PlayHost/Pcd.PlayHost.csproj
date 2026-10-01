@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Pcd.PlayHost</RootNamespace>
+    <Description>DevHost-compatible match API for the browser kernel.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pcd.Kernel\Pcd.Kernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\content\rules\catalog.yaml">
+      <LogicalName>Pcd.PlayHost.RulesCatalog.yaml</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

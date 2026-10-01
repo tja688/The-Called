@@ -10,24 +10,11 @@ export type CardArtConfig = {
   frameVariant?: string
 }
 
-export type PositionCondition = 'edge' | 'adjacent_friendly' | 'adjacent_enemy' | 'center' | 'corner' | 'isolated'
-
-export type CardEffect =
-  | { type: 'none' }
-  | { type: 'self_power_if_position'; condition: PositionCondition; amount: number }
-  | { type: 'adjacent_power_change'; target: 'friendly' | 'enemy'; amount: number }
-  | { type: 'self_power_on_cover'; amount: number }
-  | { type: 'mirror'; affect: 'self' | 'enemy'; amount: number }
-  | { type: 'line'; axis: 'row' | 'col'; target: 'friendly' | 'enemy'; amount: number }
-  | { type: 'edge_tax'; amount: number }
-  | { type: 'self_power_if_count'; side: 'friendly' | 'enemy'; minimum: number; amount: number }
-
 export type CardDefinition = {
   id: string
   name: string
   power: number
   description: string
-  effect: CardEffect
   art: CardArtConfig
   /** Name painted on the geometric back. */
   backLabel?: string
@@ -66,9 +53,7 @@ export type MatchState = {
   turn: Side
   round: number
   status: MatchStatus
-  /** Nine cells are full. Victory is checked at the start of each turn. */
-  finalBattle: boolean
-  /** Final-battle turn start has not been resolved yet. Plays are refused. */
+  /** The kernel is not offering a hand play, so the table refuses card clicks. */
   openingTurn: boolean
   board: BoardCell[]
   player: SideState

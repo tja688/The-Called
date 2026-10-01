@@ -1,0 +1,39 @@
+name: 代价付不起则整条能力不生效
+cards:
+  - id: card.ta
+    points: 4
+    name: 付不起
+    abilities:
+      - cost:
+          sacrifice: 2
+        actions:
+          - kind: change-points
+            amount: 3
+            target: self
+  - id: card.td
+    points: 1
+    name: 仅一张
+  - id: card.ti
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    deck:
+      - card: card.td
+    hand:
+      - card: card.ta
+steps:
+  - answer: play:2:5
+    deckCount: 1
+    board:
+      - cell: 5
+        card: card.ta
+        owner: player
+        points: 4
+    result: ongoing

@@ -1,0 +1,39 @@
+name: 牌组还能抽就不做资源结算
+cards:
+  - id: card.tp
+    points: 1
+    name: 玩家
+  - id: card.tm
+    points: 5
+    name: 怪物
+  - id: card.td
+    points: 1
+    name: 牌组
+monster:
+  id: monster.t01
+  intents:
+    - card.tm
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand: []
+    deck:
+      - card: card.td
+  board:
+    - { cell: 1, card: card.tp, owner: player }
+    - { cell: 2, card: card.tm, owner: monster }
+opening:
+  events:
+    - type: turn-started
+      owner: player
+      round: 1
+    - type: intent-revealed
+      card: card.tm
+    - type: card-drawn
+      card: card.td
+  handCount: 1
+  deckCount: 0
+  pending:
+    actor: player
+  result: ongoing

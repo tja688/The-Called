@@ -27,15 +27,8 @@ jobs:
       - name: Install WebAssembly tools
         run: dotnet workload install wasm-tools
 
-      - name: Checkout rules kernel
-        uses: actions/checkout@v4
-        with:
-          repository: tja688/P_CD
-          ref: 020ea979b59590ada6dacfd504043bd3e3d32a08
-          path: pcd
-
       - name: Publish browser kernel
-        run: dotnet publish pcd/src/Pcd.Wasm/Pcd.Wasm.csproj -c Release
+        run: dotnet publish src/Pcd.Wasm/Pcd.Wasm.csproj -c Release
 
       - uses: actions/setup-node@v4
         with:
@@ -46,7 +39,7 @@ jobs:
       - run: npm run build
 
       - name: Stage browser kernel
-        run: mkdir -p dist/kernel && cp -a pcd/src/Pcd.Wasm/bin/Release/net10.0/browser-wasm/AppBundle/_framework dist/kernel/_framework
+        run: mkdir -p dist/kernel && cp -a src/Pcd.Wasm/bin/Release/net10.0/browser-wasm/AppBundle/_framework dist/kernel/_framework
 
       - uses: actions/upload-pages-artifact@v3
         with:

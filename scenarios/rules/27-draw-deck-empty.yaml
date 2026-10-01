@@ -1,0 +1,29 @@
+name: 牌组为空时不抽牌
+cards:
+  - id: card.th
+    points: 1
+    name: 手牌
+  - id: card.tm
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.tm
+position:
+  phase: player-draw
+  round: 1
+  player:
+    deck: []
+    hand:
+      - card: card.th
+      - card: card.th
+opening:
+  events:
+    - type: draw-skipped
+      reason: deck-empty
+  handCount: 2
+  deckCount: 0
+  pending:
+    actor: player
+  result: ongoing

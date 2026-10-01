@@ -1,0 +1,41 @@
+name: 初始卡可以随机落到空格
+cards:
+  - id: card.ta01
+    points: 1
+    name: 甲
+  - id: card.tm00
+    points: 4
+    name: 驻点
+  - id: card.tm01
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  starting:
+    - card: card.tm00
+      cell: random
+  intents:
+    - card.tm01
+seed: 1
+deck:
+  - card.ta01
+opening:
+  events:
+    - type: card-entered
+      card: card.tm00
+      instance: 2
+      cell: 6
+      reason: setup
+    - type: card-drawn
+      card: card.ta01
+      instance: 1
+    - type: turn-started
+      owner: player
+      round: 1
+    - type: intent-revealed
+      card: card.tm01
+      cell: 0
+    - type: draw-skipped
+      reason: deck-empty
+  handCount: 1
+  result: ongoing

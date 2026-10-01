@@ -1,0 +1,65 @@
+name: 相邻只算正交，镜像格互相对称
+cards:
+  - id: card.ta
+    points: 4
+    name: 扫描
+    abilities:
+      - actions:
+          - kind: add-status
+            status: status.mark
+            target: adjacent-opponents
+  - id: card.tb
+    points: 3
+    name: 镜像
+    abilities:
+      - actions:
+          - kind: copy
+            of: self
+            to: mirror
+  - id: card.te
+    points: 2
+    name: 敌方
+  - id: card.ti
+    points: 1
+    name: 意图
+statuses:
+  - id: status.mark
+    name: 解析标记
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  opportunities: 2
+  player:
+    hand:
+      - card: card.ta
+      - card: card.tb
+  board:
+    - cell: 2
+      card: card.te
+      owner: monster
+    - cell: 1
+      card: card.te
+      owner: monster
+steps:
+  - answer: play:3:5
+    board:
+      - cell: 2
+        statuses: [status.mark]
+      - cell: 1
+        statuses: []
+      - cell: 5
+        card: card.ta
+        owner: player
+  - answer: play:4:3
+    board:
+      - cell: 3
+        card: card.tb
+        owner: player
+      - cell: 7
+        card: card.tb
+        owner: player
+    result: ongoing

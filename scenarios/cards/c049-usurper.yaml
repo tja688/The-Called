@@ -1,0 +1,30 @@
+name: 霸占者使相邻己方卡点数减少
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  opportunities: 2
+  player:
+    hand:
+      - card: card.c049
+  board:
+    - cell: 2
+      card: card.c001
+      owner: player
+      points: 4
+steps:
+  - answer: play:2:5
+    pending:
+      type: choose-card
+  - answer: card:1
+    board:
+      - cell: 2
+        card: card.c001
+        owner: player
+        points: 2
+      - cell: 5
+        card: card.c049
+        owner: player
+        points: 8
+    result: ongoing

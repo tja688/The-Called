@@ -1,0 +1,48 @@
+name: 离场效果按离场前的点数结算
+cards:
+  - id: card.ta
+    points: 4
+    name: 离场
+    abilities:
+      - trigger: leave
+        actions:
+          - kind: gain-resource
+            resource: resource.faith
+            from: captured-points
+  - id: card.tb
+    points: 6
+    name: 移除
+    abilities:
+      - target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: remove
+  - id: card.ti
+    points: 1
+    name: 意图
+resources:
+  - id: resource.faith
+    name: 信仰
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.tb
+  board:
+    - cell: 3
+      card: card.ta
+      owner: monster
+      points: 4
+steps:
+  - answer: play:2:1
+    pending:
+      type: choose-card
+  - answer: card:1
+    monsterFaith: 4
+    result: ongoing

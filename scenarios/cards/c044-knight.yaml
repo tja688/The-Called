@@ -1,0 +1,20 @@
+name: 神圣骑士在信仰足够时获得保护并加点
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    faith: 4
+    hand:
+      - card: card.c044
+steps:
+  - answer: play:1:5
+    playerFaith: 4
+    board:
+      - cell: 5
+        card: card.c044
+        owner: player
+        points: 8
+        statuses: [status.protect]
+    result: ongoing

@@ -1,0 +1,89 @@
+name: 回合开始先普通效果，再清封印，再计时
+cards:
+  - id: card.ta
+    points: 3
+    name: 普通
+    abilities:
+      - trigger: turn-start
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 1
+            target: self
+  - id: card.tb
+    points: 5
+    name: 被封
+  - id: card.tc
+    points: 4
+    name: 计时
+    abilities:
+      - trigger: countdown
+        countdown: 2
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 2
+            target: self
+  - id: card.ti
+    points: 1
+    name: 意图
+statuses:
+  - id: status.seal
+    name: 封印
+    suppresses: true
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand:
+      - card: card.ti
+  board:
+    - cell: 1
+      card: card.ta
+      owner: player
+    - cell: 2
+      card: card.tb
+      owner: player
+      statuses:
+        - id: status.seal
+          round: 0
+    - cell: 3
+      card: card.tc
+      owner: player
+      timer: 1
+      timerMax: 2
+opening:
+  events:
+    - type: turn-started
+    - type: points-changed
+      card: card.ta
+      before: 3
+      after: 4
+    - type: status-changed
+      card: card.tb
+      reason: cleared
+    - type: points-changed
+      card: card.tb
+      before: 0
+      after: 5
+      source: status.seal
+    - type: points-changed
+      card: card.tc
+      before: 4
+      after: 6
+    - type: intent-revealed
+    - type: draw-skipped
+  board:
+    - cell: 1
+      points: 4
+    - cell: 2
+      points: 5
+      statuses: []
+    - cell: 3
+      points: 6
+      timer: 2
+  result: ongoing

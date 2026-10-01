@@ -1,0 +1,44 @@
+name: 主动触发只生效一次且不消耗出牌机会
+cards:
+  - id: card.ta
+    points: 4
+    name: 主动
+    abilities:
+      - trigger: activated
+        actions:
+          - kind: change-points
+            amount: 2
+            target: self
+  - id: card.ti
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  opportunities: 1
+  board:
+    - cell: 5
+      card: card.ta
+      owner: player
+opening:
+  pending:
+    actor: player
+    type: play
+    options:
+      - activate:1
+      - end-turn
+steps:
+  - answer: activate:1
+    opportunities: 1
+    pending:
+      actor: player
+      options:
+        - end-turn
+    board:
+      - cell: 5
+        points: 6
+    result: ongoing

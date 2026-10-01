@@ -1,0 +1,53 @@
+name: 怪物的法术意图不需要落点
+cards:
+  - id: card.th
+    points: 1
+    name: 手里
+  - id: card.ts
+    name: 法术
+monster:
+  id: monster.t01
+  intents:
+    - card.ts
+position:
+  phase: monster-action
+  round: 1
+  intentIndex: 0
+  player:
+    hand:
+      - card: card.th
+    deck: []
+opening:
+  events: []
+  pending:
+    actor: monster
+    type: place-intent
+    options:
+      - cast
+steps:
+  - answer: cast
+    events:
+      - type: card-played
+        card: card.ts
+        cell: 0
+      - type: card-discarded
+        card: card.ts
+        reason: spell
+        zone: discard
+        owner: monster
+      - type: turn-ended
+        owner: monster
+      - type: turn-started
+        owner: player
+        round: 2
+      - type: intent-revealed
+        card: card.ts
+        index: 0
+        cell: 0
+      - type: draw-skipped
+        reason: deck-empty
+    monsterDiscard:
+      - card: card.ts
+    pending:
+      actor: player
+    result: ongoing

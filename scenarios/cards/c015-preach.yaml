@@ -1,0 +1,28 @@
+name: 传教消耗信仰把敌方卡转化为信徒
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    faith: 4
+    hand:
+      - card: card.c015
+  board:
+    - cell: 6
+      card: card.c002
+      owner: monster
+steps:
+  - answer: cast:2
+    pending:
+      type: choose-card
+  - answer: card:1
+    playerFaith: 1
+    board:
+      - cell: 6
+        card: card.c012
+        owner: player
+        points: 3
+    monsterDiscard:
+      - card: card.c002
+    result: ongoing

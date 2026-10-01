@@ -1,0 +1,17 @@
+name: 信徒在己方回合结束获得信仰
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c012
+steps:
+  - answer: play:1:8
+    playerFaith: 1
+    board:
+      - cell: 8
+        card: card.c012
+        owner: player
+    result: ongoing

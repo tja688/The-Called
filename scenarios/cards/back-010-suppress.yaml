@@ -1,0 +1,29 @@
+name: 镇压入场封印一张敌方卡
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c002
+        back: back.010
+  board:
+    - cell: 5
+      card: card.c001
+      owner: monster
+steps:
+  - answer: play:2:1
+    pending:
+      type: choose-card
+  - answer: card:1
+    board:
+      - cell: 5
+        card: card.c001
+        owner: monster
+        statuses: [status.seal]
+      - cell: 1
+        card: card.c002
+        owner: player
+        back: back.010
+    result: ongoing

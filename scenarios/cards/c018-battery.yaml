@@ -1,0 +1,29 @@
+name: 蓄能枪台计时归零后随机打击并添加解析标记
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand:
+      - card: card.c002
+  board:
+    - cell: 1
+      card: card.c018
+      owner: player
+      timer: 1
+      timerMax: 3
+    - cell: 5
+      card: card.c002
+      owner: monster
+opening:
+  board:
+    - cell: 1
+      card: card.c018
+      timer: 3
+    - cell: 5
+      card: card.c002
+      owner: monster
+      points: 3
+      statuses: [status.mark]
+  result: ongoing

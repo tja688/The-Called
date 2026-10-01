@@ -1,0 +1,41 @@
+name: 手牌达到十张时不再抽牌
+cards:
+  - id: card.th
+    points: 1
+    name: 手牌
+  - id: card.td
+    points: 1
+    name: 牌组
+  - id: card.tm
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.tm
+position:
+  phase: player-draw
+  round: 1
+  player:
+    deck:
+      - card: card.td
+    hand:
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+opening:
+  events:
+    - type: draw-skipped
+      reason: hand-full
+  handCount: 10
+  deckCount: 1
+  pending:
+    actor: player
+  result: ongoing

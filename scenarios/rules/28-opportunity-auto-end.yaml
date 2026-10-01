@@ -1,0 +1,36 @@
+name: 出牌机会用完时回合自动结束
+cards:
+  - id: card.tp
+    points: 2
+    name: 玩家
+  - id: card.tm
+    points: 4
+    name: 怪物
+monster:
+  id: monster.t01
+  intents:
+    - card.tm
+position:
+  phase: player-action
+  round: 1
+  opportunities: 1
+  player:
+    hand:
+      - card: card.tp
+  board:
+    - { cell: 5, card: card.tm, owner: monster }
+steps:
+  - answer: play:2:1
+    events:
+      - type: card-played
+        cell: 1
+      - type: card-entered
+        cell: 1
+        owner: player
+      - type: turn-ended
+        owner: player
+      - type: turn-started
+        owner: monster
+    pending:
+      actor: monster
+    result: ongoing

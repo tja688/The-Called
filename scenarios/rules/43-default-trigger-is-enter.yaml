@@ -1,0 +1,31 @@
+name: 未写时机的效果默认入场
+cards:
+  - id: card.ta
+    points: 3
+    name: 默认
+    abilities:
+      - actions:
+          - kind: change-points
+            amount: 2
+            target: self
+  - id: card.ti
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.ta
+steps:
+  - answer: play:1:5
+    board:
+      - cell: 5
+        card: card.ta
+        owner: player
+        points: 5
+    result: ongoing

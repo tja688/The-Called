@@ -1,0 +1,92 @@
+name: 移除时先保护，再返魂，再燃尽
+cards:
+  - id: card.ta
+    points: 2
+    name: 移除
+    abilities:
+      - target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: remove
+  - id: card.tp
+    points: 4
+    name: 有保护
+  - id: card.tr
+    points: 4
+    name: 有返魂
+    abilities:
+      - trigger: static
+        exhaust: true
+  - id: card.te
+    points: 4
+    name: 只燃尽
+    abilities:
+      - trigger: static
+        exhaust: true
+  - id: card.ti
+    points: 1
+    name: 意图
+statuses:
+  - id: status.protect
+    name: 保护
+  - id: status.return
+    name: 返魂
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  opportunities: 3
+  player:
+    hand:
+      - card: card.ta
+      - card: card.ta
+      - card: card.ta
+  board:
+    - cell: 1
+      card: card.tp
+      owner: monster
+      statuses: [status.protect, status.return]
+    - cell: 2
+      card: card.tr
+      owner: monster
+      statuses: [status.return]
+    - cell: 3
+      card: card.te
+      owner: monster
+steps:
+  - answer: play:4:4
+    pending:
+      type: choose-card
+  - answer: card:1
+    board:
+      - cell: 1
+        card: card.tp
+        owner: monster
+        statuses: [status.return]
+      - cell: 4
+        card: card.ta
+        owner: player
+  - answer: play:5:5
+    pending:
+      type: choose-card
+  - answer: card:2
+    hand:
+      - card: card.ta
+    board:
+      - cell: 3
+        card: card.te
+      - cell: 5
+        card: card.ta
+        owner: player
+  - answer: play:6:6
+    pending:
+      type: choose-card
+  - answer: card:3
+    playerVoid: []
+    monsterVoid:
+      - card: card.te
+    result: ongoing

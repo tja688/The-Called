@@ -1,0 +1,51 @@
+name: 法术不占格并直接进入弃牌
+cards:
+  - id: card.ts
+    name: 法术
+  - id: card.tm
+    points: 4
+    name: 怪物
+monster:
+  id: monster.t01
+  intents:
+    - card.tm
+position:
+  phase: player-action
+  round: 1
+  opportunities: 1
+  player:
+    hand:
+      - card: card.ts
+  board:
+    - { cell: 5, card: card.tm, owner: monster }
+opening:
+  events: []
+  pending:
+    actor: player
+    options:
+      - cast:2
+      - end-turn
+steps:
+  - answer: cast:2
+    events:
+      - type: card-played
+        card: card.ts
+        instance: 2
+        cell: 0
+      - type: card-discarded
+        card: card.ts
+        reason: spell
+        zone: discard
+      - type: turn-ended
+        owner: player
+      - type: turn-started
+        owner: monster
+    board:
+      - cell: 5
+        card: card.tm
+        owner: monster
+    playerDiscard:
+      - card: card.ts
+    pending:
+      actor: monster
+    result: ongoing

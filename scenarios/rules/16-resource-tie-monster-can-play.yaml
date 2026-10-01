@@ -1,0 +1,36 @@
+name: 点数相同但怪物还能出牌则继续
+cards:
+  - id: card.tp
+    points: 4
+    name: 玩家
+  - id: card.tm
+    points: 4
+    name: 怪物
+monster:
+  id: monster.t01
+  intents:
+    - card.tm
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand: []
+    deck: []
+  board:
+    - { cell: 1, card: card.tp, owner: player }
+    - { cell: 5, card: card.tm, owner: monster }
+opening:
+  events:
+    - type: turn-started
+      owner: player
+      round: 1
+    - type: intent-revealed
+      card: card.tm
+      cell: 0
+    - type: draw-skipped
+      reason: deck-empty
+  pending:
+    actor: player
+    options:
+      - end-turn
+  result: ongoing

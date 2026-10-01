@@ -1,0 +1,52 @@
+name: 驻场触发结算前重查来源
+cards:
+  - id: card.ta
+    points: 4
+    name: 先手
+    abilities:
+      - trigger: turn-start
+        zone: board
+        target:
+          pick: all
+          side: ally
+          allowSelf: false
+        actions:
+          - kind: remove
+  - id: card.tb
+    points: 5
+    name: 后手
+    abilities:
+      - trigger: turn-start
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 1
+            target: self
+  - id: card.ti
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand:
+      - card: card.ti
+  board:
+    - cell: 1
+      card: card.ta
+      owner: player
+    - cell: 2
+      card: card.tb
+      owner: player
+opening:
+  board:
+    - cell: 1
+      card: card.ta
+      owner: player
+      points: 4
+  boardExact: true
+  result: ongoing

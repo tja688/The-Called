@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Pcd.HostCatalog</RootNamespace>
+    <AssemblyName>Pcd.HostCatalog</AssemblyName>
+    <Description>Host-side reader for content YAML. Not part of the Unity kernel package.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pcd.Kernel\Pcd.Kernel.csproj" />
+  </ItemGroup>
+</Project>

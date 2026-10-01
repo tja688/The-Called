@@ -1,0 +1,23 @@
+name: 食尸鬼献祭后按弃牌堆张数加点数
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    deck:
+      - card: card.c002
+    hand:
+      - card: card.c007
+    discard:
+      - card: card.c004
+      - card: card.c004
+steps:
+  - answer: play:2:3
+    deckCount: 0
+    board:
+      - cell: 3
+        card: card.c007
+        owner: player
+        points: 5
+    result: ongoing

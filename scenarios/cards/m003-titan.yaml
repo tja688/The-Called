@@ -1,0 +1,26 @@
+name: 废燃泰坦在卡牌打入污染格时加点数
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  polluted: [1]
+  player:
+    hand:
+      - card: card.c002
+  board:
+    - cell: 5
+      card: card.m003
+      owner: monster
+steps:
+  - answer: play:2:1
+    board:
+      - cell: 5
+        card: card.m003
+        owner: monster
+        points: 12
+      - cell: 1
+        card: card.c002
+        owner: player
+        points: 5
+    result: ongoing

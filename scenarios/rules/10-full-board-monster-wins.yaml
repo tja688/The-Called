@@ -1,0 +1,36 @@
+name: 满格后怪物回合开始且怪物总点数更高则怪物胜利
+cards:
+  - id: card.ta01
+    points: 3
+    name: 怪物
+  - id: card.ta02
+    points: 2
+    name: 玩家
+monster:
+  id: monster.t01
+  intents:
+    - card.ta01
+position:
+  phase: monster-turn-start
+  round: 1
+  board:
+    - { cell: 1, card: card.ta01, owner: monster }
+    - { cell: 2, card: card.ta01, owner: monster }
+    - { cell: 3, card: card.ta01, owner: monster }
+    - { cell: 4, card: card.ta01, owner: monster }
+    - { cell: 5, card: card.ta01, owner: monster }
+    - { cell: 6, card: card.ta02, owner: player }
+    - { cell: 7, card: card.ta02, owner: player }
+    - { cell: 8, card: card.ta02, owner: player }
+    - { cell: 9, card: card.ta02, owner: player }
+opening:
+  events:
+    - type: turn-started
+      owner: monster
+      round: 1
+    - type: match-ended
+      winner: monster
+      reason: full-board
+  result:
+    winner: monster
+    reason: full-board

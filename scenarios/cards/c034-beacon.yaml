@@ -1,0 +1,22 @@
+name: 燎原使者在牌组不超过五张时抽牌并加点
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    deck:
+      - card: card.c002
+    hand:
+      - card: card.c034
+steps:
+  - answer: play:2:4
+    deckCount: 0
+    hand:
+      - card: card.c002
+    board:
+      - cell: 4
+        card: card.c034
+        owner: player
+        points: 6
+    result: ongoing

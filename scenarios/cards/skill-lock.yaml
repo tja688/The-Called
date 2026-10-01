@@ -1,0 +1,25 @@
+name: 封锁在怪物回合开始随机封印一张玩家卡
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: monster-turn-start
+  round: 1
+  injections:
+    - host: monster
+      ability: ability.lock
+  player:
+    hand:
+      - card: card.c002
+  board:
+    - cell: 4
+      card: card.c002
+      owner: player
+opening:
+  board:
+    - cell: 4
+      card: card.c002
+      points: 0
+      statuses: [status.seal]
+  totals:
+    player: 0
+  result: ongoing

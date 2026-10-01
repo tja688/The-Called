@@ -1,0 +1,56 @@
+name: 封印不提供点数且效果不生效，施加者下回合开始清除
+cards:
+  - id: card.ta
+    points: 4
+    name: 施加
+    abilities:
+      - target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: add-status
+            status: status.seal
+  - id: card.tb
+    points: 6
+    name: 被封
+    abilities:
+      - trigger: turn-start
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 1
+            target: self
+  - id: card.ti
+    points: 1
+    name: 意图
+statuses:
+  - id: status.seal
+    name: 封印
+    suppresses: true
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.ta
+  board:
+    - cell: 5
+      card: card.tb
+      owner: monster
+steps:
+  - answer: play:2:1
+    pending:
+      type: choose-card
+  - answer: card:1
+    totals:
+      monster: 0
+    board:
+      - cell: 5
+        card: card.tb
+        points: 0
+        statuses: [status.seal]
+    result: ongoing

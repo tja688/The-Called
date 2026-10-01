@@ -1,0 +1,40 @@
+name: 献祭移除牌组，信仰可以获得和消耗
+cards:
+  - id: card.ta
+    points: 2
+    name: 献祭
+    abilities:
+      - cost:
+          sacrifice: 1
+        actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 3
+  - id: card.td
+    points: 1
+    name: 祭品
+  - id: card.ti
+    points: 1
+    name: 意图
+resources:
+  - id: resource.faith
+    name: 信仰
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    deck:
+      - card: card.td
+    hand:
+      - card: card.ta
+steps:
+  - answer: play:2:4
+    deckCount: 0
+    playerFaith: 3
+    playerDiscard:
+      - card: card.td
+    result: ongoing

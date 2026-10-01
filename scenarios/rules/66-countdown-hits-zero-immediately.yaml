@@ -1,0 +1,46 @@
+name: 计时被减到零时立即触发并重置
+cards:
+  - id: card.ta
+    points: 5
+    name: 计时
+    abilities:
+      - trigger: countdown
+        countdown: 2
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 1
+            target: self
+  - id: card.tb
+    name: 催动
+    abilities:
+      - actions:
+          - kind: tick-countdowns
+            amount: 1
+  - id: card.ti
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.tb
+  board:
+    - cell: 6
+      card: card.ta
+      owner: player
+      timer: 1
+      timerMax: 2
+steps:
+  - answer: cast:2
+    board:
+      - cell: 6
+        card: card.ta
+        points: 6
+        timer: 2
+    result: ongoing

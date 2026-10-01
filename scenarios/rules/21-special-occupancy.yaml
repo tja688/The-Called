@@ -1,0 +1,31 @@
+name: 特殊结算总点数相同时比占格
+cards:
+  - id: card.tp
+    points: 2
+    name: 玩家
+  - id: card.tm
+    points: 4
+    name: 怪物
+monster:
+  id: monster.t01
+  intents:
+    - card.tm
+position:
+  phase: player-action
+  round: 1
+  board:
+    - { cell: 1, card: card.tp, owner: player }
+    - { cell: 2, card: card.tp, owner: player }
+    - { cell: 3, card: card.tm, owner: monster }
+steps:
+  - special: true
+    events:
+      - type: match-ended
+        winner: player
+        reason: special
+    totals:
+      player: 4
+      monster: 4
+    result:
+      winner: player
+      reason: special

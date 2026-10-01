@@ -1,0 +1,37 @@
+name: 未写阵营时可以选择自己
+cards:
+  - id: card.ta
+    points: 3
+    name: 自己
+    abilities:
+      - target:
+          pick: one
+        actions:
+          - kind: change-points
+            amount: 1
+  - id: card.ti
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.ta
+steps:
+  - answer: play:1:4
+    pending:
+      type: choose-card
+      options:
+        - card:1
+  - answer: card:1
+    board:
+      - cell: 4
+        card: card.ta
+        owner: player
+        points: 4
+    result: ongoing

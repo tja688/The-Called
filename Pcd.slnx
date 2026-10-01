@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Pcd.DevHost/Pcd.DevHost.csproj" />
+    <Project Path="src/Pcd.HostCatalog/Pcd.HostCatalog.csproj" />
+    <Project Path="src/Pcd.Kernel.Tests/Pcd.Kernel.Tests.csproj" />
+    <Project Path="src/Pcd.Kernel/Pcd.Kernel.csproj" />
+    <Project Path="src/Pcd.PlayHost/Pcd.PlayHost.csproj" />
+    <Project Path="src/Pcd.ProbeHost/Pcd.ProbeHost.csproj" />
+    <Project Path="src/Pcd.Sim/Pcd.Sim.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,21 @@
+name: 复生者按弃牌堆占场卡加点
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c035
+    discard:
+      - card: card.c002
+      - card: card.c003
+      - card: card.c001
+steps:
+  - answer: play:1:4
+    board:
+      - cell: 4
+        card: card.c035
+        owner: player
+        points: 6
+    result: ongoing

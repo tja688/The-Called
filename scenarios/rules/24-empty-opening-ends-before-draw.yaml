@@ -1,0 +1,31 @@
+name: 开局没有可用牌时在抽牌和亮意图之前结算
+cards:
+  - id: card.tm00
+    points: 4
+    name: 驻点
+  - id: card.tm01
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  starting:
+    - card: card.tm00
+      cell: 5
+  intents:
+    - card.tm01
+seed: 1
+deck: []
+opening:
+  events:
+    - type: card-entered
+      cell: 5
+      reason: setup
+    - type: turn-started
+      owner: player
+      round: 1
+    - type: match-ended
+      winner: monster
+      reason: resource
+  result:
+    winner: monster
+    reason: resource

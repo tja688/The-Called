@@ -1,0 +1,68 @@
+name: 转化移除目标后在原格生成，保护会使转化失败
+cards:
+  - id: card.ta
+    name: 转化
+    abilities:
+      - target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: transform
+            card: card.tb
+  - id: card.tb
+    points: 3
+    name: 产物
+  - id: card.tc
+    points: 5
+    name: 目标
+  - id: card.td
+    points: 5
+    name: 有保护
+  - id: card.ti
+    points: 1
+    name: 意图
+statuses:
+  - id: status.protect
+    name: 保护
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  opportunities: 2
+  player:
+    hand:
+      - card: card.ta
+      - card: card.ta
+  board:
+    - cell: 3
+      card: card.tc
+      owner: monster
+    - cell: 7
+      card: card.td
+      owner: monster
+      statuses: [status.protect]
+steps:
+  - answer: cast:3
+    pending:
+      type: choose-card
+  - answer: card:1
+    board:
+      - cell: 3
+        card: card.tb
+        owner: player
+        points: 3
+    monsterDiscard:
+      - card: card.tc
+  - answer: cast:4
+    pending:
+      type: choose-card
+  - answer: card:2
+    board:
+      - cell: 7
+        card: card.td
+        owner: monster
+        statuses: []
+    result: ongoing

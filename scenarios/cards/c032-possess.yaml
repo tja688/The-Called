@@ -1,0 +1,24 @@
+name: 夺舍者打到己方格并获得其点数
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c032
+  board:
+    - cell: 5
+      card: card.c012
+      owner: player
+      points: 3
+steps:
+  - answer: play:2:5
+    board:
+      - cell: 5
+        card: card.c032
+        owner: player
+        points: 7
+    playerDiscard:
+      - card: card.c012
+    result: ongoing

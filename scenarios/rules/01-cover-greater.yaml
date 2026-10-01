@@ -1,0 +1,94 @@
+name: 点数更高时覆盖并扣点
+cards:
+  - id: card.ta01
+    points: 5
+    name: 高点
+  - id: card.ta02
+    points: 3
+    name: 低点
+  - id: card.ta03
+    points: 5
+    name: 旁观
+monster:
+  id: monster.t01
+  intents:
+    - card.ta02
+position:
+  phase: player-action
+  round: 1
+  opportunities: 1
+  intentIndex: 0
+  player:
+    hand:
+      - card: card.ta01
+  board:
+    - cell: 1
+      card: card.ta03
+      owner: monster
+      base: 5
+      modifiers:
+        - source: cover
+          amount: -2
+    - cell: 5
+      card: card.ta02
+      owner: monster
+steps:
+  - answer: play:3:5
+    events:
+      - type: card-played
+        card: card.ta01
+        instance: 3
+        owner: player
+        cell: 5
+      - type: card-removed
+        card: card.ta02
+        instance: 2
+        owner: monster
+        cell: 5
+        zone: discard
+        reason: cover
+      - type: points-changed
+        card: card.ta01
+        instance: 3
+        source: cover
+        before: 5
+        after: 2
+        cause:
+          - player-action
+          - decision:1
+      - type: card-entered
+        card: card.ta01
+        instance: 3
+        owner: player
+        cell: 5
+        reason: play
+      - type: turn-ended
+        owner: player
+        cause:
+          - player-turn-end
+      - type: turn-started
+        owner: monster
+        round: 1
+        cause:
+          - monster-turn-start
+    pending:
+      actor: monster
+      type: place-intent
+    result: ongoing
+    boardExact: true
+    board:
+      - cell: 1
+        card: card.ta03
+        owner: monster
+        points: 3
+        modifiers: 1
+      - cell: 5
+        card: card.ta01
+        owner: player
+        points: 2
+        modifiers: 1
+    monsterDiscard:
+      - card: card.ta02
+        points: 3
+        modifiers: 0
+    handCount: 0

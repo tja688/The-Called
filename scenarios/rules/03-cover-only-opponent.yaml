@@ -1,0 +1,42 @@
+name: 只能覆盖点数不超过自己的对方卡
+cards:
+  - id: card.ta01
+    points: 2
+    name: 出手
+  - id: card.ta02
+    points: 1
+    name: 己方
+  - id: card.ta03
+    points: 5
+    name: 高墙
+monster:
+  id: monster.t01
+  intents:
+    - card.ta03
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.ta01
+  board:
+    - cell: 1
+      card: card.ta02
+      owner: player
+    - cell: 2
+      card: card.ta03
+      owner: monster
+opening:
+  events: []
+  pending:
+    actor: player
+    type: play
+    options:
+      - play:3:3
+      - play:3:4
+      - play:3:5
+      - play:3:6
+      - play:3:7
+      - play:3:8
+      - play:3:9
+      - end-turn

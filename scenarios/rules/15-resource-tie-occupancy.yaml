@@ -1,0 +1,51 @@
+name: 点数相同且怪物无牌可出时按占格分胜负
+cards:
+  - id: card.tp
+    points: 2
+    name: 玩家
+  - id: card.t1
+    points: 1
+    name: 一
+  - id: card.t2
+    points: 2
+    name: 二
+  - id: card.t3
+    points: 3
+    name: 三
+  - id: card.t4
+    points: 4
+    name: 四
+monster:
+  id: monster.t01
+  intents:
+    - card.t1
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand: []
+    deck: []
+  board:
+    - { cell: 1, card: card.tp, owner: player }
+    - { cell: 2, card: card.tp, owner: player }
+    - { cell: 3, card: card.tp, owner: player }
+    - { cell: 4, card: card.tp, owner: player }
+    - { cell: 5, card: card.tp, owner: player }
+    - { cell: 6, card: card.t1, owner: monster }
+    - { cell: 7, card: card.t2, owner: monster }
+    - { cell: 8, card: card.t3, owner: monster }
+    - { cell: 9, card: card.t4, owner: monster }
+opening:
+  events:
+    - type: turn-started
+      owner: player
+      round: 1
+    - type: match-ended
+      winner: player
+      reason: resource
+  totals:
+    player: 10
+    monster: 10
+  result:
+    winner: player
+    reason: resource

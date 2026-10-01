@@ -1,0 +1,46 @@
+name: 点数归零立即移除且弃牌后保留卡背
+cards:
+  - id: card.ta01
+    points: 1
+    name: 薄卡
+  - id: card.ta02
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ta02
+position:
+  phase: player-action
+  round: 1
+  polluted: [1]
+  player:
+    hand:
+      - card: card.ta01
+        back: back.001
+steps:
+  - answer: play:1:1
+    events:
+      - type: card-played
+        cell: 1
+      - type: card-entered
+        cell: 1
+      - type: points-changed
+        source: polluted-cell
+        before: 1
+        after: 0
+      - type: card-removed
+        reason: points-zero
+        zone: discard
+      - type: turn-ended
+        owner: player
+      - type: turn-started
+        owner: monster
+    boardExact: true
+    board: []
+    playerDiscard:
+      - card: card.ta01
+        points: 1
+        modifiers: 0
+        back: back.001
+    result: ongoing

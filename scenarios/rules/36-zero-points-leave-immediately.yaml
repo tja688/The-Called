@@ -1,0 +1,42 @@
+name: 当前点数为 0 的占场卡入场后立即移除
+cards:
+  - id: card.ta01
+    points: 0
+    name: 归零
+  - id: card.ta02
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ta02
+position:
+  phase: player-action
+  round: 1
+  polluted: [1]
+  player:
+    hand:
+      - card: card.ta01
+steps:
+  - answer: play:1:1
+    events:
+      - type: card-played
+        cell: 1
+        points: 0
+      - type: card-entered
+        cell: 1
+        points: 0
+      - type: card-removed
+        reason: points-zero
+        zone: discard
+      - type: turn-ended
+        owner: player
+      - type: turn-started
+        owner: monster
+    boardExact: true
+    board: []
+    playerDiscard:
+      - card: card.ta01
+        points: 0
+        modifiers: 0
+    result: ongoing

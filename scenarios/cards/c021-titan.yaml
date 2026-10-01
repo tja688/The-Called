@@ -1,0 +1,17 @@
+name: 泰坦级机械没有效果
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c021
+steps:
+  - answer: play:1:9
+    board:
+      - cell: 9
+        card: card.c021
+        owner: player
+        points: 10
+    result: ongoing

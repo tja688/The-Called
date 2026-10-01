@@ -1,0 +1,1018 @@
+keywords:
+  - id: keyword.enter
+    name: 入场
+  - id: keyword.adjacent
+    name: 相邻
+  - id: keyword.pollution
+    name: 污染格
+  - id: keyword.seal
+    name: 封印
+  - id: keyword.mirror
+    name: 镜像
+  - id: keyword.board
+    name: 驻场
+  - id: keyword.leave
+    name: 离场
+  - id: keyword.remove
+    name: 移除
+  - id: keyword.protect
+    name: 保护
+  - id: keyword.return
+    name: 返魂
+  - id: keyword.sacrifice
+    name: 献祭
+  - id: keyword.exhaust
+    name: 燃尽
+  - id: keyword.activated
+    name: 主动触发
+  - id: keyword.countdown
+    name: 计时
+  - id: keyword.swift
+    name: 迅捷
+  - id: keyword.transform
+    name: 转化
+  - id: keyword.copy
+    name: 复制
+statuses:
+  - id: status.mark
+    name: 解析标记
+  - id: status.seal
+    name: 封印
+    suppresses: true
+  - id: status.protect
+    name: 保护
+  - id: status.return
+    name: 返魂
+resources:
+  - id: resource.faith
+    name: 信仰
+abilities:
+  - id: ability.jam
+    trigger: level-start
+    actions:
+      - kind: pollute
+        count: 3
+  - id: ability.lock
+    trigger: turn-start
+    side: monster
+    actions:
+      - kind: seal-random
+        side: opponent
+  - id: ability.overload
+    trigger: countdown
+    countdown: 2
+    zone: board
+    actions:
+      - kind: change-points
+        amount: -2
+        target: self
+backs:
+  - id: back.001
+    name: 白板
+    load: 0
+  - id: back.002
+    name: 厚实
+    load: 1
+    points: 1
+  - id: back.003
+    name: 洞见
+    load: 1
+    abilities:
+      - actions:
+          - kind: draw
+            count: 1
+  - id: back.004
+    name: 守护
+    load: 1
+    abilities:
+      - actions:
+          - kind: add-status
+            status: status.protect
+            target: self
+  - id: back.005
+    name: 巨大
+    load: 2
+    cap: 5
+    points: 2
+  - id: back.006
+    name: 回生
+    load: 2
+    cap: 5
+    abilities:
+      - actions:
+          - kind: add-status
+            status: status.return
+            target: self
+  - id: back.007
+    name: 虔信
+    load: 2
+    cap: 5
+    abilities:
+      - actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 4
+  - id: back.008
+    name: 疾行
+    load: 3
+    cap: 2
+    abilities:
+      - actions:
+          - kind: play-extra
+  - id: back.009
+    name: 拾遗
+    load: 3
+    cap: 2
+    abilities:
+      - target:
+          pick: one
+          side: ally
+          zone: discard
+        actions:
+          - kind: take-hand
+  - id: back.010
+    name: 镇压
+    load: 3
+    cap: 2
+    abilities:
+      - target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: add-status
+            status: status.seal
+  - id: back.011
+    name: 磅礴
+    load: 4
+    cap: 1
+    points: 4
+  - id: back.012
+    name: 生长
+    load: 4
+    cap: 1
+    abilities:
+      - trigger: turn-end
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 2
+            target: self
+  - id: back.013
+    name: 通才
+    load: 4
+    cap: 1
+    abilities:
+      - actions:
+          - kind: draw
+            count: 1
+          - kind: play-extra
+cards:
+  - id: card.c001
+    name: 弱点采样机
+    school: science
+    points: 4
+    load: 4
+    rarity: white
+    abilities:
+      - target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: add-status
+            status: status.mark
+  - id: card.c002
+    name: 巨型机械
+    school: science
+    points: 6
+    load: 6
+    rarity: white
+  - id: card.c003
+    name: 瞄准打击
+    school: science
+    load: 4
+    rarity: white
+    abilities:
+      - target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: branch-status
+            status: status.mark
+            present:
+              - kind: clear-status
+                status: status.mark
+              - kind: change-points
+                amount: -5
+            absent:
+              - kind: change-points
+                amount: -3
+  - id: card.c004
+    name: 引诱机
+    school: science
+    points: 5
+    load: 4
+    rarity: white
+    abilities:
+      - actions:
+          - kind: add-status
+            status: status.mark
+            target: self
+  - id: card.c005
+    name: 解析机
+    school: science
+    points: 3
+    load: 6
+    rarity: white
+    abilities:
+      - trigger: continuous
+        zone: board
+        actions:
+          - kind: continuous-points
+            amount: 2
+            eachStatus: status.mark
+  - id: card.c006
+    name: 投影仪
+    school: mystery
+    points: 4
+    load: 5
+    rarity: white
+    abilities:
+      - cost:
+          sacrifice: 2
+        actions:
+          - kind: copy
+            of: self
+            to: mirror
+            link: true
+  - id: card.c007
+    name: 食尸鬼
+    school: mystery
+    points: 2
+    load: 5
+    rarity: white
+    abilities:
+      - cost:
+          sacrifice: 1
+        actions:
+          - kind: change-points
+            from: discard-count
+            target: self
+  - id: card.c008
+    name: 永生雕像
+    school: mystery
+    points: 3
+    load: 5
+    rarity: white
+    abilities:
+      - actions:
+          - kind: copy
+            of: self
+            to: deck
+      - trigger: leave
+        actions:
+          - kind: copy
+            of: self
+            to: deck
+  - id: card.c009
+    name: 牺牲图腾
+    school: mystery
+    points: 6
+    load: 5
+    rarity: white
+    abilities:
+      - cost:
+          sacrifice: 1
+  - id: card.c010
+    name: 招魂
+    school: mystery
+    load: 4
+    rarity: white
+    abilities:
+      - actions:
+          - kind: shuffle-discard
+            count: 3
+  - id: card.c011
+    name: 虔诚信徒
+    school: religion
+    points: 4
+    load: 5
+    rarity: white
+    abilities:
+      - actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 2
+  - id: card.c012
+    name: 信徒
+    school: religion
+    points: 3
+    load: 4
+    rarity: white
+    abilities:
+      - trigger: turn-end
+        zone: board
+        actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 1
+  - id: card.c013
+    name: 牧师
+    school: religion
+    points: 4
+    load: 5
+    rarity: white
+    abilities:
+      - cost:
+          resource: resource.faith
+          amount: 4
+        target:
+          pick: one
+          side: ally
+        actions:
+          - kind: add-status
+            status: status.return
+          - kind: change-points
+            amount: 2
+  - id: card.c014
+    name: 神的雕像
+    school: religion
+    points: 6
+    load: 7
+    rarity: white
+    abilities:
+      - trigger: turn-start
+        zone: board
+        cost:
+          resource: resource.faith
+          amount: 1
+        actions:
+          - kind: change-points
+            amount: 1
+            target: self
+  - id: card.c015
+    name: 传教
+    school: religion
+    load: 9
+    rarity: white
+    abilities:
+      - cost:
+          resource: resource.faith
+          amount: 4
+        target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: transform
+            card: card.c012
+  - id: card.c016
+    name: 科学研究器
+    school: science
+    points: 4
+    load: 5
+    rarity: white
+    abilities:
+      - trigger: turn-end
+        zone: board
+        target:
+          pick: one
+          side: opponent
+          adjacent: true
+        actions:
+          - kind: add-status
+            status: status.mark
+  - id: card.c017
+    name: 攻击炮台
+    school: science
+    points: 4
+    load: 6
+    rarity: blue
+    abilities:
+      - trigger: turn-end
+        zone: board
+        target:
+          pick: one
+          side: opponent
+          status: status.mark
+        actions:
+          - kind: change-points
+            amount: -2
+  - id: card.c018
+    name: 蓄能枪台
+    school: science
+    points: 5
+    load: 5
+    rarity: blue
+    abilities:
+      - trigger: countdown
+        countdown: 3
+        zone: board
+        target:
+          pick: random
+          side: opponent
+        actions:
+          - kind: change-points
+            amount: -3
+          - kind: add-status
+            status: status.mark
+  - id: card.c019
+    name: AI学习机
+    school: science
+    points: 5
+    load: 6
+    rarity: white
+    abilities:
+      - trigger: countdown
+        countdown: 3
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 3
+            target: self
+  - id: card.c020
+    name: 数据过量
+    school: science
+    load: 4
+    rarity: white
+    abilities:
+      - target:
+          pick: one
+          side: any
+        actions:
+          - kind: change-points
+            amount: 6
+          - kind: grant
+            ability: ability.overload
+  - id: card.c021
+    name: 泰坦级机械
+    school: science
+    points: 10
+    load: 8
+    rarity: blue
+  - id: card.c022
+    name: 扫描仪
+    school: science
+    points: 4
+    load: 6
+    rarity: white
+    abilities:
+      - actions:
+          - kind: add-status
+            status: status.mark
+            target: adjacent-opponents
+  - id: card.c023
+    name: 弱点攻击器
+    school: science
+    points: 4
+    load: 5
+    rarity: white
+    abilities:
+      - target:
+          pick: one
+          side: opponent
+          status: status.mark
+        actions:
+          - kind: change-points
+            amount: -2
+  - id: card.c024
+    name: 极速标记
+    school: science
+    load: 4
+    rarity: blue
+    abilities:
+      - trigger: static
+        swift: true
+      - target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: add-status
+            status: status.mark
+          - kind: draw
+            count: 1
+  - id: card.c025
+    name: 沙漏
+    school: science
+    points: 5
+    load: 8
+    rarity: gold
+    abilities:
+      - trigger: countdown
+        countdown: 2
+        zone: board
+        actions:
+          - kind: play-extra
+  - id: card.c026
+    name: 显微镜
+    school: science
+    points: 4
+    load: 4
+    rarity: gold
+    abilities:
+      - trigger: enemy-adjacent-play
+        zone: board
+        actions:
+          - kind: add-status
+            status: status.mark
+            target: context
+  - id: card.c027
+    name: 拾回
+    school: mystery
+    load: 4
+    rarity: white
+    abilities:
+      - target:
+          pick: one
+          side: ally
+          zone: discard
+        actions:
+          - kind: take-hand
+  - id: card.c028
+    name: 墓碑
+    school: mystery
+    points: 2
+    load: 4
+    rarity: white
+    abilities:
+      - trigger: leave
+        actions:
+          - kind: draw
+            count: 1
+  - id: card.c029
+    name: 水晶球
+    school: mystery
+    points: 3
+    load: 5
+    rarity: white
+    abilities:
+      - actions:
+          - kind: look-top
+            count: 3
+  - id: card.c030
+    name: 吞噬者
+    school: mystery
+    points: 3
+    load: 5
+    rarity: white
+    abilities:
+      - cost:
+          sacrifice: 2
+        actions:
+          - kind: change-points
+            amount: 3
+            target: self
+  - id: card.c031
+    name: 冥界来援
+    school: mystery
+    load: 6
+    rarity: white
+    abilities:
+      - target:
+          pick: one
+          kind: unit
+        actions:
+          - kind: change-points
+            from: discard-count
+            amount: 2
+  - id: card.c032
+    name: 夺舍者
+    school: mystery
+    points: 4
+    load: 6
+    rarity: white
+    abilities:
+      - trigger: static
+        coverAlly: true
+        absorb: true
+  - id: card.c033
+    name: 分影
+    school: mystery
+    load: 6
+    rarity: blue
+    abilities:
+      - target:
+          pick: one
+          side: ally
+          kind: unit
+        actions:
+          - kind: copy
+            of: chosen
+            to: empty
+  - id: card.c034
+    name: 燎原使者
+    school: mystery
+    points: 4
+    load: 6
+    rarity: blue
+    abilities:
+      - actions:
+          - kind: branch-deck
+            count: 5
+            present:
+              - kind: draw
+                count: 1
+              - kind: change-points
+                amount: 2
+                target: self
+            absent:
+              - kind: copy
+                of: self
+                to: deck
+  - id: card.c035
+    name: 复生者
+    school: mystery
+    points: 4
+    load: 7
+    rarity: blue
+    abilities:
+      - actions:
+          - kind: change-points
+            from: discard-units
+            amount: 1
+            target: self
+      - trigger: leave
+        actions:
+          - kind: shuffle-self
+  - id: card.c036
+    name: 守墓人
+    school: mystery
+    points: 5
+    load: 8
+    rarity: blue
+    abilities:
+      - trigger: unit-leave
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 2
+            target: self
+  - id: card.c037
+    name: 祭坛
+    school: mystery
+    points: 5
+    load: 8
+    rarity: gold
+    abilities:
+      - cost:
+          sacrifice: 3
+        actions:
+          - kind: double-points
+            target: self
+  - id: card.c038
+    name: 圣徽
+    school: religion
+    points: 4
+    load: 4
+    rarity: white
+    abilities:
+      - cost:
+          resource: resource.faith
+          amount: 2
+        actions:
+          - kind: add-status
+            status: status.protect
+            target: self
+  - id: card.c039
+    name: 赐福
+    school: religion
+    load: 4
+    rarity: white
+    abilities:
+      - cost:
+          resource: resource.faith
+          amount: 2
+        target:
+          pick: one
+          side: ally
+        actions:
+          - kind: change-points
+            amount: 3
+  - id: card.c040
+    name: 教会仆从
+    school: religion
+    points: 4
+    load: 5
+    rarity: white
+    abilities:
+      - trigger: turn-end
+        zone: board
+        actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 1
+  - id: card.c041
+    name: 忏悔者
+    school: religion
+    points: 4
+    load: 5
+    rarity: gold
+    abilities:
+      - cost:
+          resource: resource.faith
+          all: true
+        actions:
+          - kind: change-points
+            from: spent
+            amount: 1
+            target: self
+  - id: card.c042
+    name: 审判官
+    school: religion
+    points: 2
+    load: 6
+    rarity: white
+    abilities:
+      - cost:
+          resource: resource.faith
+          amount: 4
+        target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: remove
+  - id: card.c043
+    name: 唱诗班
+    school: religion
+    points: 6
+    load: 8
+    rarity: white
+    abilities:
+      - trigger: countdown
+        countdown: 2
+        zone: board
+        actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 3
+  - id: card.c044
+    name: 神圣骑士
+    school: religion
+    points: 5
+    load: 8
+    rarity: blue
+    abilities:
+      - actions:
+          - kind: branch-resource
+            resource: resource.faith
+            count: 4
+            present:
+              - kind: add-status
+                status: status.protect
+                target: self
+              - kind: change-points
+                amount: 3
+                target: self
+            absent:
+              - kind: gain-resource
+                resource: resource.faith
+                amount: 1
+  - id: card.c045
+    name: 思考
+    school: neutral
+    load: 4
+    rarity: blue
+    abilities:
+      - actions:
+          - kind: draw
+            count: 2
+  - id: card.c046
+    name: 庇护
+    school: neutral
+    load: 4
+    rarity: blue
+    abilities:
+      - target:
+          pick: one
+        actions:
+          - kind: add-status
+            status: status.protect
+          - kind: draw
+            count: 1
+  - id: card.c047
+    name: 记忆抹除
+    school: neutral
+    load: 4
+    rarity: gold
+    abilities:
+      - target:
+          pick: one
+        actions:
+          - kind: reset-points
+  - id: card.c048
+    name: 掩体
+    school: neutral
+    points: 3
+    load: 5
+    rarity: white
+    abilities:
+      - actions:
+          - kind: branch-adjacent
+            present:
+              - kind: change-points
+                amount: 2
+                target: self
+  - id: card.c049
+    name: 霸占者
+    school: neutral
+    points: 8
+    load: 5
+    rarity: white
+    abilities:
+      - target:
+          pick: one
+          side: ally
+          adjacent: true
+          allowSelf: false
+        actions:
+          - kind: change-points
+            amount: -2
+  - id: card.c050
+    name: 学徒
+    school: neutral
+    points: 4
+    load: 5
+    rarity: gold
+    abilities:
+      - trigger: ally-play
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 1
+            target: self
+  - id: card.c051
+    name: 诗人
+    school: neutral
+    points: 3
+    load: 7
+    rarity: blue
+    abilities:
+      - actions:
+          - kind: draw
+            count: 1
+          - kind: play-extra
+  - id: card.m001
+    name: 失控机械
+    points: 5
+    abilities:
+      - trigger: enemy-adjacent-play
+        zone: board
+        actions:
+          - kind: add-status
+            status: status.mark
+            target: context
+  - id: card.m002
+    name: 活数据库
+    points: 8
+    abilities:
+      - trigger: enemy-spell
+        zone: board
+        actions:
+          - kind: tick-countdowns
+            amount: 1
+  - id: card.m003
+    name: 废燃泰坦
+    points: 10
+    abilities:
+      - trigger: polluted-play
+        zone: board
+        actions:
+          - kind: change-points
+            amount: 2
+            target: self
+monsters:
+  - id: monster.001
+    name: 失控机械
+    information: public
+    intentMode: on-turn
+    personality:
+      points: 6
+      occupancy: 6
+      coverRisk: 4
+      fullBoard: 5
+      resource: 3
+      intent: 2
+      depth: 2
+      samples: 1
+      nodes: 32
+    starting:
+      - card: card.m001
+        cell: 5
+    intents:
+      - card.c016
+      - card.c003
+      - card.c017
+  - id: monster.002
+    name: 活数据库
+    information: public
+    intentMode: on-turn
+    personality:
+      points: 4
+      occupancy: 9
+      coverRisk: 3
+      fullBoard: 4
+      resource: 3
+      intent: 2
+      depth: 2
+      samples: 1
+      nodes: 32
+    starting:
+      - card: card.m002
+        cell: random
+    intents:
+      - card.c018
+      - card.c019
+      - card.c020
+  - id: monster.003
+    name: 废燃泰坦
+    information: public
+    intentMode: on-turn
+    personality:
+      points: 8
+      occupancy: 3
+      coverRisk: 8
+      fullBoard: 4
+      resource: 2
+      intent: 2
+      depth: 2
+      samples: 1
+      nodes: 32
+    skills:
+      - ability.jam
+    starting:
+      - card: card.m003
+        cell: random
+    intents:
+      - card.c022
+      - card.c021
+      - card.c023
+decks:
+  - id: deck.science
+    name: 科学
+    cards:
+      - card.c001
+      - card.c001
+      - card.c001
+      - card.c002
+      - card.c002
+      - card.c002
+      - card.c003
+      - card.c003
+      - card.c003
+      - card.c004
+      - card.c004
+      - card.c004
+      - card.c005
+      - card.c005
+      - card.c005
+  - id: deck.mystery
+    name: 神秘
+    cards:
+      - card.c006
+      - card.c006
+      - card.c006
+      - card.c007
+      - card.c007
+      - card.c007
+      - card.c008
+      - card.c008
+      - card.c008
+      - card.c009
+      - card.c009
+      - card.c009
+      - card.c010
+      - card.c010
+      - card.c010
+  - id: deck.religion
+    name: 宗教
+    cards:
+      - card.c011
+      - card.c011
+      - card.c011
+      - card.c012
+      - card.c012
+      - card.c012
+      - card.c013
+      - card.c013
+      - card.c013
+      - card.c014
+      - card.c014
+      - card.c014
+      - card.c015
+      - card.c015
+      - card.c015
+defaultMonster: monster.001
+defaultDeck:
+  - card.c001
+  - card.c001
+  - card.c001
+  - card.c002
+  - card.c002
+  - card.c002
+  - card.c003
+  - card.c003
+  - card.c003
+  - card.c004
+  - card.c004
+  - card.c004
+  - card.c005
+  - card.c005
+  - card.c005

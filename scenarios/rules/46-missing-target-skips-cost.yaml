@@ -1,0 +1,41 @@
+name: 目标不存在时不消耗代价
+cards:
+  - id: card.ta
+    points: 4
+    name: 落空
+    abilities:
+      - cost:
+          sacrifice: 1
+        target:
+          pick: one
+          side: opponent
+        actions:
+          - kind: change-points
+            amount: -1
+  - id: card.td
+    points: 1
+    name: 牌组
+  - id: card.ti
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    deck:
+      - card: card.td
+    hand:
+      - card: card.ta
+steps:
+  - answer: play:2:5
+    deckCount: 1
+    board:
+      - cell: 5
+        card: card.ta
+        owner: player
+        points: 4
+    result: ongoing

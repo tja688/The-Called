@@ -1,0 +1,19 @@
+name: 虔信入场获得四点信仰
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c002
+        back: back.007
+steps:
+  - answer: play:1:4
+    playerFaith: 4
+    board:
+      - cell: 4
+        card: card.c002
+        owner: player
+        back: back.007
+    result: ongoing

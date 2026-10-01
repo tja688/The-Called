@@ -6,3 +6,12 @@ coverage/
 .env*
 !.env.example
 readme/*.mp4
+
+# .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+TestResults/
+artifacts/

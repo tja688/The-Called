@@ -1,0 +1,57 @@
+name: 点数相同时同归于尽且打出卡仍入场
+cards:
+  - id: card.ta01
+    points: 3
+    name: 均势
+  - id: card.ta02
+    points: 3
+    name: 守格
+monster:
+  id: monster.t01
+  intents:
+    - card.ta02
+position:
+  phase: player-action
+  round: 1
+  opportunities: 1
+  polluted: [5]
+  player:
+    hand:
+      - card: card.ta01
+  board:
+    - cell: 5
+      card: card.ta02
+      owner: monster
+steps:
+  - answer: play:2:5
+    events:
+      - type: card-played
+        instance: 2
+        cell: 5
+      - type: card-removed
+        instance: 1
+        reason: tie-cover
+        cell: 5
+      - type: card-entered
+        instance: 2
+        cell: 5
+        reason: play
+      - type: card-removed
+        instance: 2
+        reason: tie-cover
+        cell: 5
+      - type: turn-ended
+        owner: player
+      - type: turn-started
+        owner: monster
+    result: ongoing
+    boardExact: true
+    board: []
+    playerDiscard:
+      - card: card.ta01
+        points: 3
+        modifiers: 0
+    monsterDiscard:
+      - card: card.ta02
+        points: 3
+        modifiers: 0

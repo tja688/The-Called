@@ -1,0 +1,28 @@
+name: 冥界来援按弃牌数量给占场卡加点
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c031
+    discard:
+      - card: card.c001
+      - card: card.c004
+  board:
+    - cell: 5
+      card: card.c002
+      owner: player
+      points: 6
+steps:
+  - answer: cast:2
+    pending:
+      type: choose-card
+  - answer: card:1
+    board:
+      - cell: 5
+        card: card.c002
+        owner: player
+        points: 10
+    result: ongoing

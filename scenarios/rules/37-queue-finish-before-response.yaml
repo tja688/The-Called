@@ -1,0 +1,69 @@
+name: 先结算完当前效果，再响应离场
+cards:
+  - id: card.ta
+    points: 4
+    name: 打出
+    abilities:
+      - target:
+          pick: all
+          side: opponent
+        actions:
+          - kind: remove
+      - actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 1
+  - id: card.tb
+    points: 3
+    name: 离场
+    abilities:
+      - trigger: leave
+        actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 1
+  - id: card.ti
+    name: 意图
+resources:
+  - id: resource.faith
+    name: 信仰
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.ta
+  board:
+    - cell: 5
+      card: card.tb
+      owner: monster
+steps:
+  - answer: play:2:1
+    events:
+      - type: card-played
+        card: card.ta
+      - type: card-entered
+        card: card.ta
+        cell: 1
+      - type: card-removed
+        card: card.tb
+        reason: effect
+      - type: resource-changed
+        owner: player
+        before: 0
+        after: 1
+      - type: resource-changed
+        owner: monster
+        before: 0
+        after: 1
+      - type: turn-ended
+        owner: player
+      - type: turn-started
+        owner: monster
+    playerFaith: 1
+    monsterFaith: 1
+    result: ongoing

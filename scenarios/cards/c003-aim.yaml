@@ -1,0 +1,26 @@
+name: 瞄准打击对解析标记改为清除并减五点
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c003
+  board:
+    - cell: 4
+      card: card.c002
+      owner: monster
+      statuses: [status.mark]
+steps:
+  - answer: cast:2
+    pending:
+      type: choose-card
+  - answer: card:1
+    board:
+      - cell: 4
+        card: card.c002
+        owner: monster
+        points: 1
+        statuses: []
+    result: ongoing

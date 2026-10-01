@@ -1,0 +1,24 @@
+name: 掩体在有相邻敌方卡时加点
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c048
+  board:
+    - cell: 5
+      card: card.c002
+      owner: monster
+steps:
+  - answer: play:2:2
+    board:
+      - cell: 2
+        card: card.c048
+        owner: player
+        points: 5
+      - cell: 5
+        card: card.c002
+        owner: monster
+    result: ongoing

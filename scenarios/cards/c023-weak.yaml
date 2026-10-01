@@ -1,0 +1,25 @@
+name: 弱点攻击器打击带解析标记的敌方卡
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c023
+  board:
+    - cell: 8
+      card: card.c002
+      owner: monster
+      statuses: [status.mark]
+steps:
+  - answer: play:2:1
+    pending:
+      type: choose-card
+  - answer: card:1
+    board:
+      - cell: 8
+        card: card.c002
+        points: 4
+        statuses: [status.mark]
+    result: ongoing

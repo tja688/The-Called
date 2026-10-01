@@ -1,0 +1,25 @@
+name: 投影仪献祭后在镜像格复制
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    deck:
+      - card: card.c002
+      - card: card.c002
+    hand:
+      - card: card.c006
+steps:
+  - answer: play:3:1
+    deckCount: 0
+    board:
+      - cell: 1
+        card: card.c006
+        owner: player
+        points: 4
+      - cell: 9
+        card: card.c006
+        owner: player
+        points: 4
+    result: ongoing

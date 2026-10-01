@@ -1,0 +1,62 @@
+name: 要加入已满手牌时改为进入弃牌堆
+cards:
+  - id: card.ta
+    points: 3
+    name: 返魂者
+  - id: card.tb
+    points: 4
+    name: 动手
+    abilities:
+      - trigger: turn-start
+        zone: board
+        target:
+          pick: all
+          side: ally
+          allowSelf: false
+        actions:
+          - kind: remove
+  - id: card.th
+    points: 1
+    name: 手牌
+  - id: card.ti
+    points: 1
+    name: 意图
+statuses:
+  - id: status.return
+    name: 返魂
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand:
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+      - card: card.th
+  board:
+    - cell: 1
+      card: card.ta
+      owner: player
+      statuses: [status.return]
+    - cell: 2
+      card: card.tb
+      owner: player
+opening:
+  handCount: 10
+  playerDiscard:
+    - card: card.ta
+  board:
+    - cell: 2
+      card: card.tb
+      owner: player
+  result: ongoing

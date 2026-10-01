@@ -1,0 +1,21 @@
+name: AI学习机计时归零后自己加三点
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand:
+      - card: card.c002
+  board:
+    - cell: 7
+      card: card.c019
+      owner: player
+      timer: 1
+      timerMax: 3
+opening:
+  board:
+    - cell: 7
+      points: 8
+      timer: 3
+  result: ongoing

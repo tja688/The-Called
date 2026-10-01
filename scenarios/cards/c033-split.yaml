@@ -1,0 +1,32 @@
+name: 分影在空格生成己方占场卡的复制
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c033
+  board:
+    - cell: 5
+      card: card.c002
+      owner: player
+      points: 6
+steps:
+  - answer: cast:2
+    pending:
+      type: choose-card
+  - answer: card:1
+    pending:
+      type: choose-cell
+  - answer: cell:1
+    board:
+      - cell: 1
+        card: card.c002
+        owner: player
+        points: 6
+      - cell: 5
+        card: card.c002
+        owner: player
+        points: 6
+    result: ongoing

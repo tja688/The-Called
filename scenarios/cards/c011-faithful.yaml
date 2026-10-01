@@ -1,0 +1,17 @@
+name: 虔诚信徒入场获得两点信仰
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c011
+steps:
+  - answer: play:1:2
+    playerFaith: 2
+    board:
+      - cell: 2
+        card: card.c011
+        owner: player
+    result: ongoing

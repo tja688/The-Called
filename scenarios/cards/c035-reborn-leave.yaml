@@ -1,0 +1,28 @@
+name: 复生者离场时洗回牌组
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: monster-action
+  round: 1
+  intentIndex: 0
+  board:
+    - cell: 1
+      card: card.c035
+      owner: player
+      points: 4
+opening:
+  pending:
+    actor: monster
+    type: place-intent
+steps:
+  - answer: cell:1
+    hand:
+      - card: card.c035
+    deckCount: 0
+    playerDiscard: []
+    monsterDiscard:
+      - card: card.c016
+    board:
+      - cell: 1
+        empty: true
+    result: ongoing

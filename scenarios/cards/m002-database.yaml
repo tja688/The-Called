@@ -1,0 +1,39 @@
+name: 活数据库在敌方法术打出时让己方计时减一
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c003
+  board:
+    - cell: 1
+      card: card.c021
+      owner: player
+    - cell: 5
+      card: card.m002
+      owner: monster
+    - cell: 6
+      card: card.c018
+      owner: monster
+      timer: 1
+      timerMax: 3
+steps:
+  - answer: cast:4
+    pending:
+      type: choose-card
+  - answer: card:2
+    board:
+      - cell: 1
+        card: card.c021
+        owner: player
+        points: 7
+        statuses: [status.mark]
+      - cell: 5
+        card: card.m002
+        points: 5
+      - cell: 6
+        card: card.c018
+        timer: 2
+    result: ongoing

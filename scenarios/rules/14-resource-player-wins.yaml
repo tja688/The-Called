@@ -1,0 +1,31 @@
+name: 玩家无牌可用且玩家总点数更高则玩家胜利
+cards:
+  - id: card.tp
+    points: 5
+    name: 玩家
+  - id: card.tm
+    points: 2
+    name: 怪物
+monster:
+  id: monster.t01
+  intents:
+    - card.tm
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand: []
+    deck: []
+  board:
+    - { cell: 1, card: card.tp, owner: player }
+    - { cell: 2, card: card.tm, owner: monster }
+opening:
+  events:
+    - type: turn-started
+      owner: player
+    - type: match-ended
+      winner: player
+      reason: resource
+  result:
+    winner: player
+    reason: resource

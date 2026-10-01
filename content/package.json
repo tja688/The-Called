@@ -1,0 +1,14 @@
+{
+  "name": "com.pcd.content",
+  "version": "0.1.0",
+  "displayName": "PCD 内容目录",
+  "description": "网页端与 Unity 端共用的卡牌、卡背、怪物与牌组数据。由各端读出 YAML 文本后交给内核解析，不编进内核程序集。",
+  "unity": "6000.0",
+  "keywords": [
+    "content",
+    "catalog"
+  ],
+  "author": {
+    "name": "tja688"
+  }
+}

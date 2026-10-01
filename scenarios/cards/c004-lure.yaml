@@ -1,0 +1,18 @@
+name: 引诱机入场给自己解析标记
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c004
+steps:
+  - answer: play:1:5
+    board:
+      - cell: 5
+        card: card.c004
+        owner: player
+        points: 5
+        statuses: [status.mark]
+    result: ongoing

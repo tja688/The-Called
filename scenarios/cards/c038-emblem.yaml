@@ -1,0 +1,20 @@
+name: 圣徽消耗信仰获得保护
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    faith: 2
+    hand:
+      - card: card.c038
+steps:
+  - answer: play:1:4
+    playerFaith: 0
+    board:
+      - cell: 4
+        card: card.c038
+        owner: player
+        points: 4
+        statuses: [status.protect]
+    result: ongoing

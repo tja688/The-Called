@@ -1,0 +1,42 @@
+name: 复制带上当时的状态，之后互不影响
+cards:
+  - id: card.ta
+    points: 4
+    name: 原件
+    abilities:
+      - actions:
+          - kind: copy
+            of: self
+            to: mirror
+  - id: card.ti
+    points: 1
+    name: 意图
+statuses:
+  - id: status.mark
+    name: 解析标记
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.ta
+        statuses: [status.mark]
+        points: 2
+steps:
+  - answer: play:1:1
+    board:
+      - cell: 1
+        card: card.ta
+        owner: player
+        points: 2
+        statuses: [status.mark]
+      - cell: 9
+        card: card.ta
+        owner: player
+        points: 2
+        statuses: [status.mark]
+    result: ongoing

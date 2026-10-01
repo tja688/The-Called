@@ -1,0 +1,21 @@
+name: 神的雕像在己方回合开始消耗信仰并加点数
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    faith: 1
+    hand:
+      - card: card.c002
+  board:
+    - cell: 9
+      card: card.c014
+      owner: player
+opening:
+  playerFaith: 0
+  board:
+    - cell: 9
+      card: card.c014
+      points: 7
+  result: ongoing

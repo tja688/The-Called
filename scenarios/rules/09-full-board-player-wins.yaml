@@ -1,0 +1,42 @@
+name: 满格后自己的回合开始且总点数更高则胜利
+cards:
+  - id: card.ta01
+    points: 3
+    name: 玩家
+  - id: card.ta02
+    points: 2
+    name: 怪物
+  - id: card.ta03
+    points: 1
+    name: 手里
+monster:
+  id: monster.t01
+  intents:
+    - card.ta02
+position:
+  phase: player-turn-start
+  round: 0
+  player:
+    hand:
+      - card: card.ta03
+  board:
+    - { cell: 1, card: card.ta01, owner: player }
+    - { cell: 2, card: card.ta01, owner: player }
+    - { cell: 3, card: card.ta01, owner: player }
+    - { cell: 4, card: card.ta01, owner: player }
+    - { cell: 5, card: card.ta01, owner: player }
+    - { cell: 6, card: card.ta02, owner: monster }
+    - { cell: 7, card: card.ta02, owner: monster }
+    - { cell: 8, card: card.ta02, owner: monster }
+    - { cell: 9, card: card.ta02, owner: monster }
+opening:
+  events:
+    - type: turn-started
+      owner: player
+      round: 1
+    - type: match-ended
+      winner: player
+      reason: full-board
+  result:
+    winner: player
+    reason: full-board

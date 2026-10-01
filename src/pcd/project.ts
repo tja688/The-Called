@@ -81,7 +81,6 @@ export function projectBattle(input: {
     name: '牌库',
     power: 0,
     description: '',
-    effect: { type: 'none' },
     art: playerArt,
   })
   const match: MatchState = {
@@ -90,7 +89,6 @@ export function projectBattle(input: {
     turn: input.turn,
     round: view.round,
     status: winner ? 'finished' : 'playing',
-    finalBattle: false,
     openingTurn: false,
     board,
     player: {
@@ -159,7 +157,6 @@ function faceFor(
     name: info?.name ?? cardId,
     power,
     description: info?.text ?? '',
-    effect: { type: 'none' },
     art: owner === 'player' ? playerArt : monsterArt,
     backLabel: backName,
   }

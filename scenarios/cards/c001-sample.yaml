@@ -1,0 +1,30 @@
+name: 弱点采样机给敌方卡解析标记
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c001
+  board:
+    - cell: 5
+      card: card.c002
+      owner: monster
+steps:
+  - answer: play:2:1
+    pending:
+      type: choose-card
+      options:
+        - card:1
+  - answer: card:1
+    board:
+      - cell: 1
+        card: card.c001
+        owner: player
+        points: 4
+      - cell: 5
+        card: card.c002
+        owner: monster
+        statuses: [status.mark]
+    result: ongoing

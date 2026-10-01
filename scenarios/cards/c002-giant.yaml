@@ -1,0 +1,18 @@
+name: 巨型机械没有效果，打出后留在格上
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c002
+steps:
+  - answer: play:1:4
+    board:
+      - cell: 4
+        card: card.c002
+        owner: player
+        points: 6
+        modifiers: 0
+    result: ongoing

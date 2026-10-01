@@ -1,0 +1,65 @@
+name: 打出的入场当场结算，生成的入场进入队列
+cards:
+  - id: card.ta
+    points: 4
+    name: 打出
+    abilities:
+      - actions:
+          - kind: copy
+            of: self
+            to: mirror
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 1
+  - id: card.tw
+    points: 3
+    name: 旁观
+    abilities:
+      - trigger: other-enter
+        zone: board
+        actions:
+          - kind: gain-resource
+            resource: resource.faith
+            amount: 10
+  - id: card.ti
+    points: 1
+    name: 意图
+resources:
+  - id: resource.faith
+    name: 信仰
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.ta
+  board:
+    - cell: 2
+      card: card.tw
+      owner: player
+steps:
+  - answer: play:2:1
+    events:
+      - type: card-played
+      - type: card-entered
+        card: card.ta
+        reason: play
+      - type: card-entered
+        reason: copy
+      - type: resource-changed
+        before: 0
+        after: 1
+      - type: resource-changed
+        before: 1
+        after: 11
+      - type: resource-changed
+        before: 11
+        after: 21
+      - type: turn-ended
+      - type: turn-started
+    playerFaith: 21
+    result: ongoing

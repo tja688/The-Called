@@ -1,0 +1,19 @@
+name: 厚实把基础点数加一
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  board:
+    - cell: 5
+      card: card.c002
+      owner: player
+      back: back.002
+opening:
+  board:
+    - cell: 5
+      card: card.c002
+      owner: player
+      points: 7
+      back: back.002
+  result: ongoing

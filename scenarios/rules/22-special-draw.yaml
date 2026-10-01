@@ -1,0 +1,24 @@
+name: 特殊结算点数和占格都相同则平局
+cards:
+  - id: card.tx
+    points: 3
+    name: 同点
+monster:
+  id: monster.t01
+  intents:
+    - card.tx
+position:
+  phase: player-action
+  round: 1
+  board:
+    - { cell: 1, card: card.tx, owner: player }
+    - { cell: 9, card: card.tx, owner: monster }
+steps:
+  - special: true
+    events:
+      - type: match-ended
+        winner: draw
+        reason: special
+    result:
+      winner: draw
+      reason: special

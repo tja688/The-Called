@@ -1,0 +1,24 @@
+name: 失控机械给相邻打出的敌方卡解析标记
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c002
+  board:
+    - cell: 5
+      card: card.m001
+      owner: monster
+steps:
+  - answer: play:2:2
+    board:
+      - cell: 5
+        card: card.m001
+        owner: monster
+      - cell: 2
+        card: card.c002
+        owner: player
+        statuses: [status.mark]
+    result: ongoing

@@ -1,0 +1,49 @@
+name: 从手牌打到棋盘时保留点数增减
+cards:
+  - id: card.ta01
+    points: 6
+    name: 带伤
+  - id: card.ta02
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ta02
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.ta01
+        base: 6
+        modifiers:
+          - source: cover
+            amount: -2
+  board:
+    - cell: 5
+      card: card.ta02
+      owner: monster
+steps:
+  - answer: play:2:1
+    events:
+      - type: card-played
+        cell: 1
+      - type: card-entered
+        cell: 1
+        owner: player
+      - type: turn-ended
+        owner: player
+      - type: turn-started
+        owner: monster
+    board:
+      - cell: 1
+        card: card.ta01
+        owner: player
+        points: 4
+        modifiers: 1
+      - cell: 5
+        card: card.ta02
+        owner: monster
+        points: 1
+    result: ongoing

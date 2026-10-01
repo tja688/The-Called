@@ -1,0 +1,19 @@
+name: 忏悔者把全部信仰换成点数
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    faith: 3
+    hand:
+      - card: card.c041
+steps:
+  - answer: play:1:4
+    playerFaith: 0
+    board:
+      - cell: 4
+        card: card.c041
+        owner: player
+        points: 7
+    result: ongoing

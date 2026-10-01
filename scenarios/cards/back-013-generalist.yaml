@@ -1,0 +1,28 @@
+name: 通才入场抽牌并再打出一张
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  opportunities: 1
+  player:
+    deck:
+      - card: card.c001
+    hand:
+      - card: card.c002
+        back: back.013
+steps:
+  - answer: play:2:4
+    pending:
+      type: play-card
+  - answer: play:1:1
+    deckCount: 0
+    board:
+      - cell: 4
+        card: card.c002
+        owner: player
+        back: back.013
+      - cell: 1
+        card: card.c001
+        owner: player
+    result: ongoing

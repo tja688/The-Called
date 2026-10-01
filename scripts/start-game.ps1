@@ -1,15 +1,12 @@
-﻿# 同时拉起 P_CD 的 DevHost 和本仓库的 Vite。浏览器只访问 Vite，/api 由 Vite 转到 DevHost。
+﻿# 同时拉起本仓库的 DevHost 和 Vite。浏览器只访问 Vite，/api 由 Vite 转到 DevHost。
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $repo = Split-Path -Parent $PSScriptRoot
-$pcdRoot = if ($env:PCD_ROOT) { $env:PCD_ROOT } else { Join-Path (Split-Path -Parent $repo) 'P_CD' }
-$pcdRoot = [System.IO.Path]::GetFullPath($pcdRoot)
-$project = Join-Path $pcdRoot 'src\Pcd.DevHost\Pcd.DevHost.csproj'
+$project = Join-Path $repo 'src\Pcd.DevHost\Pcd.DevHost.csproj'
 
 if (-not (Test-Path -LiteralPath $project)) {
-    Write-Host "[错误] 找不到 P_CD 内核：$pcdRoot"
-    Write-Host "默认找本仓库上一级的 P_CD。要换位置，先设置环境变量 PCD_ROOT。"
+    Write-Host "[错误] 找不到本仓库的对局服务：$project"
     exit 1
 }
 
@@ -51,7 +48,7 @@ function Find-CatalogPort([int] $Start, [int] $Tries) {
 function Start-DevHost([int] $Port, [switch] $NoBuild) {
     $arguments = @('run', '--project', $project, '--urls', "http://127.0.0.1:$Port")
     if ($NoBuild) { $arguments += '--no-build' }
-    return Start-Process -FilePath 'dotnet' -ArgumentList $arguments -WorkingDirectory $pcdRoot -PassThru -NoNewWindow
+    return Start-Process -FilePath 'dotnet' -ArgumentList $arguments -WorkingDirectory $repo -PassThru -NoNewWindow
 }
 
 function Wait-DevHost([System.Diagnostics.Process] $Process, [int] $Port) {
@@ -83,7 +80,7 @@ if ($hostPort) {
 $webPort = Find-Port 4174 50
 $env:PCD_API = "http://127.0.0.1:$hostPort"
 Set-Location -LiteralPath $repo
-Write-Host "[内核] $pcdRoot"
+Write-Host "[内核] $repo"
 Write-Host "[网页] http://localhost:$webPort/"
 
 try {

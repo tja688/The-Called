@@ -1,0 +1,43 @@
+name: 未写区域时只能选择场上的卡
+cards:
+  - id: card.ta
+    points: 3
+    name: 选择
+    abilities:
+      - target:
+          pick: one
+        actions:
+          - kind: change-points
+            amount: 1
+  - id: card.tb
+    points: 4
+    name: 场上
+  - id: card.th
+    points: 2
+    name: 手牌
+  - id: card.ti
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.ta
+      - card: card.th
+  board:
+    - cell: 5
+      card: card.tb
+      owner: monster
+steps:
+  - answer: play:2:1
+    pending:
+      type: choose-card
+      options:
+        - card:2
+        - card:1
+  result: ongoing

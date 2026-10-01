@@ -1,0 +1,19 @@
+name: 招魂把弃牌堆的卡洗回牌组
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.c010
+    discard:
+      - card: card.c006
+      - card: card.c007
+      - card: card.c008
+steps:
+  - answer: cast:1
+    deckCount: 3
+    playerDiscard:
+      - card: card.c010
+    result: ongoing

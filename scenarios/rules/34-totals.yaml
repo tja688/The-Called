@@ -1,0 +1,33 @@
+name: 总点数是该方战场卡当前点数之和
+cards:
+  - id: card.t2
+    points: 2
+    name: 二
+  - id: card.t3
+    points: 3
+    name: 三
+  - id: card.t4
+    points: 4
+    name: 四
+monster:
+  id: monster.t01
+  intents:
+    - card.t2
+position:
+  phase: player-action
+  round: 1
+  player:
+    hand:
+      - card: card.t2
+  board:
+    - { cell: 1, card: card.t2, owner: player }
+    - { cell: 2, card: card.t3, owner: player }
+    - { cell: 9, card: card.t4, owner: monster }
+opening:
+  events: []
+  totals:
+    player: 5
+    monster: 4
+  pending:
+    actor: player
+  result: ongoing

@@ -1,0 +1,27 @@
+name: 显微镜给相邻打出的敌方卡解析标记
+catalog: content/rules/catalog.yaml
+monster: monster.001
+position:
+  phase: monster-action
+  round: 1
+  intentIndex: 0
+  board:
+    - cell: 5
+      card: card.c026
+      owner: player
+      points: 4
+opening:
+  pending:
+    actor: monster
+    type: place-intent
+steps:
+  - answer: cell:2
+    board:
+      - cell: 5
+        card: card.c026
+        owner: player
+      - cell: 2
+        card: card.c016
+        owner: monster
+        statuses: [status.mark]
+    result: ongoing

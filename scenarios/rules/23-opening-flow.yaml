@@ -1,0 +1,98 @@
+name: 开局抽四张后第一回合再抽一张并亮出意图
+cards:
+  - id: card.ta01
+    points: 1
+    name: 甲
+  - id: card.ta02
+    points: 1
+    name: 乙
+  - id: card.ta03
+    points: 1
+    name: 丙
+  - id: card.ta04
+    points: 1
+    name: 丁
+  - id: card.ta05
+    points: 1
+    name: 戊
+  - id: card.ta06
+    points: 1
+    name: 己
+  - id: card.tm00
+    points: 4
+    name: 驻点
+  - id: card.tm01
+    points: 2
+    name: 意图
+monster:
+  id: monster.t01
+  starting:
+    - card: card.tm00
+      cell: 5
+  intents:
+    - card.tm01
+seed: 1
+deck:
+  - card.ta01
+  - card.ta02
+  - card.ta03
+  - card.ta04
+  - card.ta05
+  - card.ta06
+opening:
+  events:
+    - type: card-entered
+      card: card.tm00
+      instance: 7
+      cell: 5
+      reason: setup
+      cause:
+        - level-start
+    - type: card-drawn
+      card: card.ta01
+      instance: 1
+      cause:
+        - level-start
+    - type: card-drawn
+      card: card.ta02
+      instance: 2
+      cause:
+        - level-start
+    - type: card-drawn
+      card: card.ta04
+      instance: 4
+      cause:
+        - level-start
+    - type: card-drawn
+      card: card.ta03
+      instance: 3
+      cause:
+        - level-start
+    - type: turn-started
+      owner: player
+      round: 1
+      cause:
+        - player-turn-start
+    - type: intent-revealed
+      card: card.tm01
+      index: 0
+      cell: 0
+      cause:
+        - reveal-intent
+    - type: card-drawn
+      card: card.ta05
+      instance: 5
+      cause:
+        - player-draw
+  hand:
+    - card.ta01
+    - card.ta02
+    - card.ta04
+    - card.ta03
+    - card.ta05
+  handCount: 5
+  deckCount: 1
+  pending:
+    actor: player
+    type: play
+  result: ongoing

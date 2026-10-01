@@ -1,0 +1,54 @@
+name: 可以覆盖己方，具名脚本能抽牌
+cards:
+  - id: card.ta
+    points: 5
+    name: 夺位
+    abilities:
+      - trigger: static
+        coverAlly: true
+  - id: card.tb
+    points: 2
+    name: 己方
+  - id: card.tc
+    points: 3
+    name: 脚本
+    abilities:
+      - script: draw-one
+  - id: card.td
+    points: 1
+    name: 牌组
+  - id: card.ti
+    points: 1
+    name: 意图
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  opportunities: 2
+  player:
+    deck:
+      - card: card.td
+    hand:
+      - card: card.ta
+      - card: card.tc
+  board:
+    - cell: 5
+      card: card.tb
+      owner: player
+steps:
+  - answer: play:3:5
+    board:
+      - cell: 5
+        card: card.ta
+        owner: player
+        points: 3
+    playerDiscard:
+      - card: card.tb
+  - answer: play:4:1
+    hand:
+      - card: card.td
+    deckCount: 0
+    result: ongoing

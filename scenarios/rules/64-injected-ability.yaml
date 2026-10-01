@@ -1,0 +1,35 @@
+name: 对局配置可以注入能力
+cards:
+  - id: card.ta
+    points: 2
+    name: 白板
+  - id: card.ti
+    points: 1
+    name: 意图
+abilities:
+  - id: ability.gift
+    trigger: turn-start
+    side: player
+    actions:
+      - kind: gain-resource
+        resource: resource.faith
+        amount: 2
+resources:
+  - id: resource.faith
+    name: 信仰
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-turn-start
+  round: 0
+  injections:
+    - host: player
+      ability: ability.gift
+  player:
+    hand:
+      - card: card.ta
+opening:
+  playerFaith: 2
+  result: ongoing

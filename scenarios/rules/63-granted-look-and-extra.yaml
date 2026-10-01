@@ -1,0 +1,87 @@
+name: 授予的计时、看牌选牌和再打出一张
+cards:
+  - id: card.ta
+    points: 4
+    name: 授予
+    abilities:
+      - target:
+          pick: one
+        actions:
+          - kind: grant
+            ability: ability.down
+  - id: card.tb
+    points: 5
+    name: 看牌
+    abilities:
+      - actions:
+          - kind: look-top
+            count: 2
+  - id: card.tc
+    points: 3
+    name: 再打
+    abilities:
+      - actions:
+          - kind: play-extra
+  - id: card.td
+    points: 2
+    name: 顶一
+  - id: card.te
+    points: 2
+    name: 顶二
+  - id: card.tf
+    points: 4
+    name: 再出
+  - id: card.ti
+    points: 1
+    name: 意图
+abilities:
+  - id: ability.down
+    trigger: countdown
+    countdown: 1
+    zone: board
+    actions:
+      - kind: change-points
+        amount: -2
+        target: self
+monster:
+  id: monster.t01
+  intents:
+    - card.ti
+position:
+  phase: player-action
+  round: 1
+  opportunities: 3
+  player:
+    deck:
+      - card: card.td
+      - card: card.te
+    hand:
+      - card: card.ta
+      - card: card.tb
+      - card: card.tc
+      - card: card.tf
+  board:
+    - cell: 8
+      card: card.ta
+      owner: player
+steps:
+  - answer: play:4:1
+    pending:
+      type: choose-card
+  - answer: card:1
+  - answer: play:5:2
+    pending:
+      type: choose-card
+  - answer: card:2
+    deckCount: 0
+    playerDiscard:
+      - card: card.te
+  - answer: play:6:3
+    pending:
+      type: play-card
+  - answer: play:7:4
+    board:
+      - cell: 4
+        card: card.tf
+        owner: player
+    result: ongoing
