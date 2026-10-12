@@ -14,7 +14,7 @@ https://github.com/tja688/The-Called.git?path=/src/Pcd.Kernel#<标签>
 https://github.com/tja688/The-Called.git?path=/content#<标签>
 ```
 
-网页表现层是仓库里已有的三维矢量场景。开发时由本仓库的 `Pcd.DevHost` 提供 `/api`；发布到网页时把 `Pcd.Wasm` 编进页面，浏览器里跑同一份内核。局外的地图和构筑仍留在网页，进对局时只提交对局配置。
+网页表现层由本仓库的 TypeScript 负责。2026-10-12 的 [ADR-0013](0013-pixel-2d-web-presentation.md) 将原三维场景改为二维俯视表现。开发时由本仓库的 `Pcd.DevHost` 提供 `/api`；发布到网页时把 `Pcd.Wasm` 编进页面，浏览器里跑同一份内核。局外的地图和构筑仍留在网页，进对局时只提交对局配置。
 
 ## Considered Options
 

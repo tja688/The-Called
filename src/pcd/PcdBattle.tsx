@@ -1,488 +1,1042 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { playCameraTransition } from '../audio/gameAudio'
-import { GameCanvas } from '../scene/GameCanvas'
-import { HAND_VIEW_RETURN_MS } from '../scene/camera/cameraMotion'
-import { clearPresentedCards } from '../config/cardCatalog'
-import type { CameraMode, CellId } from '../game/types'
-import { useBattleCue } from '../game/v6/view/battle/cue'
-import { boardTargetIds, canPlayFromHand, nextCameraMode, type PendingView } from './battleView'
-import { monsterScene, sceneCell, type RuleCell } from './cells'
-import '../game/v6/view/battle/battle.css'
-import { useGameStore } from '../stores/gameStore'
-import { useInteractionStore } from '../stores/interactionStore'
-import { usePresentationStore } from '../stores/presentationStore'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { playCardFlip, playCardSelect } from '../audio/gameAudio'
+import { Atmosphere } from '../visual/Atmosphere'
+import { CardFace, SCHOOL_NAMES } from '../visual/CardFace'
+import { InkBurst } from '../visual/InkBurst'
+import { Sigil } from '../visual/Sigil'
 import { answerMatch } from './client'
-import { readInstance } from './ids'
-import { looseCardOptions, optionForAnswer, optionForCast, optionForEndTurn, optionForPlay } from './options'
-import { beatsFor, type Beat } from './playback'
-import { projectBattle, publishProjection } from './project'
-import type { PcdAdvance, PcdCatalog, PcdOption, PcdView } from './types'
-import './pcd.css'
+import {
+    cellChoice,
+    cellEffects,
+    otherChoices,
+    type CellEffect,
+} from './flatChoices'
+import { beatsFor } from './playback'
+import type {
+    PcdAdvance,
+    PcdCatalog,
+    PcdOption,
+    PcdView,
+    PcdViewCard,
+} from './types'
+import './battle2d.css'
 
-type Score = {
-  player: number
-  monster: number
-  intent: string | null
-  deck: number
-  playerDiscard: number
-  monsterDiscard: number
-  pools: Array<{ owner: string; id: string; name: string; amount: number }>
-  round: number
-}
+type Drag = { card: PcdViewCard; x: number; y: number }
+type Pile = 'matchDeck' | 'playerDiscard' | 'monsterDiscard' | 'playerVoid'
+type EffectFrame = { id: number; effects: CellEffect[] }
 
 export function PcdBattle({
-  catalog,
-  advance: opening,
-  monsterId,
-  onDone,
-}: {
-  catalog: PcdCatalog
-  advance: PcdAdvance
-  monsterId: string
-  onDone: () => void
-}) {
-  const monsterName = catalog.monsters.find((monster) => monster.id === monsterId)?.name ?? monsterId
-  const stage = monsterScene(monsterId, monsterName)
-  const [advance, setAdvance] = useState(opening)
-  const [ready, setReady] = useState(false)
-  const [score, setScore] = useState<Score | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const optionsRef = useRef<PcdOption[]>([])
-  const snapshotRef = useRef(opening.snapshot)
-  const busyRef = useRef(true)
-  const landRef = useRef<(() => void) | null>(null)
-  const submitRef = useRef<(optionId: string) => void>(() => {})
-  const shownRef = useRef<PcdView | null>(null)
-  const liveRef = useRef(true)
-  const returnTimer = useRef<number | null>(null)
-  const settleRef = useRef<(pending: PendingView | null, boardInstances: ReadonlySet<number>) => void>(() => {})
-  const liftRef = useRef<() => void>(() => {})
-  const match = useGameStore((state) => state.match)
-  const placementNotice = useInteractionStore((state) => state.placementNotice)
-  const selectedId = useInteractionStore((state) => state.selectedCardInstanceId)
-
-  const clearReturn = () => {
-    if (returnTimer.current != null) window.clearTimeout(returnTimer.current)
-    returnTimer.current = null
-  }
-  const moveCamera = (mode: CameraMode) => {
-    const interaction = useInteractionStore.getState()
-    if (interaction.cameraMode === mode) return
-    playCameraTransition(mode === 'overview' ? 'up' : 'down')
-    interaction.setCameraMode(mode)
-  }
-  liftRef.current = () => {
-    clearReturn()
-    moveCamera('overview')
-  }
-  settleRef.current = (pending, boardInstances) => {
-    const interaction = useInteractionStore.getState()
-    const next = nextCameraMode(
-      interaction.cameraMode,
-      Boolean(interaction.selectedCardInstanceId),
-      pending,
-      boardInstances,
-    )
-    if (next === 'overview') {
-      clearReturn()
-      moveCamera('overview')
-      return
-    }
-    if (interaction.cameraMode !== 'overview') return
-    clearReturn()
-    returnTimer.current = window.setTimeout(() => {
-      returnTimer.current = null
-      const live = useInteractionStore.getState()
-      const resolved = nextCameraMode(
-        live.cameraMode,
-        Boolean(live.selectedCardInstanceId),
-        pending,
-        boardInstances,
-      )
-      if (resolved === live.cameraMode) return
-      playCameraTransition(resolved === 'overview' ? 'up' : 'down')
-      live.setCameraMode(resolved)
-    }, HAND_VIEW_RETURN_MS)
-  }
-
-  submitRef.current = (optionId: string) => {
-    if (busyRef.current) return
-    busyRef.current = true
-    setNotice(null)
-    usePresentationStore.getState().setInputLocked(true)
-    useInteractionStore.getState().finishCardPlacement()
-    void answerMatch(snapshotRef.current, optionId).then(
-      (next) => {
-        if (liveRef.current) setAdvance(next)
-      },
-      (reason: unknown) => {
-        busyRef.current = false
-        if (!liveRef.current) return
-        usePresentationStore.getState().setInputLocked(false)
-        setNotice(reason instanceof Error ? reason.message : '对局请求失败')
-        settleRef.current(null, new Set())
-      },
-    )
-  }
-
-  useLayoutEffect(() => {
-    liveRef.current = true
-    clearPresentedCards()
-    useInteractionStore.getState().resetBattleView()
-    usePresentationStore.getState().setInputLocked(true)
-    useGameStore.setState((state) => ({
-      match: null,
-      battleKey: state.battleKey + 1,
-      telegraph: undefined,
-      activePlacement: undefined,
-      resolution: undefined,
-      placementSettled: false,
-    }))
-    useBattleCue.getState().bind({
-      allows: (instanceId, cell) => Boolean(optionForPlay(optionsRef.current, instanceId, cell)),
-      picks: () => false,
-      answers: (cell) => Boolean(optionForAnswer(optionsRef.current, cell, cardOn(cell))),
-      play: (action) => {
-        const id = optionForPlay(optionsRef.current, action.cardInstanceId, action.cellId)
-        if (!id) {
-          useInteractionStore.getState().showPlacementNotice('这一格现在不能放')
-          return 'illegal'
-        }
-        submitRef.current(id)
-        return undefined
-      },
-      land: () => landRef.current?.(),
-      answer: (cell) => {
-        const id = optionForAnswer(optionsRef.current, cell, cardOn(cell))
-        if (id) submitRef.current(id)
-      },
-      commit: (instanceId) => {
-        const id = optionForCast(optionsRef.current, instanceId)
-        if (id) submitRef.current(id)
-      },
-    })
-    return () => {
-      liveRef.current = false
-      if (returnTimer.current != null) window.clearTimeout(returnTimer.current)
-      returnTimer.current = null
-      useBattleCue.getState().clear()
-      usePresentationStore.getState().setInputLocked(false)
-      useGameStore.getState().abandon()
-      clearPresentedCards()
-    }
-  }, [])
-
-  useEffect(() => {
-    let alive = true
-    const living = () => alive && liveRef.current
-    optionsRef.current = []
-    snapshotRef.current = advance.snapshot
-    busyRef.current = true
-    setReady(false)
-    usePresentationStore.getState().setInputLocked(true)
-    useBattleCue.getState().setOffers([])
-    if (returnTimer.current != null) window.clearTimeout(returnTimer.current)
-    returnTimer.current = null
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const beats = beatsFor(shownRef.current, advance)
-    void (async () => {
-      let flown: string | null = null
-      for (const beat of beats) {
-        if (!living()) return
-        const sameIntent = Boolean(flown && beat.view.revealedIntent === flown)
-        if (beat.fly?.side === 'monster') {
-          flown = beat.fly.cardId
-          if (!reduce) liftRef.current()
-          paint(beat, 'fly', catalog, monsterId, setScore)
-          if (!reduce) await waitLand(landRef, living)
-          if (!living()) return
-          paint(beat, 'landed', catalog, monsterId, setScore)
-        } else if (beat.fly?.side === 'player') {
-          paint(beat, 'play', catalog, monsterId, setScore, sameIntent)
-          await pause(reduce ? 40 : 720)
-          if (!living()) return
-          useGameStore.setState({ activePlacement: undefined })
-        } else {
-          paint(beat, 'still', catalog, monsterId, setScore, sameIntent)
-          if (beat.view.revealedIntent && beat.view.revealedIntent !== flown) flown = null
-          await pause(reduce ? 30 : 240)
-        }
-      }
-      if (!living()) return
-      shownRef.current = advance.view
-      const over = Boolean(advance.result || advance.view.winner)
-      const player = advance.pending?.actor === 'player' && !over
-      const pending = player ? advance.pending : null
-      const boardInstances = new Set(
-        advance.view.cells.flatMap((cell) => (cell.card ? [cell.card.instance] : [])),
-      )
-      const live = useGameStore.getState().match
-      if (live && player && pending) {
-        useGameStore.setState({
-          match: { ...live, turn: 'player', openingTurn: !canPlayFromHand(pending), status: 'playing' },
-        })
-      }
-      optionsRef.current = pending?.options ?? []
-      snapshotRef.current = advance.snapshot
-      busyRef.current = false
-      usePresentationStore.getState().setInputLocked(!player)
-      useBattleCue.getState().setOffers(pending ? boardTargetIds(pending.options, boardInstances) : [])
-      settleRef.current(pending, boardInstances)
-      setReady(player)
-    })()
-    return () => {
-      alive = false
-      if (returnTimer.current != null) window.clearTimeout(returnTimer.current)
-      returnTimer.current = null
-    }
-  }, [advance, catalog, monsterId])
-
-  useEffect(() => {
-    if (!placementNotice) return
-    const timer = window.setTimeout(() => useInteractionStore.getState().showPlacementNotice(undefined), 2400)
-    return () => window.clearTimeout(timer)
-  }, [placementNotice])
-
-  useEffect(() => {
-    const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaY) < 8) return
-      const target = event.target
-      if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"]')) return
-      const live = useGameStore.getState().match
-      if (!live || live.status !== 'playing' || live.turn !== 'player' || live.openingTurn) return
-      if (usePresentationStore.getState().inputLocked) return
-      const interaction = useInteractionStore.getState()
-      const forward = event.deltaY < 0
-      if (forward && interaction.cameraMode !== 'overview') {
-        clearReturn()
-        playCameraTransition('up')
-        interaction.setCameraMode('overview')
-        event.preventDefault()
-      }
-      if (!forward && interaction.cameraMode === 'overview') {
-        clearReturn()
-        playCameraTransition('down')
-        interaction.finishCardPlacement()
-        interaction.setCameraMode('board')
-        event.preventDefault()
-      }
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey || event.repeat) return
-      const target = event.target as HTMLElement | null
-      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
-      const live = useGameStore.getState().match
-      if (!live || live.status !== 'playing' || live.openingTurn) return
-      if (usePresentationStore.getState().inputLocked) return
-      event.preventDefault()
-      const interaction = useInteractionStore.getState()
-      const entering = interaction.cameraMode !== 'overview'
-      clearReturn()
-      playCameraTransition(entering ? 'up' : 'down')
-      if (!entering) interaction.finishCardPlacement()
-      interaction.setCameraMode(entering ? 'overview' : 'board')
-    }
-    window.addEventListener('wheel', onWheel, { passive: false })
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('wheel', onWheel)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [])
-
-  const options = ready ? advance.pending?.options ?? [] : []
-  const endTurn = optionForEndTurn(options)
-  const boardInstances = new Set(
-    advance.view.cells.flatMap((cell) => (cell.card ? [cell.card.instance] : [])),
-  )
-  const loose = ready ? looseCardOptions(options, boardInstances) : []
-  const over = Boolean(match?.result)
-  const winner = match?.result?.winner
-  const pendingType = ready ? advance.pending?.type ?? null : null
-
-  return (
-    <main className="app-shell v6-battle-stage">
-      <div className="scene-layer">
-        <GameCanvas monster={stage.monster} scene={stage.scene} />
-      </div>
-      {match?.status === 'playing' ? (
-        <aside className="view-hint">
-          <span className="view-hint__mark" aria-hidden="true" />
-          <span>滚轮向前 俯视</span>
-          <span>滚轮向后 手牌</span>
-        </aside>
-      ) : null}
-      <section className="battle-status" aria-live="polite">
-        <div className="battle-status__score">
-          <span>{score?.player ?? 0}</span>
-          <span>—</span>
-          <span>{score?.monster ?? 0}</span>
-        </div>
-        <div className="battle-status__meta">
-          <span>{monsterName}</span>
-          <span>{statusLabel(over, ready, match?.turn)}</span>
-          {score ? <span>第 {score.round} 回合</span> : null}
-          {score?.intent ? <span>意图 {score.intent}</span> : null}
-          <span>牌组 {score?.deck ?? 0}</span>
-          <span>弃牌 {score?.playerDiscard ?? 0}</span>
-          <span>对方弃牌 {score?.monsterDiscard ?? 0}</span>
-          {score?.pools.filter((pool) => pool.amount > 0).map((pool) => (
-            <span key={`${pool.owner}:${pool.id}`}>{pool.name} {pool.amount}</span>
-          ))}
-        </div>
-      </section>
-      {placementNotice || notice ? <div className="placement-notice" role="status">{placementNotice || notice}</div> : null}
-      {loose.length > 0 ? (
-        <div className="v6-pick-prompt" role="status">
-          <p>选一张牌</p>
-          <div className="v6-pick-prompt__choices">
-            {loose.map((option) => (
-              <button key={option.id} type="button" onClick={() => submitRef.current(option.id)}>
-                {optionLabel(advance.view, catalog, option)}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      <div className="v6-stage-actions">
-        <p className="v6-stage-hint">{hint(ready, pendingType, options, selectedId ?? null)}</p>
-        <button type="button" onClick={onDone}>返回</button>
-        <button
-          type="button"
-          disabled={!endTurn}
-          onClick={() => {
-            if (endTurn) submitRef.current(endTurn)
-          }}
-        >
-          结束回合
-        </button>
-      </div>
-      {over ? (
-        <div className="match-result" role="dialog" aria-modal="true" aria-label="对局结果">
-          <div className="match-result__panel">
-            <strong>{winner === 'player' ? '你赢了' : winner === 'monster' ? '对方赢了' : '平局'}</strong>
-            <span>YOU {score?.player ?? 0} — {score?.monster ?? 0} {monsterName}</span>
-            <button type="button" onClick={onDone}>回到地图</button>
-          </div>
-        </div>
-      ) : null}
-    </main>
-  )
-}
-
-function paint(
-  beat: Beat,
-  mode: 'fly' | 'landed' | 'play' | 'still',
-  catalog: PcdCatalog,
-  monsterId: string,
-  setScore: (score: Score) => void,
-  hideIntent = false,
-) {
-  const flying = mode === 'fly' && beat.fly?.side === 'monster'
-  const projected = projectBattle({
-    view: beat.view,
     catalog,
+    advance: opening,
     monsterId,
-    turn: flying ? 'monster' : turnOf(beat.view),
-    concealInstance: flying ? beat.fly?.instanceId : undefined,
-    hideIntent: mode === 'landed' || hideIntent,
-    monsterCell: flying ? beat.fly?.cell : undefined,
-    telegraphId: flying ? beat.fly?.telegraphId : undefined,
-  })
-  publishProjection(projected)
-  useGameStore.setState({
-    match: projected.match,
-    telegraph: projected.telegraph,
-    activePlacement: mode === 'play' && beat.fly
-      ? { side: 'player', cardInstanceId: beat.fly.instanceId, cellId: sceneCell(asCell(beat.fly.cell)) }
-      : undefined,
-    resolution: undefined,
-    placementSettled: false,
-  })
-  useBattleCue.getState().bump([], projected.polluted)
-  setScore({
-    player: projected.playerPoints,
-    monster: projected.monsterPoints,
-    intent: mode === 'landed' || hideIntent ? null : projected.intentName,
-    deck: projected.deckCount,
-    playerDiscard: projected.playerDiscard,
-    monsterDiscard: projected.monsterDiscard,
-    pools: projected.pools,
-    round: beat.view.round,
-  })
-}
-
-function turnOf(view: PcdView): 'player' | 'monster' {
-  if (view.phase === 'monster-action' || view.phase === 'monster-turn-start' || view.phase === 'monster-turn-end') {
-    return 'monster'
-  }
-  return 'player'
-}
-
-function cardOn(cell: CellId) {
-  return useGameStore.getState().match?.board.find((item) => item.id === cell)?.card?.instanceId ?? null
-}
-
-function asCell(cell: number) {
-  return cell as RuleCell
-}
-
-function waitLand(landRef: { current: (() => void) | null }, alive: () => boolean) {
-  return new Promise<void>((resolve) => {
-    const timer = window.setTimeout(finish, 1600)
-    function finish() {
-      window.clearTimeout(timer)
-      landRef.current = null
-      resolve()
+    onDone,
+}: {
+    catalog: PcdCatalog
+    advance: PcdAdvance
+    monsterId: string
+    onDone: () => void
+}) {
+    const [advance, setAdvance] = useState(opening)
+    const [view, setView] = useState(opening.view)
+    const [ready, setReady] = useState(false)
+    const [selected, setSelected] = useState<number | null>(null)
+    const [inspection, setInspection] = useState<PcdViewCard | null>(null)
+    const [notice, setNotice] = useState<string | null>(null)
+    const [effects, setEffects] = useState<EffectFrame>({ id: 0, effects: [] })
+    const [beatLabel, setBeatLabel] = useState('你的回合')
+    const [fast, setFast] = useState(false)
+    const [drag, setDrag] = useState<Drag | null>(null)
+    const [pile, setPile] = useState<Pile | null>(null)
+    const [confirmExit, setConfirmExit] = useState(false)
+    const dragRef = useRef<{
+        card: PcdViewCard
+        x: number
+        y: number
+        active: boolean
+    } | null>(null)
+    const skipClick = useRef(false)
+    const busy = useRef(true)
+    const live = useRef(true)
+    const previous = useRef<PcdView | null>(null)
+    const speed = useRef(false)
+    speed.current = fast
+    const result = view.winner ? { winner: view.winner } : null
+    const options = ready && !result ? (advance.pending?.options ?? []) : []
+    const monster = catalog.monsters.find((item) => item.id === monsterId)
+    const intent = catalog.cards.find((card) => card.id === view.revealedIntent)
+    const selectedCard = view.hand.find((card) => card.instance === selected)
+    const inspectCard = inspection ?? selectedCard ?? null
+    const inspectInfo = catalog.cards.find(
+        (card) => card.id === inspectCard?.cardId,
+    )
+    const endTurn = options.find((option) => option.kind === 'end-turn')
+    const cast = options.find(
+        (option) => option.kind === 'cast' && option.instance === selected,
+    )
+    const loose = otherChoices(options, view)
+    const pendingTarget = ready && advance.pending?.type !== 'play'
+    const pileLabels: Record<Pile, string> = {
+        matchDeck: '牌组',
+        playerDiscard: '玩家弃牌堆',
+        monsterDiscard: '怪物弃牌堆',
+        playerVoid: '消散区',
     }
-    landRef.current = finish
-    const poll = window.setInterval(() => {
-      if (alive()) return
-      window.clearInterval(poll)
-      finish()
-    }, 40)
-    window.setTimeout(() => window.clearInterval(poll), 1600)
-  })
+
+    useEffect(() => {
+        live.current = true
+        return () => {
+            live.current = false
+        }
+    }, [])
+
+    useEffect(() => {
+        let active = true
+        busy.current = true
+        setReady(false)
+        setSelected(null)
+        setInspection(null)
+        const reduced = window.matchMedia(
+            '(prefers-reduced-motion: reduce)',
+        ).matches
+        const frames = beatsFor(previous.current, advance)
+        void (async () => {
+            let before = previous.current
+            for (const beat of frames) {
+                if (!active || !live.current) return
+                const changes = before ? cellEffects(before, beat.view) : []
+                setView(beat.view)
+                setEffects((current) => ({
+                    id: current.id + 1,
+                    effects: changes,
+                }))
+                if (beat.fly) {
+                    setBeatLabel(
+                        beat.fly.side === 'monster'
+                            ? '怪物正在回应'
+                            : '卡牌入场',
+                    )
+                    playCardFlip()
+                } else if (changes.some((change) => change.kind === 'points'))
+                    setBeatLabel('点数变化')
+                else if (changes.some((change) => change.kind === 'leave'))
+                    setBeatLabel('卡牌离场')
+                else if (beat.view.revealedIntent !== before?.revealedIntent)
+                    setBeatLabel('意图揭示')
+                before = beat.view
+                if (frames.length > 1)
+                    await pause(
+                        reduced
+                            ? 12
+                            : speed.current
+                              ? 65
+                              : beat.fly
+                                ? 440
+                                : changes.length
+                                  ? 280
+                                  : 110,
+                    )
+            }
+            if (!active || !live.current) return
+            previous.current = advance.view
+            setView(advance.view)
+            setEffects((current) => ({ id: current.id + 1, effects: [] }))
+            busy.current = false
+            setReady(advance.pending?.actor === 'player')
+            setBeatLabel(
+                advance.result || advance.view.winner ? '对局结束' : '你的回合',
+            )
+        })()
+        return () => {
+            active = false
+        }
+    }, [advance])
+
+    useEffect(() => {
+        if (!notice) return
+        const timer = window.setTimeout(() => setNotice(null), 2600)
+        return () => window.clearTimeout(timer)
+    }, [notice])
+
+    const submit = (option: PcdOption) => {
+        if (
+            busy.current ||
+            !ready ||
+            !options.some((offered) => offered.id === option.id)
+        )
+            return
+        busy.current = true
+        setReady(false)
+        setNotice(null)
+        setDrag(null)
+        setSelected(null)
+        setPile(null)
+        void answerMatch(advance.snapshot, option.id).then(
+            (next) => {
+                if (live.current) setAdvance(next)
+            },
+            (reason: unknown) => {
+                if (!live.current) return
+                busy.current = false
+                setReady(true)
+                setNotice(
+                    reason instanceof Error
+                        ? reason.message
+                        : '这次回应没有送达，请重试。',
+                )
+            },
+        )
+    }
+
+    const selectHand = (card: PcdViewCard) => {
+        const answer = options.find(
+            (option) =>
+                option.kind === 'card' && option.instance === card.instance,
+        )
+        if (answer) {
+            submit(answer)
+            return
+        }
+        setInspection(null)
+        setSelected((current) =>
+            current === card.instance ? null : card.instance,
+        )
+        playCardSelect()
+    }
+
+    useEffect(() => {
+        const key = (event: KeyboardEvent) => {
+            if (
+                event.target instanceof Element &&
+                event.target.closest(
+                    'input,select,textarea,dialog,[role="dialog"]',
+                )
+            )
+                return
+            if (event.key === 'Escape') {
+                setSelected(null)
+                setInspection(null)
+                setPile(null)
+                setConfirmExit(false)
+                return
+            }
+            if (event.repeat || !ready || pile || confirmExit || result) return
+            const index = Number(event.key) - 1
+            if (/^[1-9]$/.test(event.key) && view.hand[index]) {
+                event.preventDefault()
+                selectHand(view.hand[index])
+            }
+            if (event.key.toLowerCase() === 'e' && endTurn) {
+                event.preventDefault()
+                submit(endTurn)
+            }
+            if (event.key === 'Enter' && cast) {
+                event.preventDefault()
+                submit(cast)
+            }
+        }
+        window.addEventListener('keydown', key)
+        return () => window.removeEventListener('keydown', key)
+    })
+
+    const pointerDown = (
+        event: PointerEvent<HTMLButtonElement>,
+        card: PcdViewCard,
+    ) => {
+        if (
+            event.button !== 0 ||
+            !options.some(
+                (option) =>
+                    option.kind === 'play' && option.instance === card.instance,
+            )
+        )
+            return
+        dragRef.current = {
+            card,
+            x: event.clientX,
+            y: event.clientY,
+            active: false,
+        }
+        event.currentTarget.setPointerCapture(event.pointerId)
+    }
+    const pointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+        const gesture = dragRef.current
+        if (!gesture) return
+        if (
+            !gesture.active &&
+            Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) < 7
+        )
+            return
+        gesture.active = true
+        setSelected(gesture.card.instance)
+        setInspection(null)
+        setDrag({ card: gesture.card, x: event.clientX, y: event.clientY })
+    }
+    const pointerUp = (event: PointerEvent<HTMLButtonElement>) => {
+        const gesture = dragRef.current
+        dragRef.current = null
+        setDrag(null)
+        if (!gesture?.active) return
+        skipClick.current = true
+        window.setTimeout(() => {
+            skipClick.current = false
+        }, 0)
+        const target = document
+            .elementFromPoint(event.clientX, event.clientY)
+            ?.closest('[data-cell]')
+        const cell = Number(target?.getAttribute('data-cell'))
+        const option = options.find(
+            (item) =>
+                item.kind === 'play' &&
+                item.instance === gesture.card.instance &&
+                item.cell === cell,
+        )
+        if (option) submit(option)
+        else setNotice('将卡牌放到点亮的格位上。')
+    }
+
+    const instruction = !ready
+        ? beatLabel
+        : pendingTarget
+          ? '选择点亮的目标，完成能力结算。'
+          : cast
+            ? '法术已就绪。点击「施放法术」或按 Enter。'
+            : selectedCard
+              ? options.some(
+                    (option) =>
+                        option.kind === 'play' && option.instance === selected,
+                )
+                  ? '选择一个点亮的格位。'
+                  : '这张牌本回合暂时无法打出。'
+              : endTurn &&
+                  !options.some(
+                      (option) =>
+                          option.kind === 'play' || option.kind === 'cast',
+                  )
+                ? '你的回应已完成，结束回合。'
+                : '选择手牌，回应它的意图。'
+
+    const pileCards =
+        pile === 'matchDeck'
+            ? view.matchDeck
+                  .slice()
+                  .sort((a, b) => a.cardId.localeCompare(b.cardId))
+            : pile
+              ? view[pile]
+              : []
+
+    return (
+        <main
+            className={`battle-2d${drag ? ' battle-2d--dragging' : ''}`}
+            data-ready={ready}
+            data-round={view.round}
+            data-decision={ready ? advance.pending?.type : 'animating'}
+        >
+            <Atmosphere variant="battle" />
+            <header className="battle-header">
+                <button
+                    type="button"
+                    className="battle-back"
+                    onClick={() => setConfirmExit(true)}
+                >
+                    ‹ <span>返回地图</span>
+                </button>
+                <div className="battle-header__title">
+                    <span>THE CALLED / 对局</span>
+                    <strong>{monster?.name ?? monsterId}</strong>
+                </div>
+                <button
+                    className="battle-speed"
+                    type="button"
+                    aria-pressed={fast}
+                    onClick={() => setFast((current) => !current)}
+                >
+                    {fast ? '▸▸ 加速' : '▸ 常速'}
+                </button>
+            </header>
+            <div className="battle-round">
+                <span className={ready ? 'is-player' : 'is-busy'} />
+                <b>回合 {String(view.round).padStart(2, '0')}</b>
+                <small aria-live="polite">{beatLabel}</small>
+            </div>
+            <section className="battle-layout">
+                <aside className="battle-player-panel">
+                    <div
+                        className="battle-score"
+                        aria-label={`玩家总点数 ${view.playerPoints}`}
+                    >
+                        <span className="battle-kicker">玩家 / YOU</span>
+                        <strong key={view.playerPoints}>
+                            {String(view.playerPoints).padStart(2, '0')}
+                        </strong>
+                        <span className="battle-score__caption">
+                            总点数<span>占格 {view.playerOccupancy} / 9</span>
+                        </span>
+                        <div className="battle-score__pips">
+                            {Array.from({ length: 9 }, (_, index) => (
+                                <i
+                                    key={index}
+                                    className={
+                                        index < view.playerOccupancy
+                                            ? 'is-filled'
+                                            : ''
+                                    }
+                                />
+                            ))}
+                        </div>
+                    </div>
+                    <div className="battle-piles">
+                        <button
+                            type="button"
+                            onClick={() => setPile('matchDeck')}
+                        >
+                            牌组<span>{view.matchDeckCount}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPile('playerDiscard')}
+                        >
+                            弃牌堆<span>{view.playerDiscardCount}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPile('playerVoid')}
+                        >
+                            消散区<span>{view.playerVoid.length}</span>
+                        </button>
+                    </div>
+                    {view.pools
+                        .filter((pool) => pool.owner === 'player')
+                        .map((pool) => (
+                            <div className="battle-resource" key={pool.id}>
+                                <span>
+                                    {catalog.resources.find(
+                                        (item) => item.id === pool.id,
+                                    )?.name ?? pool.id}
+                                </span>
+                                <b>{pool.amount}</b>
+                            </div>
+                        ))}
+                    <div className="battle-inspect" aria-live="polite">
+                        <span className="battle-kicker">
+                            {inspectInfo ? '卡牌档案' : '行动提示'}
+                        </span>
+                        {inspectInfo ? (
+                            <>
+                                <h3>{inspectInfo.name}</h3>
+                                <p>
+                                    {inspectInfo.text ||
+                                        '以纯粹的力量占据战场。'}
+                                </p>
+                                <div className="battle-inspect__meta">
+                                    <span>
+                                        {SCHOOL_NAMES[inspectInfo.school] ??
+                                            '怪物'}
+                                    </span>
+                                    <span>
+                                        {inspectInfo.isSpell
+                                            ? '法术'
+                                            : `${inspectCard?.currentPoints ?? inspectInfo.points} 点`}
+                                    </span>
+                                </div>
+                                {inspectCard?.statuses.length ? (
+                                    <p className="battle-inspect__status">
+                                        {inspectCard.statuses
+                                            .map(
+                                                (id) =>
+                                                    catalog.statuses.find(
+                                                        (item) =>
+                                                            item.id === id,
+                                                    )?.name ?? id,
+                                            )
+                                            .join(' · ')}
+                                    </p>
+                                ) : null}
+                                {inspectCard?.timer ? (
+                                    <p className="battle-inspect__status">
+                                        计时 {inspectCard.timer}
+                                    </p>
+                                ) : null}
+                                {inspectCard?.cardBackId ? (
+                                    <p className="battle-inspect__status">
+                                        卡背 ·{' '}
+                                        {
+                                            catalog.backs.find(
+                                                (back) =>
+                                                    back.id ===
+                                                    inspectCard.cardBackId,
+                                            )?.name
+                                        }
+                                    </p>
+                                ) : null}
+                            </>
+                        ) : (
+                            <>
+                                <h3>看见意图，布下回应。</h3>
+                                <p>
+                                    选择一张手牌，点亮合法格位。
+                                    <br />
+                                    悬停卡牌，阅读完整能力。
+                                </p>
+                                <small>1–9 选牌 · E 结束回合</small>
+                            </>
+                        )}
+                    </div>
+                </aside>
+                <div className="battle-arena">
+                    <div className="battle-arena__label">
+                        <span>九宫格</span>
+                        <span>THE NINEFOLD</span>
+                    </div>
+                    <div className="battle-board" aria-label="九宫格战场">
+                        {view.cells.map((cell) => {
+                            const card = cell.card
+                            const info = catalog.cards.find(
+                                (item) => item.id === card?.cardId,
+                            )
+                            const option = cellChoice(
+                                options,
+                                cell.cell,
+                                card?.instance ?? null,
+                                selected,
+                            )
+                            const effect = effects.effects.find(
+                                (item) => item.cell === cell.cell,
+                            )
+                            const statuses =
+                                card?.statuses.map(
+                                    (id) =>
+                                        catalog.statuses.find(
+                                            (status) => status.id === id,
+                                        )?.name ?? id,
+                                ) ?? []
+                            return (
+                                <button
+                                    key={cell.cell}
+                                    type="button"
+                                    data-cell={cell.cell}
+                                    data-legal={Boolean(option)}
+                                    data-owner={card?.owner ?? 'empty'}
+                                    data-instance={card?.instance ?? ''}
+                                    className={`battle-cell${option ? ' is-legal' : ''}${cell.polluted ? ' is-polluted' : ''}${effect ? ` is-${effect.kind}` : ''}`}
+                                    aria-label={`格位 ${cell.cell}${info ? `，${info.name}，${card?.currentPoints} 点，${card?.owner === 'player' ? '玩家' : '怪物'}` : '，空格'}${option ? '，可选择' : ''}`}
+                                    onClick={() => {
+                                        if (option) submit(option)
+                                        else if (card) setInspection(card)
+                                    }}
+                                    onMouseEnter={() => {
+                                        if (card) setInspection(card)
+                                    }}
+                                    onMouseLeave={() => setInspection(null)}
+                                    onFocus={() => {
+                                        if (card) setInspection(card)
+                                    }}
+                                    onBlur={() => setInspection(null)}
+                                >
+                                    <span className="battle-cell__index">
+                                        {String(cell.cell).padStart(2, '0')}
+                                    </span>
+                                    {card && info ? (
+                                        <div
+                                            className="battle-cell__card"
+                                            key={`card:${card.instance}`}
+                                        >
+                                            <CardFace
+                                                card={info}
+                                                points={card.currentPoints}
+                                                owner={card.owner}
+                                                statuses={statuses}
+                                                compact
+                                            />
+                                        </div>
+                                    ) : (
+                                        <span
+                                            className="battle-cell__empty"
+                                            aria-hidden="true"
+                                        >
+                                            <i />
+                                            {option ? '+' : '·'}
+                                        </span>
+                                    )}
+                                    {cell.polluted && (
+                                        <span className="battle-cell__pollution">
+                                            污染
+                                        </span>
+                                    )}
+                                    {option && (
+                                        <span
+                                            className="battle-cell__reticle"
+                                            aria-hidden="true"
+                                        />
+                                    )}
+                                    {effect && (
+                                        <span
+                                            key={`effect:${effects.id}`}
+                                            className="battle-cell__effect"
+                                        >
+                                            <InkBurst tone={effect.owner} />
+                                            {effect.kind === 'points' && (
+                                                <b
+                                                    className={
+                                                        effect.delta < 0
+                                                            ? 'is-negative'
+                                                            : ''
+                                                    }
+                                                >
+                                                    {effect.delta > 0
+                                                        ? '+'
+                                                        : ''}
+                                                    {effect.delta}
+                                                </b>
+                                            )}
+                                        </span>
+                                    )}
+                                </button>
+                            )
+                        })}
+                    </div>
+                    <div className="battle-instruction" role="status">
+                        <i />
+                        {instruction}
+                    </div>
+                </div>
+                <aside className="battle-monster-panel">
+                    <div
+                        className="battle-score battle-score--monster"
+                        aria-label={`怪物总点数 ${view.monsterPoints}`}
+                    >
+                        <span className="battle-kicker">怪物 / ADVERSARY</span>
+                        <strong key={view.monsterPoints}>
+                            {String(view.monsterPoints).padStart(2, '0')}
+                        </strong>
+                        <span className="battle-score__caption">
+                            总点数<span>占格 {view.monsterOccupancy} / 9</span>
+                        </span>
+                        <div className="battle-score__pips">
+                            {Array.from({ length: 9 }, (_, index) => (
+                                <i
+                                    key={index}
+                                    className={
+                                        index < view.monsterOccupancy
+                                            ? 'is-filled'
+                                            : ''
+                                    }
+                                />
+                            ))}
+                        </div>
+                    </div>
+                    <div className="battle-intent">
+                        <span className="battle-kicker">
+                            <i />
+                            已揭示意图
+                        </span>
+                        {intent ? (
+                            <>
+                                <div className="battle-intent__preview">
+                                    <Sigil id={intent.id} />
+                                    <div>
+                                        <h3>{intent.name}</h3>
+                                        <span>
+                                            {intent.isSpell
+                                                ? '法术'
+                                                : `${intent.points} 点 / 占场卡`}
+                                        </span>
+                                    </div>
+                                </div>
+                                <p>{intent.text || '将以点数占据战场。'}</p>
+                            </>
+                        ) : (
+                            <p>等待下一次回应。</p>
+                        )}
+                        <div
+                            className="battle-intent__sequence"
+                            aria-label="意图顺序"
+                        >
+                            {view.intents.map((id, index) => (
+                                <span
+                                    key={`${id}-${index}`}
+                                    className={
+                                        index ===
+                                        view.intentIndex %
+                                            Math.max(1, view.intents.length)
+                                            ? 'is-current'
+                                            : ''
+                                    }
+                                    title={
+                                        catalog.cards.find(
+                                            (card) => card.id === id,
+                                        )?.name
+                                    }
+                                >
+                                    <Sigil id={id} />
+                                    <i />
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                    <button
+                        className="battle-monster-discard"
+                        type="button"
+                        onClick={() => setPile('monsterDiscard')}
+                    >
+                        怪物弃牌堆<span>{view.monsterDiscardCount}</span>
+                    </button>
+                    {view.pools
+                        .filter((pool) => pool.owner === 'monster')
+                        .map((pool) => (
+                            <div className="battle-resource" key={pool.id}>
+                                <span>
+                                    {catalog.resources.find(
+                                        (item) => item.id === pool.id,
+                                    )?.name ?? pool.id}
+                                </span>
+                                <b>{pool.amount}</b>
+                            </div>
+                        ))}
+                </aside>
+            </section>
+            {inspectInfo && (
+                <div className="battle-mobile-detail">
+                    <strong>{inspectInfo.name}</strong>
+                    <p>{inspectInfo.text || '以纯粹的力量占据战场。'}</p>
+                    {inspectCard?.statuses.length ? (
+                        <small>
+                            {inspectCard.statuses
+                                .map(
+                                    (id) =>
+                                        catalog.statuses.find(
+                                            (status) => status.id === id,
+                                        )?.name ?? id,
+                                )
+                                .join(' · ')}
+                        </small>
+                    ) : null}
+                </div>
+            )}
+            <section className="battle-hand-area" aria-label="手牌区域">
+                <div className="battle-hand-heading">
+                    <span>
+                        你的手牌 <b>{view.hand.length}</b>
+                    </span>
+                    <small>
+                        {ready
+                            ? `出牌机会 ${view.remainingOpportunities}`
+                            : '等待结算'}
+                    </small>
+                </div>
+                <div className="battle-hand">
+                    {view.hand.map((card, index) => {
+                        const info = catalog.cards.find(
+                            (item) => item.id === card.cardId,
+                        )
+                        if (!info) return null
+                        const playable = options.some(
+                            (option) =>
+                                ['play', 'cast', 'card'].includes(
+                                    option.kind,
+                                ) && option.instance === card.instance,
+                        )
+                        return (
+                            <button
+                                type="button"
+                                key={card.instance}
+                                data-hand-instance={card.instance}
+                                data-playable={playable}
+                                aria-pressed={selected === card.instance}
+                                className={`battle-hand-card${selected === card.instance ? ' is-selected' : ''}${playable ? ' is-playable' : ''}`}
+                                aria-label={`${info.name}，${card.isSpell ? '法术' : `${card.currentPoints} 点`}`}
+                                onClick={() => {
+                                    if (skipClick.current) {
+                                        skipClick.current = false
+                                        return
+                                    }
+                                    if (!busy.current) selectHand(card)
+                                }}
+                                onMouseEnter={() => setInspection(card)}
+                                onMouseLeave={() => setInspection(null)}
+                                onFocus={() => setInspection(card)}
+                                onBlur={() => setInspection(null)}
+                                onPointerDown={(event) =>
+                                    pointerDown(event, card)
+                                }
+                                onPointerMove={pointerMove}
+                                onPointerUp={pointerUp}
+                                onPointerCancel={() => {
+                                    dragRef.current = null
+                                    setDrag(null)
+                                }}
+                            >
+                                <CardFace
+                                    card={info}
+                                    points={card.currentPoints}
+                                    owner="player"
+                                />
+                                <span className="battle-hand-card__key">
+                                    {index < 9 ? index + 1 : ''}
+                                </span>
+                            </button>
+                        )
+                    })}
+                    {view.hand.length === 0 && (
+                        <p className="battle-empty-hand">
+                            手牌已空。等待下一次抽牌。
+                        </p>
+                    )}
+                </div>
+            </section>
+            <div className="battle-actions">
+                {cast && (
+                    <button
+                        type="button"
+                        className="pixel-button battle-cast"
+                        onClick={() => submit(cast)}
+                    >
+                        ✦ 施放法术 <small>ENTER</small>
+                    </button>
+                )}
+                <button
+                    type="button"
+                    className="pixel-button pixel-button--accent"
+                    disabled={!endTurn}
+                    onClick={() => {
+                        if (endTurn) submit(endTurn)
+                    }}
+                >
+                    结束回合 <small>E</small>
+                </button>
+            </div>
+            <footer className="battle-footer">
+                <span>THE CALLED</span>
+                <span>青 / 玩家 · 红 / 怪物</span>
+                <span>ESC 取消选择</span>
+            </footer>
+            {loose.length > 0 && (
+                <div
+                    className="battle-choices"
+                    role="dialog"
+                    aria-label="能力选择"
+                >
+                    <span className="battle-kicker">
+                        {advance.pending?.ability ? '能力结算' : '待决策'}
+                    </span>
+                    <h2>选择你的回应</h2>
+                    <div>
+                        {loose.map((option) => {
+                            const card = view.cards.find(
+                                (item) => item.instance === option.instance,
+                            )
+                            const info = catalog.cards.find(
+                                (item) =>
+                                    item.id === (card?.cardId ?? option.cardId),
+                            )
+                            return (
+                                <button
+                                    className="pixel-button"
+                                    key={option.id}
+                                    type="button"
+                                    data-option-id={option.id}
+                                    onClick={() => submit(option)}
+                                >
+                                    {option.kind === 'activate'
+                                        ? '激活 · '
+                                        : ''}
+                                    {info?.name ??
+                                        (option.kind === 'skip'
+                                            ? '跳过'
+                                            : option.kind === 'pass'
+                                              ? '确认'
+                                              : option.kind === 'accept'
+                                                ? '接受'
+                                                : option.kind === 'decline'
+                                                  ? '放弃'
+                                                  : (option.cardId ??
+                                                    '确认选择'))}
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
+            {notice && (
+                <div className="battle-notice" role="alert">
+                    {notice}
+                </div>
+            )}
+            <div className="battle-mobile-piles">
+                <button type="button" onClick={() => setPile('matchDeck')}>
+                    牌组 {view.matchDeckCount}
+                </button>
+                <button type="button" onClick={() => setPile('playerDiscard')}>
+                    弃牌 {view.playerDiscardCount}
+                </button>
+            </div>
+            {drag && (
+                <div
+                    className="battle-drag-card"
+                    style={{ left: drag.x, top: drag.y }}
+                >
+                    <CardFace
+                        card={
+                            catalog.cards.find(
+                                (card) => card.id === drag.card.cardId,
+                            ) ?? fallbackInfo(drag.card)
+                        }
+                        points={drag.card.currentPoints}
+                    />
+                </div>
+            )}
+            {pile && (
+                <div className="battle-modal" onClick={() => setPile(null)}>
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={pileLabels[pile]}
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <header>
+                            <div>
+                                <span className="battle-kicker">卡牌档案</span>
+                                <h2>
+                                    {pileLabels[pile]}{' '}
+                                    <small>
+                                        {pile === 'matchDeck'
+                                            ? view.matchDeckCount
+                                            : pileCards.length}
+                                    </small>
+                                </h2>
+                            </div>
+                            <button
+                                type="button"
+                                className="pixel-button"
+                                onClick={() => setPile(null)}
+                            >
+                                关闭
+                            </button>
+                        </header>
+                        {pile === 'matchDeck' && (
+                            <p className="battle-modal__note">
+                                抽取顺序不公开，卡牌在抽出时揭示。
+                            </p>
+                        )}
+                        <div className="battle-pile-cards">
+                            {pileCards.map((card) => {
+                                const info = catalog.cards.find(
+                                    (item) => item.id === card.cardId,
+                                )
+                                return info ? (
+                                    <div key={card.instance}>
+                                        <CardFace
+                                            card={info}
+                                            points={card.currentPoints}
+                                            owner={card.owner}
+                                        />
+                                    </div>
+                                ) : null
+                            })}
+                            {pileCards.length === 0 && (
+                                <p>
+                                    {pile === 'matchDeck' &&
+                                    view.matchDeckCount > 0
+                                        ? `牌组中还有 ${view.matchDeckCount} 张卡牌。`
+                                        : '这里还没有卡牌。'}
+                                </p>
+                            )}
+                        </div>
+                    </section>
+                </div>
+            )}
+            {confirmExit && !result && (
+                <div className="battle-modal">
+                    <section
+                        className="battle-exit"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="离开对局"
+                    >
+                        <span className="battle-kicker">对局尚未结束</span>
+                        <h2>返回地图？</h2>
+                        <p>本次对局的进度将不保留。</p>
+                        <div>
+                            <button
+                                type="button"
+                                className="pixel-button"
+                                onClick={() => setConfirmExit(false)}
+                            >
+                                继续对局
+                            </button>
+                            <button
+                                type="button"
+                                className="pixel-button pixel-button--accent"
+                                onClick={onDone}
+                            >
+                                返回地图
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
+            {result && (
+                <div
+                    className="battle-modal battle-result"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="对局结果"
+                >
+                    <section>
+                        <span className="battle-kicker">
+                            THE NINEFOLD / 对局结束
+                        </span>
+                        <Sigil id={monsterId} />
+                        <h2>
+                            {result.winner === 'player'
+                                ? '回应已落定'
+                                : result.winner === 'monster'
+                                  ? '裂隙吞没了回应'
+                                  : '不分胜负'}
+                        </h2>
+                        <p>
+                            {result.winner === 'player'
+                                ? '你赢下了这场对局。'
+                                : result.winner === 'monster'
+                                  ? '这一次，怪物赢了。'
+                                  : '双方总点数与占格相同。'}
+                        </p>
+                        <div className="battle-result__score">
+                            <span>
+                                {view.playerPoints}
+                                <small>玩家</small>
+                            </span>
+                            <i>:</i>
+                            <span>
+                                {view.monsterPoints}
+                                <small>怪物</small>
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            className="pixel-button pixel-button--accent"
+                            onClick={onDone}
+                        >
+                            回到地图
+                        </button>
+                    </section>
+                </div>
+            )}
+        </main>
+    )
 }
 
 function pause(ms: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms)
-  })
+    return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 }
-
-function statusLabel(over: boolean, ready: boolean, turn: 'player' | 'monster' | undefined) {
-  if (over) return '结束'
-  if (!ready) return '结算中'
-  if (turn === 'monster') return '对方回合'
-  return '你的回合'
-}
-
-function hint(ready: boolean, pendingType: string | null, options: PcdOption[], selectedId: string | null) {
-  if (!ready) return '正在结算'
-  if (pendingType && pendingType !== 'play') {
-    if (options.some((option) => option.kind === 'cell')) return '点一个格子'
-    if (options.some((option) => option.kind === 'card')) return '点要选的那张牌'
-  }
-  const selected = selectedId ? readInstance(selectedId) : null
-  const canPlay = selected != null && options.some((option) => option.kind === 'play' && option.instance === selected)
-  const canCast = selected != null && options.some((option) => option.kind === 'cast' && option.instance === selected)
-  if (selected != null && !canPlay && !canCast) return '这张牌现在不能打出'
-  if (options.some((option) => option.kind === 'cast') && !options.some((option) => option.kind === 'play')) {
-    return '点一张法术打出'
-  }
-  if (selected == null) return '点一张手牌，再点格子'
-  return '再点一个可以放的格子'
-}
-
-function optionLabel(view: PcdView, catalog: PcdCatalog, option: PcdOption) {
-  const cards = [
-    ...view.hand,
-    ...view.playerDiscard,
-    ...view.monsterDiscard,
-    ...view.cells.flatMap((cell) => (cell.card ? [cell.card] : [])),
-  ]
-  const card = cards.find((item) => item.instance === option.instance)
-  const id = card?.cardId ?? option.cardId
-  return catalog.cards.find((item) => item.id === id)?.name ?? id ?? '一张牌'
+function fallbackInfo(card: PcdViewCard) {
+    return {
+        id: card.cardId,
+        name: card.cardId,
+        isSpell: card.isSpell,
+        points: card.currentPoints,
+        load: 0,
+        rarity: '',
+        school: '',
+        text: '',
+    }
 }
