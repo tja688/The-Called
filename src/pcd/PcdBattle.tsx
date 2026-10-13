@@ -55,6 +55,7 @@ export function PcdBattle({
         active: boolean
     } | null>(null)
     const skipClick = useRef(false)
+    const cancelledDrag = useRef(false)
     const busy = useRef(true)
     const live = useRef(true)
     const previous = useRef<PcdView | null>(null)
@@ -74,7 +75,7 @@ export function PcdBattle({
         (option) => option.kind === 'cast' && option.instance === selected,
     )
     const loose = otherChoices(options, view)
-    const pendingTarget = ready && advance.pending?.type !== 'play'
+    const pendingTarget = ready && options.some(option => option.kind === 'card' || option.kind === 'cell')
     const pileLabels: Record<Pile, string> = {
         matchDeck: '牌组',
         playerDiscard: '玩家弃牌堆',
@@ -95,6 +96,9 @@ export function PcdBattle({
         setReady(false)
         setSelected(null)
         setInspection(null)
+        setDrag(null)
+        dragRef.current = null
+        cancelledDrag.current = false
         const reduced = window.matchMedia(
             '(prefers-reduced-motion: reduce)',
         ).matches
@@ -168,6 +172,8 @@ export function PcdBattle({
         setReady(false)
         setNotice(null)
         setDrag(null)
+        dragRef.current = null
+        cancelledDrag.current = false
         setSelected(null)
         setPile(null)
         void answerMatch(advance.snapshot, option.id).then(
@@ -197,6 +203,11 @@ export function PcdBattle({
             return
         }
         setInspection(null)
+        if (!options.some(option => ['play', 'cast'].includes(option.kind) && option.instance === card.instance)) {
+            setSelected(null)
+            setInspection(card)
+            return
+        }
         setSelected((current) =>
             current === card.instance ? null : card.instance,
         )
@@ -213,6 +224,9 @@ export function PcdBattle({
             )
                 return
             if (event.key === 'Escape') {
+                cancelledDrag.current = dragRef.current !== null
+                dragRef.current = null
+                setDrag(null)
                 setSelected(null)
                 setInspection(null)
                 setPile(null)
@@ -256,6 +270,7 @@ export function PcdBattle({
             y: event.clientY,
             active: false,
         }
+        cancelledDrag.current = false
         event.currentTarget.setPointerCapture(event.pointerId)
     }
     const pointerMove = (event: PointerEvent<HTMLButtonElement>) => {
@@ -275,11 +290,15 @@ export function PcdBattle({
         const gesture = dragRef.current
         dragRef.current = null
         setDrag(null)
-        if (!gesture?.active) return
-        skipClick.current = true
-        window.setTimeout(() => {
-            skipClick.current = false
-        }, 0)
+        const cancelled = cancelledDrag.current
+        cancelledDrag.current = false
+        if (gesture?.active || cancelled) {
+            skipClick.current = true
+            window.setTimeout(() => {
+                skipClick.current = false
+            }, 0)
+        }
+        if (!gesture?.active || cancelled) return
         const target = document
             .elementFromPoint(event.clientX, event.clientY)
             ?.closest('[data-cell]')
@@ -297,7 +316,9 @@ export function PcdBattle({
     const instruction = !ready
         ? beatLabel
         : pendingTarget
-          ? '选择点亮的目标，完成能力结算。'
+          ? options.some(option => option.kind === 'card' && option.cell === 0)
+            ? '选择卡牌目标，完成能力结算。'
+            : '选择点亮的目标，完成能力结算。'
           : cast
             ? '法术已就绪。点击「施放法术」或按 Enter。'
             : selectedCard
@@ -313,7 +334,9 @@ export function PcdBattle({
                           option.kind === 'play' || option.kind === 'cast',
                   )
                 ? '你的回应已完成，结束回合。'
-                : '选择手牌，回应它的意图。'
+                : advance.pending?.type === 'play-card'
+                  ? '能力允许再打出一张牌。选择手牌，再选择格位或施放法术。'
+                  : '选择手牌，回应它的意图。'
 
     const pileCards =
         pile === 'matchDeck'
@@ -481,6 +504,53 @@ export function PcdBattle({
                             </>
                         )}
                     </div>
+                    {loose.length > 0 && (
+                        <div
+                            className="battle-choices"
+                            role="group"
+                            aria-label="能力选择"
+                        >
+                            <span className="battle-kicker">
+                                {advance.pending?.ability ? '能力结算' : '待决策'}
+                            </span>
+                            <h2>选择你的回应</h2>
+                            <div>
+                                {loose.map((option) => {
+                                    const card = view.cards.find(
+                                        (item) => item.instance === option.instance,
+                                    )
+                                    const info = catalog.cards.find(
+                                        (item) =>
+                                            item.id === (card?.cardId ?? option.cardId),
+                                    )
+                                    return (
+                                        <button
+                                            className="pixel-button"
+                                            key={option.id}
+                                            type="button"
+                                            data-option-id={option.id}
+                                            onClick={() => submit(option)}
+                                        >
+                                            {option.kind === 'activate'
+                                                ? '激活 · '
+                                                : ''}
+                                            {info?.name ??
+                                                (option.kind === 'skip'
+                                                    ? '跳过'
+                                                    : option.kind === 'pass'
+                                                      ? '确认'
+                                                      : option.kind === 'accept'
+                                                        ? '接受'
+                                                        : option.kind === 'decline'
+                                                          ? '放弃'
+                                                          : (option.cardId ??
+                                                            '确认选择'))}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </aside>
                 <div className="battle-arena">
                     <div className="battle-arena__label">
@@ -762,6 +832,7 @@ export function PcdBattle({
                                 onPointerUp={pointerUp}
                                 onPointerCancel={() => {
                                     dragRef.current = null
+                                    cancelledDrag.current = false
                                     setDrag(null)
                                 }}
                             >
@@ -809,53 +880,6 @@ export function PcdBattle({
                 <span>青 / 玩家 · 红 / 怪物</span>
                 <span>ESC 取消选择</span>
             </footer>
-            {loose.length > 0 && (
-                <div
-                    className="battle-choices"
-                    role="dialog"
-                    aria-label="能力选择"
-                >
-                    <span className="battle-kicker">
-                        {advance.pending?.ability ? '能力结算' : '待决策'}
-                    </span>
-                    <h2>选择你的回应</h2>
-                    <div>
-                        {loose.map((option) => {
-                            const card = view.cards.find(
-                                (item) => item.instance === option.instance,
-                            )
-                            const info = catalog.cards.find(
-                                (item) =>
-                                    item.id === (card?.cardId ?? option.cardId),
-                            )
-                            return (
-                                <button
-                                    className="pixel-button"
-                                    key={option.id}
-                                    type="button"
-                                    data-option-id={option.id}
-                                    onClick={() => submit(option)}
-                                >
-                                    {option.kind === 'activate'
-                                        ? '激活 · '
-                                        : ''}
-                                    {info?.name ??
-                                        (option.kind === 'skip'
-                                            ? '跳过'
-                                            : option.kind === 'pass'
-                                              ? '确认'
-                                              : option.kind === 'accept'
-                                                ? '接受'
-                                                : option.kind === 'decline'
-                                                  ? '放弃'
-                                                  : (option.cardId ??
-                                                    '确认选择'))}
-                                </button>
-                            )
-                        })}
-                    </div>
-                </div>
-            )}
             {notice && (
                 <div className="battle-notice" role="alert">
                     {notice}

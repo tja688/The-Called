@@ -678,17 +678,20 @@
     color: var(--ink);
 }
 .battle-choices {
-    position: absolute;
-    left: 50%;
-    top: 17%;
-    transform: translateX(-50%);
+    position: relative;
+    margin: 14px auto;
     padding: 17px 20px;
     z-index: 20;
     background: #111115f5;
     border: 1px solid #73737b;
     box-shadow: 4px 4px #000;
-    min-width: 280px;
-    max-width: 90%;
+    min-width: 0;
+    width: 100%;
+    max-height: 280px;
+    overflow-y: auto;
+}
+.battle-player-panel:has(.battle-choices) .battle-inspect {
+    display: none;
 }
 .battle-choices h2 {
     font-size: 16px;
@@ -1207,7 +1210,13 @@
         height: 180px;
     }
     .battle-choices {
-        top: 180px;
+        position: fixed;
+        left: 15px;
+        right: 15px;
+        bottom: 60px;
+        width: auto;
+        max-height: min(220px, 30vh);
+        margin: 0;
     }
     .battle-notice {
         top: 60px;

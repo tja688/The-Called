@@ -163,22 +163,22 @@ namespace Pcd.Kernel
         {
             if (_state.Phase == MatchPhase.Finished)
             {
-                return Pack(_state.Events.Count);
+                return Pack(Events.Count);
             }
 
             if (_state.Waiting)
             {
-                return Pack(_state.Events.Count);
+                return Pack(Events.Count);
             }
 
-            int start = _state.Events.Count;
+            int start = Events.Count;
             _rules.Run();
             return Pack(start);
         }
 
         public AdvanceResult SubmitAndAdvance(string optionId)
         {
-            int start = _state.Events.Count;
+            int start = Events.Count;
             _rules.Submit(optionId);
             _rules.Run();
             return Pack(start);
@@ -186,7 +186,7 @@ namespace Pcd.Kernel
 
         public AdvanceResult SpecialSettlement()
         {
-            int start = _state.Events.Count;
+            int start = Events.Count;
             _rules.SpecialSettlement();
             return Pack(start);
         }
@@ -227,7 +227,7 @@ namespace Pcd.Kernel
 
         public string EventHash()
         {
-            return Hashing.Sha256Hex(EventCodec.Canonical(_state.Events));
+            return Hashing.Sha256Hex(EventCodec.Canonical(Events));
         }
 
         public string ToSnapshot()
@@ -243,7 +243,7 @@ namespace Pcd.Kernel
 
         public string ToEventLog()
         {
-            return EventCodec.Canonical(_state.Events);
+            return EventCodec.Canonical(Events);
         }
 
         public string ToReplay()
@@ -301,16 +301,16 @@ namespace Pcd.Kernel
 
         public IReadOnlyList<GameEvent> Events
         {
-            get { return _state.Events; }
+            get { return _rules.VisibleEvents; }
         }
 
         private AdvanceResult Pack(int start)
         {
-            int count = _state.Events.Count - start;
+            int count = Events.Count - start;
             var events = new GameEvent[count];
             for (int i = 0; i < count; i++)
             {
-                events[i] = _state.Events[start + i];
+                events[i] = Events[start + i];
             }
 
             if (_state.Phase == MatchPhase.Finished)

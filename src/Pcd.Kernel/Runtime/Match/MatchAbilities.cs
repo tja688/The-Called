@@ -42,9 +42,17 @@ namespace Pcd.Kernel
         }
 
         private bool _rebuild;
+        // Execution replays from its checkpoint; hosts see the unanswered choice.
+        private MatchState? _decisionState;
+        private readonly List<CardInstance> _inFlight = new List<CardInstance>();
+        private readonly List<CardInstance> _decisionCards = new List<CardInstance>();
+
+        public IReadOnlyList<GameEvent> VisibleEvents => (_decisionState ?? _state).Events;
 
         private void Execute(string kind, string option, Action body)
         {
+            _decisionState = null;
+            _decisionCards.Clear();
             if (!_catalog.MayAsk && !_state.Resolving)
             {
                 body();
@@ -73,6 +81,12 @@ namespace Pcd.Kernel
             }
             catch (NeedDecision need)
             {
+                _decisionState = _state.Clone();
+                foreach (CardInstance card in _inFlight)
+                {
+                    if (card.Zone == Zone.None) _decisionCards.Add(card.Clone());
+                }
+                _inFlight.Clear();
                 _queue.Clear();
                 _held.Clear();
                 _holding = false;
@@ -134,7 +148,7 @@ namespace Pcd.Kernel
         {
             _held.Clear();
             _holding = true;
-            ResolveImmediate(card, "enter");
+            ResolveImmediate(card, "enter", cell);
             if (card.Zone == Zone.Board)
             {
                 ApplyPollution(card, cell);
@@ -170,7 +184,7 @@ namespace Pcd.Kernel
             }
         }
 
-        private void ResolveImmediate(CardInstance card, string trigger)
+        private void ResolveImmediate(CardInstance card, string trigger, int contextCell = 0)
         {
             if (card.Suppressed)
             {
@@ -178,6 +192,7 @@ namespace Pcd.Kernel
             }
 
             AbilityDefinition[] abilities = Effects(card);
+            int originCell = contextCell == 0 ? card.Cell : contextCell;
             for (int i = 0; i < abilities.Length; i++)
             {
                 if (abilities[i].Trigger != trigger)
@@ -190,7 +205,7 @@ namespace Pcd.Kernel
                     Instance = card.InstanceId,
                     AbilityIndex = i,
                     ContextInstance = card.InstanceId,
-                    ContextCell = card.Cell,
+                    ContextCell = originCell,
                     CapturedPoints = Points.Vital(card)
                 };
                 ResolveAbility(card, abilities[i], item);
@@ -375,7 +390,7 @@ namespace Pcd.Kernel
                 return true;
             }
 
-            List<CardInstance> candidates = Candidates(source, ability.Target);
+            List<CardInstance> candidates = Candidates(source, ability.Target, item.ContextCell);
             if (candidates.Count == 0 || !MirrorReady(source, ability))
             {
                 return false;
@@ -594,10 +609,11 @@ namespace Pcd.Kernel
         {
             if (action.Target == "adjacent-opponents" && source != null)
             {
+                int sourceCell = source.Zone == Zone.Board ? source.Cell : item.ContextCell;
                 for (int cell = 1; cell <= 9; cell++)
                 {
                     CardInstance? other = _state.Board[cell - 1];
-                    if (other != null && other.Owner != source.Owner && Adjacent(source.Cell, cell))
+                    if (other != null && other.Owner != source.Owner && Adjacent(sourceCell, cell))
                     {
                         GiveStatus(other, action.Status, source.Owner);
                     }
@@ -1867,7 +1883,7 @@ namespace Pcd.Kernel
             }
         }
 
-        private List<CardInstance> Candidates(CardInstance? source, TargetDefinition target)
+        private List<CardInstance> Candidates(CardInstance? source, TargetDefinition target, int contextCell = 0)
         {
             if (target.Zone == "discard")
             {
@@ -1890,7 +1906,7 @@ namespace Pcd.Kernel
             for (int cell = 1; cell <= 9; cell++)
             {
                 CardInstance? card = _state.Board[cell - 1];
-                if (card != null && Matches(source, card, target))
+                if (card != null && Matches(source, card, target, contextCell))
                 {
                     list.Add(card);
                 }
@@ -1899,7 +1915,7 @@ namespace Pcd.Kernel
             return list;
         }
 
-        private bool Matches(CardInstance? source, CardInstance card, TargetDefinition target)
+        private bool Matches(CardInstance? source, CardInstance card, TargetDefinition target, int contextCell = 0)
         {
             if (source != null && target.Side == "opponent" && card.Owner == source.Owner)
             {
@@ -1918,7 +1934,8 @@ namespace Pcd.Kernel
 
             if (target.Adjacent && target.Zone != "discard")
             {
-                if (source == null || source.Zone != Zone.Board || !Adjacent(source.Cell, card.Cell))
+                int sourceCell = source != null && source.Zone == Zone.Board ? source.Cell : contextCell;
+                if (source == null || !Adjacent(sourceCell, card.Cell))
                 {
                     return false;
                 }
@@ -2333,12 +2350,13 @@ namespace Pcd.Kernel
         private void BranchAdjacent(CardInstance? source, ActionDefinition action, CardInstance? chosen, PendingAbility item)
         {
             bool found = false;
-            if (source != null && source.Zone == Zone.Board)
+            if (source != null)
             {
+                int sourceCell = source.Zone == Zone.Board ? source.Cell : item.ContextCell;
                 for (int cell = 1; cell <= 9; cell++)
                 {
                     CardInstance? other = _state.Board[cell - 1];
-                    if (other != null && other.Owner != source.Owner && Adjacent(source.Cell, cell))
+                    if (other != null && other.Owner != source.Owner && Adjacent(sourceCell, cell))
                     {
                         found = true;
                         break;

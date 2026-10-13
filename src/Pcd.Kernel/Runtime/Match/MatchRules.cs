@@ -134,6 +134,11 @@ namespace Pcd.Kernel
                 throw new InvalidOperationException("对局已结束。");
             }
 
+            if (_state.Resolving)
+            {
+                throw new InvalidOperationException("请先完成当前能力的选择，再进行特殊结算。");
+            }
+
             _state.Waiting = false;
             _state.Pending = null;
             _causeOverride = "special-settlement";
@@ -176,6 +181,13 @@ namespace Pcd.Kernel
 
         public MatchView BuildView(string audience)
         {
+            if (_decisionState != null)
+            {
+                var projection = new MatchRules(_catalog, _decisionState);
+                projection._inFlight.AddRange(_decisionCards);
+                return projection.BuildView(audience);
+            }
+
             if (audience != "public" && audience != "player" && audience != "hand" && audience != "omniscient")
             {
                 throw new ArgumentException("未知的信息等级：" + audience);
@@ -246,6 +258,10 @@ namespace Pcd.Kernel
                 all.AddRange(ToViews(_state.Monster.Hand));
                 all.AddRange(view.MonsterDiscard);
                 all.AddRange(view.MonsterVoid);
+                foreach (CardInstance card in _inFlight)
+                {
+                    if (card.Zone == Zone.None) all.Add(ToView(card));
+                }
                 view.Cards = all.ToArray();
             }
 
@@ -605,6 +621,7 @@ namespace Pcd.Kernel
 
         private void ResolveSpell(CardInstance card)
         {
+            _inFlight.Add(card);
             Emit(new GameEvent
             {
                 Type = EventTypes.CardPlayed,
@@ -618,6 +635,7 @@ namespace Pcd.Kernel
             SendToDiscard(card, "spell", null, 0, EventTypes.CardDiscarded);
             EnqueueSpellWatchers(card);
             DrainQueue();
+            _inFlight.Remove(card);
         }
 
         private void ApplyPollution(CardInstance card, int cell)

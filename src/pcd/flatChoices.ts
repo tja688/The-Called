@@ -7,6 +7,12 @@ export function cellChoice(
     instance: number | null,
     selected: number | null,
 ) {
+    const target = options.find(
+        (option) => option.kind === 'cell' && option.cell === cell,
+    ) ?? options.find(
+        (option) => option.kind === 'card' && instance !== null && option.instance === instance,
+    )
+    if (target) return target
     if (selected !== null)
         return options.find(
             (option) =>
@@ -14,17 +20,7 @@ export function cellChoice(
                 option.instance === selected &&
                 option.cell === cell,
         )
-    return (
-        options.find(
-            (option) => option.kind === 'cell' && option.cell === cell,
-        ) ??
-        options.find(
-            (option) =>
-                option.kind === 'card' &&
-                instance !== null &&
-                option.instance === instance,
-        )
-    )
+    return undefined
 }
 
 export function otherChoices(options: readonly PcdOption[], view: PcdView) {
