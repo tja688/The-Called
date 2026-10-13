@@ -22,6 +22,18 @@ start-game.bat
 
 脚本会拉起本仓库的对局服务和 Vite。开发时浏览器通过 `/api` 访问对局服务，改 `content/rules/catalog.yaml` 后重启对局服务即可。发布到 GitHub Pages 时，工作流会把 `src/Pcd.Wasm` 编进页面，正式环境在浏览器里跑同一份内核。
 
+## Windows 桌面包
+
+安装 Node.js、.NET 10 SDK 和 WebAssembly workload 后，在仓库根目录执行：
+
+```bash
+dotnet workload install wasm-tools
+npm install
+npm run electron:dist
+```
+
+成品位于 `release/package/`：NSIS 安装程序和免安装便携版。桌面程序通过本机地址加载静态网页与浏览器内核，不需要启动开发对局服务。
+
 ## Unity
 
 用 Git 地址加路径引用（把 `<标签>` 换成版本标签）：
